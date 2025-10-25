@@ -5,14 +5,16 @@
 # ORM that will help us in converting the database tables into Python objects. So, to convert these Python objects into JSON objects that can be sent over HTTP, we use
 # serializers.
 
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import CustomUser
+
+User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
 
-        model = CustomUser
+        model = User
 
         fields = ['id', 'username', 'email', 'password']
 
@@ -23,6 +25,6 @@ class UserSerializer(serializers.ModelSerializer):
     # data is valid, it'll pass it as validated_data in the function
     def create(self, validated_data):
 
-        user = CustomUser.objects.create_user(**validated_data)
+        user = User.objects.create_user(**validated_data)
 
         return user
