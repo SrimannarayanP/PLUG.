@@ -14,7 +14,10 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 
-import os
+import os, pymysql
+
+
+pymysql.install_as_MySQLdb()
 
 load_dotenv() # Loads an enviroment file
  
@@ -105,8 +108,12 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'events',
+        'USER' : 'Sriman',
+        'PASSWORD' : 'SpitterDune#891*',
+        'HOST' : 'localhost',
+        'PORT' : '3306',
     }
 }
 
