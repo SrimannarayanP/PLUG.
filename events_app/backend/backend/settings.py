@@ -45,7 +45,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES' : (
         
-        'rest_framework.permissions.IsAuthenticated',
+        # 'rest_framework.permissions.IsAuthenticated',
 
     ),
 
@@ -163,3 +163,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 AUTH_USER_MODEL = 'api.CustomUser'
+
+MEDIA_URL = '/media/' # URL path for browser 
+MEDIA_ROOT = BASE_DIR / 'media' # Absolute path on server's filesystem
