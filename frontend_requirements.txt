@@ -1,3 +1,4 @@
 axios
 react-router-dom
 jwt-decode
+@yudiel/react-qr-scanner
