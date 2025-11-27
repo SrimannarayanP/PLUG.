@@ -1,5 +1,8 @@
 axios
 react-router-dom
 jwt-decode
-@yudiel/react-qr-scanner
+@yudiel/react-qr-scanner  
 @vitejs/plugin-basic-ssl
+@tiptap/react
+@tiptap/starter-kit
+@tiptap/extension-placeholder
