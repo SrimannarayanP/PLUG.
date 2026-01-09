@@ -10,6 +10,11 @@
 from django.db import transaction
 from django.contrib.auth import get_user_model, authenticate
 from django.forms import ValidationError
+from django.utils import timezone
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.password_validation import validate_password
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
 
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -53,14 +58,23 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         refresh = self.get_token(user)
 
         return {
-            super().validate(attrs)
+            'refresh' : str(refresh),
+            'access' : str(refresh.access_token),
+            'user' : {
+                'id' : user.id,
+                'email' : user.email,
+                'username' : user.username,
+                'first_name' : user.first_name,
+                'last_name' : user.last_name,
+                'role' : user.role,
+            }
         }
  
 
 class UserSerializer(serializers.ModelSerializer):
 
     organisation_name = serializers.CharField(write_only = True, required = False)
-    phone_no = serializers.CharField(write_only = True, required = False)
+    phone = serializers.CharField(write_only = True, required = False)
 
     class Meta:
 
@@ -73,7 +87,6 @@ class UserSerializer(serializers.ModelSerializer):
     # data is valid, it'll pass it as validated_data in the function
     @transaction.atomic
     def create(self, validated_data):
-
         # Pop the profile data off from the dictionary.
         # We don't want to pass 'organisation_name' to the User model, it would crash   
         org_name = validated_data.pop('organisation_name', None)
@@ -96,7 +109,6 @@ class UserSerializer(serializers.ModelSerializer):
             )
 
         elif role == 'student':
-
             # Create an empty student profile so they can register for events immediately. 
             StudentProfile.objects.create(
                 user = user,
@@ -104,6 +116,45 @@ class UserSerializer(serializers.ModelSerializer):
 
         return user
     
+
+class SetNewPasswordSerializer(serializers.Serializer):
+
+    uid = serializers.CharField(write_only = True)
+    token = serializers.CharField(write_only = True)
+    password = serializers.CharField(
+        write_only = True,
+        style = {'input_type' : 'password'}
+    )
+
+    def validate(self, attrs):
+        # Decode the UID for this user.
+        try:
+            uid = force_str(urlsafe_base64_decode(attrs.get('uid')))
+            self.user = User.objects.get(pk = uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+
+            raise serializers.ValidationError({'uid' : "Invalid user link."})
+        
+        # Check if the token is valid for this user.
+        if not default_token_generator.check_token(self.user, attrs.get('token')):
+
+            raise serializers.ValidationError({'token' : "Link has expired or is invalid."})
+
+        try:
+            validate_password(attrs.get('password'), self.user)
+        except Exception as e:
+
+            raise serializers.ValidationError({'password' : list(e.messages)})
+        
+        return attrs
+
+    # Set the new password & save
+    def save(self):
+        self.user.set_password(self.validated_data['password'])
+        self.user.save()
+
+        return self.user
+
 
 class OrganisationSerializer(serializers.ModelSerializer):
 
@@ -120,29 +171,31 @@ class EventSerializer(serializers.ModelSerializer):
     start_date = serializers.DateTimeField(format = r"%B %d, %Y, %I:%M %p")
     end_date = serializers.DateTimeField(format = r"%B %d, %Y, %I:%M %p")
     location = serializers.SerializerMethodField()
-    categories = serializers.StringRelatedField(many = True)
+    categories = serializers.StringRelatedField(many = True, read_only = True)
     organiser = serializers.CharField(source = 'organisation.name', read_only = True)
+    organisation = serializers.SerializerMethodField()
+    # File fields
+    payment_qr_image = serializers.ImageField(read_only = True) # Frontend needs to read it to display it.
+    poster_field = serializers.ImageField(max_length = None, use_url = True, required = False)
 
     def get_location(self, obj):
-
         if obj.location_type == 'offline' and obj.physical_location:
 
             return obj.physical_location
-        
         if obj.location_type == 'online':
 
             return obj.virtual_location or 'Online'
         
         return 'TBD'
+    
+    def get_organisation(self, obj):
+
+        return OrganisationSerializer(obj.organisation).data
 
     class Meta:
 
         model = Event
-        fields = [
-            'id', 'event_name', 'description', 'start_date', 'end_date', 'location_type', 'physical_location', 'virtual_location', 'register_link', 'is_native', 
-            'is_featured', 'organisation', 'organiser', 'location', 'categories', 'poster_field', 'collect_phone', 'collect_college_school', 'collect_student_id'
-        ]
-        read_only_fields = ['organisation']
+        fields = '__all__'
         
 
 class CategoriesSerializer(serializers.ModelSerializer):
@@ -161,7 +214,7 @@ class TicketSerializer(serializers.ModelSerializer):
     class Meta:
 
         model = Registrations
-        fields = ['id', 'event', 'date', 'checked_in', 'cancelled', 'qr_code']
+        fields = ['id', 'event', 'date', 'checked_in', 'cancelled', 'qr_code', 'payment_status']
 
     def get_qr_code(self, obj):
 
