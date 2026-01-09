@@ -5,12 +5,35 @@ const AnimatedIsometricBackground = () => {
 
     return (
 
-        <svg className = "absolute top-0 left-0 w-full h-full z-0" xmlns = 'http://www.w3.org/2000/svg' viewBox = "0 0 100 50" preserveAspectRatio = "xMidYMid slice">
+        <svg 
+            className = "absolute top-0 left-0 w-full h-full z-0" 
+            xmlns = 'http://www.w3.org/2000/svg' 
+            viewBox = "0 0 100 50" 
+            preserveAspectRatio = "xMidYMid slice"
+        >
             <defs>
-                <linearGradient id = 'glowGradient' x1 = '0%' y1 = '0%' x2 = '100%' y2 = '100%'>
-                    <stop offset = '0%' style = {{stopColor : '#f87171', stopOpacity : 1}} />
+                <linearGradient 
+                    id = 'glowGradient' 
+                    x1 = '0%' 
+                    y1 = '0%' 
+                    x2 = '100%' 
+                    y2 = '100%'
+                >
+                    <stop 
+                        offset = '0%' 
+                        style = {{
+                            stopColor : '#f87171', 
+                            stopOpacity : 1
+                        }} 
+                    />
 
-                    <stop offset = '100%' style = {{stopColor : '#ef4444', stopOpacity : 1}} />
+                    <stop 
+                        offset = '100%' 
+                        style = {{
+                            stopColor : '#ef4444', 
+                            stopOpacity : 1
+                        }} 
+                    />
                 </linearGradient>
 
                 <style>
@@ -41,21 +64,45 @@ const AnimatedIsometricBackground = () => {
             </defs>
 
             <g id = 'grid'>
-                <path className = 'grid-line' d = "M0 12.5 L100 37.5" />
+                <path 
+                    className = 'grid-line' 
+                    d = "M0 12.5 L100 37.5" 
+                />
 
-                <path className = 'grid-line' d = "M0 37.5 L100 12.5" />
+                <path 
+                    className = 'grid-line' 
+                    d = "M0 37.5 L100 12.5" 
+                />
 
-                <path className = 'grid-line' d = "M25 6.25 L75 18.75" />
+                <path 
+                    className = 'grid-line' 
+                    d = "M25 6.25 L75 18.75" 
+                />
 
-                <path className = 'grid-line' d = "M25 43.75 L75 18.75" />
+                <path 
+                    className = 'grid-line' 
+                    d = "M25 43.75 L75 18.75" 
+                />
 
-                <path className = 'grid-line' d = "M50 0 L100 12.5 L50 25 L0 12.5 Z" />
+                <path 
+                    className = 'grid-line' 
+                    d = "M50 0 L100 12.5 L50 25 L0 12.5 Z" 
+                />
                 
-                <path className = 'grid-line' d = "M50 25 L100 37.5 L50 50 L0 37.5 Z" />
+                <path 
+                    className = 'grid-line' 
+                    d = "M50 25 L100 37.5 L50 50 L0 37.5 Z" 
+                />
 
-                <path className = 'grid-line' d = "M-10 18.75 L40 3.75" />
+                <path 
+                    className = 'grid-line' 
+                    d = "M-10 18.75 L40 3.75" 
+                />
 
-                <path className = 'grid-line' d = "M60 12.5 L110 31.25" />
+                <path 
+                    className = 'grid-line' 
+                    d = "M60 12.5 L110 31.25" 
+                />
             </g>
 
             <g 
