@@ -1,25 +1,28 @@
 # views.py
 
 
-
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db import transaction
 from django.conf import settings
+from django.core.files import File
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
 
-from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework import generics, status
+from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 
-from .serializers import UserSerializer, EventSerializer, TicketSerializer, CustomTokenObtainPairSerializer
+from .serializers import UserSerializer, EventSerializer, TicketSerializer, CustomTokenObtainPairSerializer, SetNewPasswordSerializer
 from .models import Event, Registrations, CustomUser, StudentProfile
 from .utils import generate_ticket_token, generate_qr_code_base64
-from .tasks import send_ticket_email_task
+from .tasks import send_ticket_email_task, send_password_reset_email_task
 
-import jwt
+import jwt, os
 
 User = get_user_model()
 
@@ -54,6 +57,54 @@ class UserProfileView(APIView):
         })
 
 
+class RequestPasswordResetView(APIView):
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+
+        if not email:
+
+            return Response({'error' : "Email is required."}, status = 400)
+        
+        response_data = {'message' : "If an account exists, a reset link has been sent."}
+
+        try:
+            user = User.objects.get(email = email)
+        except User.DoesNotExist:
+            
+            return Response(response_data, status = 200)
+        
+        # 'uid' Encodes the user ID so we know who to look up later
+        # 'token' is a unique hash that is valid for a limited time & checks if the password changed recently.
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+
+        # Construct the frontend link
+        reset_link = f"https://localhost:5173/reset-password/{uid}/{token}"
+
+        transaction.on_commit(lambda: send_password_reset_email_task.delay(email, reset_link))
+
+        return Response(response_data, status = 200)
+
+class SetNewPasswordView(generics.GenericAPIView):
+
+    permission_classes = [AllowAny]
+    serializer_class = SetNewPasswordSerializer
+
+    # Sends the data to the serializer to be validated. If it is validated, it'll tell to save. Else it'll raise error. 
+    def post(self, request):
+        serializer = self.get_serializer(data = request.data)
+
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response({'message' : "Password set succesfully. You can now login."}, status = status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status = status.HTTP_400_BAD_REQUEST)
+
+
 class EventListView(generics.ListAPIView):
 
     queryset = Event.objects.all().order_by('start_date')
@@ -83,11 +134,48 @@ class UpcomingEventListView(generics.ListAPIView):
     serializer_class = EventSerializer
 
 
-class EventDetailsView(APIView):
+class EventDetailsView(generics.RetrieveUpdateDestroyAPIView):
 
     queryset = Event.objects.all()
     serializer_class = EventSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny] # This is to allow any un-logged in users to atleast see the event before registering.
+    lookup_field = 'id'
+
+    # Required for file uploads (poster/brochure)
+    parser_classes = [MultiPartParser, FormParser]
+
+    def update(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+
+            return Response({'error' : "Authentication required"}, status = status.HTTP_401_UNAUTHORIZED)
+
+        # Get event object
+        instance = self.get_object()
+
+        # We assume the user has an 'organisationprofile'. If not, they can't edit the event.
+        if not hasattr(request.user, 'organisationprofile'):
+            
+            return Response({'error' : "Only hosts can edit events"}, status = status.HTTP_403_FORBIDDEN)
+        
+        # Check if the event actually belongs to this host
+        if instance.organisation != request.user.organisationprofile:
+            
+            return Response({'error' : "You do not have permission to edit this event"}, status = status.HTTP_403_FORBIDDEN)
+        
+        return super().update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+
+            return Response({'error' : "Authentication required"}, status = status.HTTP_401_UNAUTHORIZED)
+        
+        instance = self.get_object()
+
+        if not hasattr(request.user, 'organisationprofile') or instance.organisation != request.user.organisationprofile:
+
+            return Response({'error' : "You cannot delete this event."}, status = status.HTTP_403_FORBIDDEN)
+        
+        return super().destroy(request, *args, **kwargs)
 
 
 # Returns all the events that have is_featured = True for the Featured section of the website
@@ -116,6 +204,10 @@ class RegisterForEventView(APIView):
             
             return Response({'error' : "Native event not found."}, status = 404)
         
+        if timezone.now() > event.registration_deadline:
+
+            return Response({'error' : f"Registration for this event closed on {event.registration_deadline.strftime("%d %b, %I:%M %p")}."}, status = 400)
+        
         # Validate the payload against the event's toggles
         errors = {}
 
@@ -125,6 +217,10 @@ class RegisterForEventView(APIView):
             errors['school_college_name'] = "This field is required."
         if event.collect_student_id and not data.get('student_id_number'):
             errors['student_id_number'] = "This field is required."
+
+        if event.is_paid_event:
+            if not data.get('transaction_id'):
+                errors['transaction_id'] = "Transaction ID is required for paid events."
 
         if not user.is_authenticated:
             
@@ -137,22 +233,35 @@ class RegisterForEventView(APIView):
         
         # Get or create the user's profile
         if user.is_authenticated:
+            if not hasattr(user, 'studentprofile'):
+
+                return Response({'error' : "Only students can register for events."}, status = 403)
             student_profile = user.studentprofile
         else:
+            email = data.get('email')
+
+            if CustomUser.objects.filter(email = email).exists():
+
+                return Response({
+                    'error' : "An account with this email already exists. Please log in to register."
+                }, status = 403)
+            
             user, user_created = CustomUser.objects.get_or_create(
-                email = data.get('email'),
+                email = email,
                 defaults = {
                     'first_name' : data.get('first_name'),
                     'last_name' : data.get('last_name'),
                     'role' : 'student',
-                    'email' : data.get('email')
-
+                    'email' : email,
                 }
             )
             
             if user_created:
                 user.set_unusable_password()
                 user.save()
+
+                token = default_token_generator.make_token(user)
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
 
             student_profile, _ = StudentProfile.objects.get_or_create(user = user)
 
@@ -171,7 +280,7 @@ class RegisterForEventView(APIView):
 
             if not student_profile.date_of_birth:
 
-                return Response({'error' : "This is an age-restricted event. Please update your profile DOB."}, status = 403)
+                return Response({'error' : "This is an age-restricted event. Please update your DOB."}, status = 403)
             
             if student_profile.date_of_birth > event.age_restriction_cutoff:
 
@@ -188,8 +297,39 @@ class RegisterForEventView(APIView):
             return Response({'message' : "You are already registered."}, status = 200)
         
         registration.cancelled = False
+
+        # Handling payment state
+        if event.is_paid_event:
+            registration.transaction_id = data.get('transaction_id')
+
+            if reg_created or registration.payment_status in ['rejected', 'verified']:
+                registration.payment_status = 'pending'
+
+            registration.save()
+
+            return Response({
+                'message' : "Payment submitted. Waiting for host's approval.",
+                'payment_needed' : True,
+                'registration' : {
+                    'id' : registration.id,
+                    'attendee_name' : f"{user.first_name} {user.last_name}",
+                    'email' : user.email,
+                    'status' : registration.payment_status,
+                }
+            }, status = status.HTTP_200_OK)
+        else:
+            registration.payment_status = 'verified'
+            registration.save()
+
+            ticket_token = generate_ticket_token(registration.id, event.id)
+            qr_code_image = generate_qr_code_base64(ticket_token)
+
+            transaction.on_commit(lambda: send_ticket_email_task.delay(registration.id))
+
+        # Free registration for event flow
+        registration.payment_status = 'verified'
         registration.save()
-        
+
         # Trigger async task to send ticket email only after the transaction is committed. This is to ensure that Celery & Django go hand-in-hand. Pehle kya hota tha,
         # Django user ko register krta, phir send_ticket_email_task.delay() ko call krta, lekin ye abhi tak DB me reflect hi nhi hua ki naya user bna hai. Isliye Celery
         # task fail ho jata hai, kyunki wo user ko DB me dhundh nhi pata.
@@ -205,7 +345,8 @@ class RegisterForEventView(APIView):
                 'token' : ticket_token,
                 'qr_code' : qr_code_image,
                 'attendee_name' : f"{student_profile.user.first_name} {student_profile.user.last_name}",
-                'event_name' : event.event_name
+                'event_name' : event.event_name,
+                'is_pending' : False,
             }
         }, status = status.HTTP_201_CREATED)
     
@@ -280,7 +421,6 @@ class VerifyTicketView(APIView):
 class CreateEventView(APIView):
 
     permission_classes = [IsAuthenticated]
-
     parser_classes = [MultiPartParser, FormParser] # Parses multipart HTML form content, which supports file uploads. Typically dono, FormParser & MultiPartParser use
                                                     # krte hain HTML forms ke liye.
 
@@ -296,8 +436,8 @@ class CreateEventView(APIView):
                 status = status.HTTP_403_FORBIDDEN
             )
 
-        data = request.data 
-        serializer = EventSerializer(data = data) # We get the raw data from the request & pass it to the serializer. The serializer than maps this raw data to the
+        # Deserializing the data (Converting it back into the respective object type)
+        serializer = EventSerializer(data = request.data) # We get the raw data from the request & pass it to the serializer. The serializer than maps this raw data to the
                                                     # 'Event' model fields.
                                                     
         # This method runs all the rules defined in the 'Event' model & 'EventSerializer'. Are required fields present? Is the email valid? etc. It returns True if
@@ -308,9 +448,19 @@ class CreateEventView(APIView):
             # sab sahi rha, phir uss data me "Organisation ID" ko 'inject'/add karega. Phir usko backend me save karega.    
             serializer.save(organisation = user.organisationprofile)
 
+            is_paid = request.data.get('is_paid_event') == 'true'
+
+            if is_paid:
+                qr_path = os.path.join(settings.MEDIA_ROOT, 'platform_qr.jpg')
+
+                if os.path.exists(qr_path):
+                    with open(qr_path, 'rb') as f:
+                        serializer.save(
+                            payment_qr_image = File(f, name = 'platform_qr.jpg'),
+                        )
+
             return Response(serializer.data, status = status.HTTP_201_CREATED)
         else:
-
             # If is_valid() returned false, the serializer populated a special list called '.errors'. We send this to the frontend so that it can be displayed.
             return Response(serializer.errors, status = status.HTTP_400_BAD_REQUEST)
         
@@ -320,6 +470,7 @@ class HostEventListView(generics.ListAPIView):
 
     serializer_class = EventSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         
@@ -330,3 +481,108 @@ class HostEventListView(generics.ListAPIView):
             return Event.objects.none()
         
         return Event.objects.filter(organisation = user.organisationprofile).order_by('-start_date')
+    
+
+# Returns stats & list of attendees for a specific event. Only hosts can access this.
+class HostEventDetailView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, event_id):
+
+        user = request.user
+
+        try:
+            profile = user.organisationprofile
+            event = Event.objects.get(id = event_id, organisation = profile)
+        except (AttributeError, Event.DoesNotExist):
+
+            return Response({
+                'error' : "Event not found or you do not have permission to view it."
+            }, status = status.HTTP_403_FORBIDDEN)
+
+        # Stats
+        total_registrations = Registrations.objects.filter(event = event, cancelled = False).count()
+        checked_in_count = Registrations.objects.filter(event = event, checked_in = True, cancelled = False).count()
+
+        # Attendee List (.select_related avoids the problem of running 100 SQL queries for 100 students)
+        registrations = Registrations.objects.filter(
+            event = event,
+            cancelled = False
+        ).select_related('student__user').order_by('-date')
+
+        attendees = []
+
+        for reg in registrations:
+            attendees.append({
+                'id' : reg.id,
+                'name' : f"{reg.student.user.first_name} {reg.student.user.last_name}",
+                'email' : reg.student.user.email,
+                'phone' : reg.student.phone_number,
+                'college' : reg.student.school_college_name,
+                'student_id' : reg.student.student_id_number,
+                'checked_in' : reg.checked_in,
+                'registered_at' : reg.date,
+                'payment_status' : reg.payment_status,
+                'transaction_id' : reg.transaction_id,
+            })
+
+        return Response({
+            'event' : EventSerializer(event).data,
+            'stats' : {
+                'total' : total_registrations,
+                'checked_in' : checked_in_count,
+            },
+            'attendees' : attendees
+        })
+
+
+class ProcessPaymentView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+
+        user = request.user
+        data = request.data
+
+        registration_id = data.get('registration_id')
+        action = data.get('action')
+
+        if not registration_id or action not in ['approve', 'reject']:
+
+            return Response({'error' : "Invalid request"}, status = 400)
+        
+        try:
+            # We filter by the registration ID & the organisation linked to the logged-in host. This prevents hackers from approving tickets for other people's events.
+            registration = Registrations.objects.get(
+                id = registration_id,
+                event__organisation__user = user # Checks if event belongs to host
+            )
+        except Registrations.DoesNotExist:
+
+            return Response({'error' : "Registration not found or authorized."}, status = 403)
+        
+        # Handle rejection
+        if action == 'reject':
+            registration.payment_status = 'rejected'
+            registration.cancelled = True
+            registration.save()
+
+            return Response({'message' : "Registration rejected."}, status = 200)
+        
+        # Handle approval
+        if action == 'approve':
+            # Don't verify again if already verified
+            if registration.payment_status == 'verified':
+
+                return Response({'message' : "Already verified."}, status = 200)
+            
+            registration.payment_status = 'verified'
+            registration.cancelled = False
+            registration.save()
+
+            transaction.on_commit(lambda: send_ticket_email_task.delay(registration.id))
+
+            return Response({'message' : "Payment verified. Ticket sent to student."}, status = 200)
