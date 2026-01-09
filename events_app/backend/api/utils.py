@@ -1,16 +1,13 @@
 # utils.py
 
 
-
-import jwt, qrcode, io, base64
-
 from django.conf import settings
 from django.utils import timezone
 
+import jwt, qrcode, io, base64
 
 # Generates a secure, signed JWT containing the registration details. This token is the ticket.
 def generate_ticket_token(registration_id, event_id):
-
     payload = {
         'rid' : registration_id, # Registration ID
         'eid' : event_id, # Event ID
@@ -23,7 +20,6 @@ def generate_ticket_token(registration_id, event_id):
 
 # Generates the PIL (Pillow) image object. Encapsulates all the data & the metadata associated with an image.
 def _generate_qr_core(data):
-
     qr = qrcode.QRCode(
         version = 1,
         error_correction = qrcode.constants.ERROR_CORRECT_L,
@@ -38,7 +34,6 @@ def _generate_qr_core(data):
 
 # Returns raw bytes for email attachments
 def generate_qr_bytes(data):
-
     img = _generate_qr_core(data)
     buffer = io.BytesIO()
     img.save(buffer, format = 'PNG')
@@ -48,7 +43,6 @@ def generate_qr_bytes(data):
 
 # Generates QR code & returns it as Base64 string. This way we can directly send this string as a JSON object instead of saving the QR image
 def generate_qr_code_base64(data):
-     
     qr_bytes = generate_qr_bytes(data) # Re-using bytes function to avoid duplicating IO logic
     img_str = base64.b64encode(qr_bytes).decode('utf-8')
 
