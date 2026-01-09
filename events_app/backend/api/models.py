@@ -1,8 +1,29 @@
 # models.py
 
 
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator, URLValidator
+from django.contrib.auth.models import AbstractUser, BaseUserManager, User
 from django.db import models
-from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.utils import timezone
+
+import uuid
+
+
+def validate_brochure_size(value):
+    filesize = value.size
+    
+    if filesize > 5 * 1024 * 1024: # 5MB
+        
+        raise ValidationError("The max. file size that can be uploaded is 5MB")
+    
+def validate_image_size(value):
+    filesize = value.size
+
+    if filesize > 2 * 1024 * 1024: # 2MB
+        
+        raise ValidationError("The max. image size is 2MB. Please compress your image.")
+
 
 # To create & save a user with given email ID & password
 class CustomUserManager(BaseUserManager):
@@ -27,6 +48,7 @@ class CustomUserManager(BaseUserManager):
         if extra_fields.get('is_staff') is not True:
 
             raise ValueError("Superuser must have is_staff = True")
+        
         if extra_fields.get('is_superuser') is not True:
 
             raise ValueError("Superuser must have is_superuser = True")
@@ -90,19 +112,87 @@ class Event(models.Model):
     end_date = models.DateTimeField()
     location_type = models.CharField(max_length = 10, choices = LOCATION_CHOICES)
     physical_location = models.CharField(max_length = 500, blank = True, null = True)
+    google_maps_link = models.TextField(max_length = 500, blank = True, null = True, validators = [URLValidator()])
     virtual_location = models.TextField(blank = True, null = True)
     register_link = models.TextField(blank = True, null = True)
+    registration_deadline = models.DateTimeField(null = True, blank = True)
+    
+    # Brochure field
+    brochure = models.FileField(
+        upload_to = 'event_brochures/', 
+        null = True, 
+        blank = True,
+        # Check for file type & size
+        validators = [
+            FileExtensionValidator(allowed_extensions = ['pdf', 'doc', 'docx']),
+            validate_brochure_size
+        ],
+        help_text = "Upload a PDF/Doc file (Max. 5MB)"
+    )
+
     is_native = models.BooleanField(default = False)
     is_featured = models.BooleanField(default = False)
-    poster_field = models.ImageField(upload_to = 'event_posters/', null = True, blank = True)
+    
+    # Image Field
+    poster_field = models.ImageField(
+        upload_to = 'event_posters/', 
+        null = True, 
+        blank = True,
+        # Check for file size & format
+        validators = [
+            FileExtensionValidator(allowed_extensions = ['jpg', 'jpeg', 'png', 'webp']),
+            validate_image_size
+        ]
+    )
+
+    # Payment Fields
+    is_paid_event = models.BooleanField(default = False)
+    payment_qr_image = models.ImageField(upload_to = 'payment_qr_img/', null = True, blank = True)
+    ticket_price = models.DecimalField(max_digits = 10, decimal_places = 2, default = 0.00)
+
+    # Smart Fields
     age_restriction_cutoff = models.DateField(null = True, blank = True)
-    # This is what the host configures
     collect_phone = models.BooleanField(default = False)
     collect_college_school = models.BooleanField(default = False)
     collect_student_id = models.BooleanField(default = False)
     
+    # Foreign Keys
     organisation = models.ForeignKey(OrganisationProfile, on_delete = models.CASCADE, related_name = 'events')
     categories = models.ManyToManyField(Categories, through = 'EventCategories')
+
+    def save(self, *args, **kwargs):
+
+        # If the host didn't provide a deadline, take the default to be the event start date
+        if not self.registration_deadline:
+            self.registration_deadline = self.start_date
+
+        # Can't have a deadline after the event starts
+        if self.registration_deadline > self.start_date:
+            
+            raise ValueError("Registration deadline cannot be after the start date.")
+
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+
+        if self.location_type == 'offline':
+            if not self.physical_location:
+                
+                raise ValidationError({'physical_location' : "Venue name is required for offline events."})
+            
+            if not self.google_maps_link:
+                
+                raise ValidationError({'google_maps_link' : "Google Maps link is required for offline events."})
+            
+        if self.location_type == 'online' and not self.virtual_location:
+            
+            raise ValidationError({'virtual_location' : "Meeting link is required for online events."})
+
+    @property
+    def is_registration_open(self):
+
+        return timezone.now() < self.registration_deadline
 
     def __str__(self):
 
@@ -141,9 +231,20 @@ class Registrations(models.Model):
     student = models.ForeignKey(StudentProfile, on_delete = models.CASCADE, related_name = 'registrations')
     event = models.ForeignKey(Event, on_delete = models.CASCADE, related_name = 'registrations')
     date = models.DateTimeField(auto_now_add = True)
+
+    # Status flags
     cancelled = models.BooleanField(default = False)
     checked_in = models.BooleanField(default = False)
     checked_in_at = models.DateTimeField(null = True, blank = True)
+
+    # Payment Tracking
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('verified', 'Verified'),
+        ('rejected', 'Rejected'),
+    ]
+    payment_status = models.CharField(max_length = 20, choices = PAYMENT_STATUS_CHOICES, default = "pending")
+    transaction_id = models.CharField(max_length = 100, blank = True, null = True)
 
     class Meta:
         constraints = [
