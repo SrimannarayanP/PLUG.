@@ -11,3 +11,4 @@ framer-motion
 lucide-react
 react-hot-toast
 react-intersection-observer
+terser
