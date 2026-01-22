@@ -24,7 +24,8 @@ from django.conf.urls.static import static
 
 from api.views import (
     CreateUserView, CustomTokenObtainPairView, EventListView, RegisterForEventView, UpcomingEventListView, UserProfileView, FeaturedEventListView, VerifyTicketView, 
-    CreateEventView, HostEventListView, RegisteredEventsView, HostEventDetailView, ProcessPaymentView, SetNewPasswordView, RequestPasswordResetView, EventDetailsView
+    CreateEventView, HostEventListView, RegisteredEventsView, HostEventDetailView, ProcessPaymentView, SetNewPasswordView, RequestPasswordResetView, EventDetailsView, 
+    CategoryListView, SchoolCollegeListView
 )
 
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -49,6 +50,8 @@ urlpatterns = [
     path('api/auth/set-new-password/', SetNewPasswordView.as_view(), name = 'set-password'),
     path('api/auth/request-password-reset/', RequestPasswordResetView.as_view(), name = 'request_password_reset'),
     path('api/events/<int:id>/', EventDetailsView.as_view(), name = 'event-detail'),
+    path('api/categories/', CategoryListView.as_view(), name = 'category-list'),
+    path('api/colleges/', SchoolCollegeListView.as_view(), name = 'school-college-list'),
     path('api-auth/', include('rest_framework.urls')),
 ]
 
