@@ -1,27 +1,41 @@
 // SolidAnimatedButton.jsx
 
 
-import React from 'react';
+const SolidAnimatedButton = ({
+    type = 'submit', 
+    children, 
+    disabled = false, 
+    className = '', 
+    onClick
+}) => (
 
-
-const SolidAnimatedButton = ({type = 'submit', children, disabled = false}) => (
-
-    <button 
+    <button
         type = {type}
-        disabled = {disabled} 
-        className = "relative group w-full text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-red-500 transition-transform duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden">
-
-            <span className = "absolute inset-0 bg-gradient-to-r from-[#f87171] to-[#ef4444]"></span>
-            <span className = "absolute inset-0 bg-gradient-to-r from-[#ef4444] to-[#f87171] opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-in-out"></span>
-            <span className = "relative z-10">
-
-                {disabled ? "Logging In..." : children} 
-
+        disabled = {disabled}
+        onClick = {onClick}
+        className = {`
+            relative group w-full
+            text-white font-black uppercase tracking-widest text-sm
+            py-4 px-6 rounded-xl
+            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 focus:ring-pink-500
+            transition-all duration-300 ease-out
+            transform hover:-translate-y-1 active:scale-95
+            disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none
+            overflow-hidden
+            shadow-lg hover:shadow-[0_0_25px_rgba(236, 72, 153, 0.4)]
+            ${className}
+        `}
+    >
+            <span className = "absolute inset-0 bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600" />
+            {/* Hover highlight - mix-blend-overlay adds a glossy effect*/}
+            <span className = "absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-out mix-blend-overlay" />
+            {/* Text content */}
+            <span className = "relative z-10 flex items-center justify-center gap-2 drop-shadow-md">
+                {children} 
             </span>
-
     </button>
 
-);
+)
 
 
-export default SolidAnimatedButton;
+export default SolidAnimatedButton
