@@ -1,7 +1,7 @@
 // EventCard.jsx
 
 
-import {Calendar, MapPin, User, Ticket, ExternalLink, ImageOff} from 'lucide-react'
+import {Calendar, MapPin, User, Ticket, ExternalLink, ImageOff, Laptop} from 'lucide-react'
 
 import {getImageUrl} from '../../utils/imageHelper'
 
@@ -11,6 +11,26 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
     const posterUrl = getImageUrl(event.poster_field)
 
     const festiveGradient = "from orange-500 via-pink-500 to-purple-600"
+
+    const getLocationDisplay = () => {
+
+        if (event.location_type === 'online') {
+
+            return (
+
+                <span className = "flex items-center gap-1">
+                    <Laptop className = "w-3 h-3" />
+
+                    Online Event
+                </span>
+
+            )
+
+        }
+
+        return event.physical_location || 'TBA'
+
+    }
 
     return (
 
@@ -44,7 +64,10 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
                 <div className = "absolute top-3 right-3 bg-black/70 backdrop-blur-md border border-white/10 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-2">
                     <Calendar className = "w-3 h-3 text-orange-500" />
 
-                    {new Date(event.start_date).toLocaleDateString(undefined, {month : 'short', day : 'numeric'})}
+                    {event.start_date 
+                        ? new Date(event.start_date).toLocaleDateString(undefined, {month : 'short', day : 'numeric'})
+                        : 'TBA'
+                    }
                 </div>
             </div>
 
@@ -56,12 +79,12 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
                 <div>
                     {/* Categories */}
                     <div className = "flex flex-wrap gap-2 mb-3">
-                        {event.categories.map((category) => (
+                        {event.categories && event.categories.slice(0, 3).map((category) => (
                             <span
-                                key = {category}
+                                key = {category.id}
                                 className = "inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border border-zinc-800 bg-zinc-900 text-zinc-400 group-hover:border-zinc-700 transition-colors"
                             >
-                                {category}
+                                {category.name} 
                             </span>
                         ))}
                     </div>
@@ -77,7 +100,7 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
 
                         Hosted by
                         <span className = "font-medium text-zinc-300">
-                            {event.organiser || 'Unknown'}
+                            {event.organisation?.name || 'Unknown'}
                         </span>
                     </p>
 
@@ -86,7 +109,7 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
                         <MapPin className = "w-3 h-3 mt-0.5 text-zinc-500" />
 
                         <span className = 'line-clamp-1'>
-                            {event.location || 'TBA'}
+                            {getLocationDisplay()}
                         </span>
                     </div>
                 </div>
