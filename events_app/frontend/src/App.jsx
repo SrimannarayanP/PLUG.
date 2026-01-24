@@ -1,27 +1,26 @@
 // App.jsx
 
 
-import React, {Suspense} from 'react'
+import {Suspense, lazy} from 'react'
 import {BrowserRouter, Routes, Route, Navigate} from 'react-router-dom'
 
 import ProtectedRoute from './components/ProtectedRoute'
 
-import LandingPage from './pages/LandingPage'
-import LoginSignup from './pages/LoginSignup'
-import NotFound from './pages/NotFound'
-import SuccessfulLogin from './pages/SuccessfulLogin'
-import HostScanner from './pages/HostScanner'
-import CreateEvent from './pages/CreateEvent'
-import HostDashboard from './pages/HostDashboard'
-import ManageEvent from './pages/ManageEvent'
-import SetPassword from './pages/SetPassword'
-import ForgotPassword from './pages/RequestPasswordLink'
-import ResetPassword from './pages/ResetPassword'
-import RequestPasswordLink from './pages/RequestPasswordLink'
 import LoadingSpinner from './components/common/LoadingSpinner'
 
 
-const StudentDashboard = React.lazy(() => import('./pages/StudentDashboard'))
+// Lazy loading: Tells React to not include in index.js. Make separate files.
+const LandingPage = lazy(() => import('./pages/LandingPage'))
+const LoginSignup = lazy(() => import('./pages/LoginSignup'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const StudentDashboard = lazy(() => import('./pages/StudentDashboard'))
+const HostDashboard = lazy(() => import('./pages/HostDashboard'))
+const ManageEvent = lazy(() => import('./pages/ManageEvent'))
+const CreateEvent = lazy(() => import('./pages/CreateEvent'))
+const HostScanner = lazy(() => import('./pages/HostScanner'))
+const SetPassword = lazy(() => import('./pages/SetPassword'))
+const RequestPasswordLink = lazy(() => import('./pages/RequestPasswordLink'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 
 
 function Logout() {
@@ -42,48 +41,66 @@ export default function App() {
                 <Route 
                     path = '/'
                     element = {
-                        <LandingPage />
+                        <Suspense fallback = {<LoadingSpinner />}>
+                            <LandingPage />
+                        </Suspense>
                     }
                 />
 
-                <Route 
-                    path = '/login' 
-                    element = {<LoginSignup />} 
+                <Route
+                    path = '/login'
+                    element = {
+                        <Suspense fallback = {<LoadingSpinner />}>
+                            <LoginSignup />
+                        </Suspense>
+                    } 
                 />
 
                 <Route 
                     path = '/logout' 
-                    element = {<Logout />} 
+                    element = {
+                        <Suspense fallback = {<LoadingSpinner />}>
+                            <Logout />
+                        </Suspense>
+                    } 
                 />
 
-                <Route 
+                {/* <Route 
                     path = '/success_login'
                     element = {
                         <ProtectedRoute>
-                            <SuccessfulLogin />
+                            <Suspense fallback = {<LoadingSpinner />}>
+                                <SuccessfulLogin />
+                            </Suspense>
                         </ProtectedRoute>
                     }    
-                />
+                /> */}
 
                 {/* Password reset links */}
                 <Route 
                     path = '/set-password/:uid/:token'
                     element = {
-                        <SetPassword />
+                        <Suspense fallback = {<LoadingSpinner />}>
+                            <SetPassword />
+                        </Suspense>
                     }
                 />
 
                 <Route 
                     path = '/request-password'
                     element = {
-                        <RequestPasswordLink />
+                        <Suspense fallback = {<LoadingSpinner />}>
+                            <RequestPasswordLink />
+                        </Suspense>
                     }
                 />
 
                 <Route 
                     path = '/reset-password'
                     element = {
-                        <ResetPassword />
+                        <Suspense fallback = {<LoadingSpinner />}>
+                            <ResetPassword />
+                        </Suspense>
                     }
                 />
 
@@ -104,7 +121,9 @@ export default function App() {
                     path = '/host/dashboard'
                     element = {
                         <ProtectedRoute>
-                            <HostDashboard />
+                            <Suspense fallback = {<LoadingSpinner />}>
+                                <HostDashboard />
+                            </Suspense>
                         </ProtectedRoute>
                     }
                 />
@@ -113,7 +132,9 @@ export default function App() {
                     path = '/host/create-event'
                     element = {
                         <ProtectedRoute>
-                            <CreateEvent />
+                            <Suspense fallback = {<LoadingSpinner />}>
+                                <CreateEvent />
+                            </Suspense>
                         </ProtectedRoute>
                     }
                 />
@@ -122,7 +143,9 @@ export default function App() {
                     path = '/host/event/:eventId'
                     element = {
                         <ProtectedRoute>
-                            <ManageEvent />
+                            <Suspense fallback = {<LoadingSpinner />}>
+                                <ManageEvent />
+                            </Suspense>
                         </ProtectedRoute>
                     }
                 />
@@ -131,15 +154,21 @@ export default function App() {
                     path = '/host/scan'
                     element = {
                         <ProtectedRoute>
-                            <HostScanner />
+                            <Suspense fallback = {<LoadingSpinner />}>
+                                <HostScanner />
+                            </Suspense>
                         </ProtectedRoute>
                     }
                 />
                     
                 {/* If the user tries to go to any other route apart from the ones defined it'll show error 404 - Not found page */}
                 <Route 
-                    path = '*' 
-                    element = {<NotFound />} 
+                    path = '*'
+                    element = {
+                        <Suspense fallback = {<LoadingSpinner />}>
+                            <NotFound />
+                        </Suspense>
+                    } 
                 />
             </Routes>
         </BrowserRouter>
