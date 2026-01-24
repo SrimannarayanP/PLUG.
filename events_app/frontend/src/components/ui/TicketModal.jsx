@@ -4,7 +4,10 @@
 import {X, Loader2, CalendarDays, MapPin, ScanLine, Ticket, ExternalLink} from 'lucide-react'
 
 
-export default function TicketModal({ticket, closeModal}) {
+export default function TicketModal({
+    ticket, 
+    closeModal
+}) {
 
     const event = ticket.event
     const isPending = ticket.payment_status === 'pending'
