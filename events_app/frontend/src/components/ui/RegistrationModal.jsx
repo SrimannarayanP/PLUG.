@@ -1,15 +1,19 @@
 // RegistrationModal.jsx
 
 
-import React, {useState} from 'react'
+import {useState} from 'react'
 
 import apiPublic from '../../api/apiPublic'
 
 import FormInput from '../common/FormInput'
 
+import PLATFORM_QR from '../../assets/platform_qr.jpg'
+import {X, Loader2, ScanLine} from 'lucide-react'
+
 
 export default function RegistrationModal({event, closeModal}) {
 
+    const [step, setStep] = useState(1) // 1 = Details, 2 = Payment
     // We now use a single 'formData' object
     const [formData, setFormData] = useState({
         email : '',
@@ -18,6 +22,7 @@ export default function RegistrationModal({event, closeModal}) {
         phone_number : '',
         school_college_name : '',
         student_id_number : '',
+        transaction_id : '',
     })
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
@@ -39,10 +44,25 @@ export default function RegistrationModal({event, closeModal}) {
                                                             // holding & update with that value.
     }
 
-    const handleSubmit = async (e) => {
+    // The logic is if we are on step 1 & it is a paid event, then go to step 2
+    const handleFormAction = async (e) => {
         e.preventDefault()
 
-        // Setting loading state & clearing old errors
+        // Transition to payment step
+        if (step === 1 && event.is_paid_event) {
+            setStep(2)
+
+            return
+        }
+
+        // Validate transaction ID
+        if (event.is_paid_event && !formData.transaction_id) {
+            setError({transaction_id : "Transaction ID is required for payment verification"})
+
+            return
+        }
+
+        // Start loading & clear all old errors
         setLoading(true)
         setError(null)
 
@@ -54,9 +74,18 @@ export default function RegistrationModal({event, closeModal}) {
         try {
             const response = await apiPublic.post('/api/events/register/', payload)
 
-            setTicketData(response.data.ticket) // We grab the object immediately after the API call succeeds.
+            if (response.data.payment_needed) {
+                setTicketData({
+                    ...response.data.registration,
+                    is_pending : true
+                })
+                setSuccess(true)
+            } else if (response.data.ticket) {
+                setTicketData(response.data.ticket)
+                setSuccess(true)
+            }
+
             setLoading(false)
-            setSuccess(true)
         } catch (err) {
             setLoading(false)
 
@@ -65,16 +94,6 @@ export default function RegistrationModal({event, closeModal}) {
 
             const serverErrors = err.response?.data?.errors || err.response?.data || {}
             let safeErrorState = {}
-
-            // if (err.response && err.response.data.errors) {
-            //     // Handles field specific error
-            //     setError(err.response.data.errors)
-            // } else if (err.response && err.response.data.error) {
-            //     // Handles generic errors
-            //     setError({general : err.response.data.error})
-            // } else {
-            //     setError({general : "Registration failed. Please try again."})
-            // }
 
             if (err.response?.data?.error && typeof err.response.data.error === 'string') {
                 safeErrorState.general = err.response.data.error
@@ -97,178 +116,299 @@ export default function RegistrationModal({event, closeModal}) {
             }
 
             setError(safeErrorState)
-        }   
+        }
     }
+
+    // If we are on step 2 (or it's a free event), submit to backend
+
+    const inputStyle = "bg-transparent border-zinc-700 text-white focus:border-orange-500 focus:ring-orange-500/20 placeholder:text-zinc-500"
 
     return (
 
         // "fixed inset-0" stretches the container across the whole screen
         // 'z-50' places it on top of all the other content
         <div
-            className = "fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm"
+            className = "fixed inset-0 z-50 flex items-center justify-center bg-black/80 bg-opacity-80 backdrop-blur-md p-4 animate-in fade-in duration-200"
             onClick = {closeModal} // Click outside the modal to close it
         >
             <div
-                className = "relative w-full max-w-md p-8 rounded-2xl shadow-2xl transform transition-all"
+                className = "relative w-full max-w-md bg-zinc-950 border border-zinc-800 p-8 rounded-3xl shadow-2xl shadow-purple-900/20 transform transition-all animate-in zoom-in-95 duration-200"
                 onClick = {(e) => e.stopPropagation()} // Suppose I have an element that has nested elements in it. If I do some event (i.e., click) on the inner element,
                                                         // it'll trigger it's event listener & the parent event listener as well. stopPropagation prevents the parent
                                                         // event listener from being triggered. DOM tree me inner element ke parent element me event listener ko trigger
                                                         // nhi krega.
-                style = {{backgroundColor : '#eae5dc'}}
             >
 
                 {/* Close button */}
                 <button
                     onClick = {closeModal}
-                    className = "absolute top-4 right-4 text-[#6f2d37] hover:text-[#c90000] font-bold text-xl"
+                    className = "absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors bg-zinc-900/50 hover:bg-zinc-800 p-2 rounded-full"
                 >
-                    &times; {/* &times displays the actual multiplication sign. It's like an icon for the close button. */} 
+                    <X className = "w-5 h-5" /> 
                 </button>
 
                 {/* Success view */}
                 {success && ticketData ? (
-                    <div className = "text-center py-4">
-                        <h2 
-                            className = "text-2xl font-black mb-2"
-                            style = {{color : '#6f2d37'}}
-                        >
-                            You're Going!
-                        </h2>
-
-                        <p className = "text-[#6f2d37]/80 mb-6 text-sm">
-                            Ticket for <span className = "font-bold">{ticketData.attendee_name}</span>
-                        </p>
-
-                        {/* QR Code */}
-                        <div className = "bg-white p-4 rounded-xl shadow-inner mx-auto mb-6 w-fit">
-                            {/* Backend sent the image as a string, the browser knows how to render that now */}
-                            <img 
-                                src = {ticketData.qr_code}
-                                alt = "Your Event Ticket"
-                                className = "w-48 h-48 object-contain"
-                            />
+                    <div className = "text-center py-4 flex flex-col items-center">
+                        <div className = "w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-500/20">
+                            <Check className = "w-8 h-8 text-white stroke-[3]" />
                         </div>
 
-                        <p className = "text-[#265742] font-bold text-sm mb-6 bg-[#265742]/10 py-2 px-4 rounded-lg inline-block">
-                            Show this code at entry
+                        <h2 className = "text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-zinc-400 uppercase tracking-tighter">
+                            {ticketData.is_pending 
+                                ? "You're Almost There!" 
+                                : "You're Going!"
+                            }
+                        </h2>
+
+                        <p className = "text-zinc-400 mb-8 text-sm max-w-xs mx-auto">
+                            {ticketData.is_pending
+                                ? "Hang tight, your payment will be verified by the host!"
+                                : <span>
+                                    Ticket for <span className = "text-white font-bold">{ticketData.first_name} {ticketData.last_name}</span>
+                                </span>
+                            }
                         </p>
 
-                        <p className = "text-xs text-[#6f2d37]/60 mb-6">
-                            Ticket has also been sent to {formData.email}
+                        {/* QR Code - Only for verified attendees*/}
+                        {!ticketData.is_pending && ticketData.qr_code && (
+                            <div className = "bg-white p-3 rounded-2xl shadow-xl mx-auto mb-6 w-fit relative group">
+                                <div className = "absolute inset-0 bg-gradient-to-r from-orange-500 to-purple-600 rounded-2xl -z-10 blur opacity-40 group-hover:opacity-60 transition-opacity" />
+
+                                <img 
+                                    src = {ticketData.qr_code}
+                                    alt = "Your Event Ticket"
+                                    className = "w-48 h-48 object-contain"
+                                />
+                            </div>
+                        )}
+
+                        {/* Pending state */}
+                        {ticketData.is_pending && (
+                            <div className = "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-3">
+                                <Loader2 className = "w-4 h-4 animate-spin" />
+                                
+                                <div className = 'text-left'>
+                                    <strong className = "block text-xs uppercase tracking-wider mb-0.5">
+                                        Verification Pending
+                                    </strong>
+
+                                    <p className = "text-xs opacity-80">
+                                        You will receive your ticket via email once the transaction is verified.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        <p className = "text-xs text-zinc-600 mb-6 font-mono">
+                            Sent to: {formData.email}
                         </p>
 
                         <button
                             onClick = {closeModal}
-                            className = "w-full px-4 py-3 rounded-lg text-white font-bold shadow-lg hover:brightness-110"
-                            style = {{backgroundColor : '#c90000'}}
+                            className = "w-full px-6 py-4 rounded-xl text-black font-bold shadow-lg bg-white hover:bg-zinc-200 transition-colors uppercase tracking-widest text-sm"
                         >
                             Done
                         </button>
                     </div> 
                 ) : (
                     // Form view
-                    <form onSubmit = {handleSubmit}>
-                        <h2 
-                            className = "text-3xl font-black mb-1"
-                            style = {{color : '#6f2d37'}}
-                        >
-                            Join the Event
-                        </h2>
+                    <form onSubmit = {handleFormAction}>
+                        <div className = 'mb-8'>
+                            <h2 className = "text-3xl font-black text-white uppercase tracking-tighter mb-2">
+                                {step === 1 ? "Join the Event" : "Complete Payment"}
+                            </h2>
 
-                        <p 
-                            className = "text-sm mb-8 opacity-80"
-                            style = {{color : '#6f2d37'}}
-                        >
-                            {event.event_name}
-                        </p>
+                            <p 
+                                className = "text-sm font-medium text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-purple-400"
+                                style = {{color : '#6f2d37'}}
+                            >
+                                {step === 1 ? event.event_name : `Step 2 of 2 • ₹${event.ticket_price}`}
+                            </p>
+                        </div>
 
                         {/* Generic error message */}
                         {error && error.general && (
-                            <div className = "mb-6 pg-3 bg-red-100 border-border-red-400 text-red-700 rounded text-sm">
+                            <div className = "mb-6 p-4 bg-red-950/30 border-border-red-500/20 text-red-400 rounded-xl text-sm flex items-start gap-3">
+                                <div className = "w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0" />
+
                                 {error.general}
                             </div>
                         )}
 
-                        <div className = "grid grid-cols-2 gap-4">
-                            <FormInput
-                                id = 'first_name'
-                                name = 'first_name'
-                                placeholder = "First Name"
-                                value = {formData.first_name}
-                                onChange = {handleInputChange}
-                            />
+                        {step === 1 && (  
+                            <div className = "space-y-4 animate-in slide-in-from-bottom-4 fade-in duration-300">
+                                <div className = "grid grid-cols-2 gap-4">
+                                    <FormInput
+                                        id = 'first_name'
+                                        name = 'first_name'
+                                        placeholder = "First Name"
+                                        value = {formData.first_name}
+                                        onChange = {handleInputChange}
+                                        className = {inputStyle}
+                                    />
 
-                            <FormInput 
-                                id = 'last_name'
-                                name = 'last_name'
-                                placeholder = "Last Name"
-                                value = {formData.last_name}
-                                onChange = {handleInputChange}
-                            />
+                                    <FormInput 
+                                        id = 'last_name'
+                                        name = 'last_name'
+                                        placeholder = "Last Name"
+                                        value = {formData.last_name}
+                                        onChange = {handleInputChange}
+                                        className = {inputStyle}
+                                    />
+                                </div>
+
+                                <FormInput 
+                                    id = 'email'
+                                    name = 'email'
+                                    type = 'email'
+                                    placeholder = "Email ID"
+                                    value = {formData.email}
+                                    onChange = {handleInputChange}
+                                    className = {inputStyle}
+                                />
+
+                                {/* Smart Fields (Renders on condition) */}
+                                {event.collect_phone && (
+                                    <div>
+                                        <FormInput 
+                                            id = 'phone_number'
+                                            name = 'phone_number'
+                                            type = 'tel'
+                                            placeholder = "Phone Number"
+                                            value = {formData.phone_number}
+                                            onChange = {handleInputChange}
+                                            className = {inputStyle}
+                                        />
+
+                                        {error?.phone_number && <p className = "text-red-500 text-xs mt-1 ml-1">{error.phone_number}</p>}
+                                    </div>
+                                )}
+
+                                {event.collect_college_school && (
+                                    <div>
+                                        <FormInput 
+                                            id = 'school_college_name'
+                                            name = 'school_college_name'
+                                            placeholder = "School/College"
+                                            value = {formData.school_college_name}
+                                            onChange = {handleInputChange}
+                                            className = {inputStyle}
+                                        />
+
+                                        {error?.school_college_name && <p className = "text-red-500 text-xs mt-1 ml-1">{error.school_college_name}</p>}
+                                    </div>
+                                )}
+
+                                {event.collect_student_id && (
+                                    <div>
+                                        <FormInput 
+                                            id = 'student_id_number'
+                                            name = 'student_id_number'
+                                            placeholder = "Student ID"
+                                            value = {formData.student_id_number}
+                                            onChange = {handleInputChange}
+                                            className = {inputStyle}
+                                        />
+                                        {error?.student_id_number && <p className = "text-red-500 text-xs mt-1 ml-1">{error.student_id_number}</p>}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {step === 2 && event.is_paid_event && (
+                            <div className = "animate-in slide-in-from-right-8 fade-in duration-300">
+                                <div className = "mb-6 bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 flex flex-col items-center justify-center relative overflow-hidden">
+                                    <div className = "absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600" />  
+
+                                    <div className = "text-zinc-400 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <ScanLine className = "w-4 h-4 text-purple-500" />
+
+                                        Scan to Pay
+                                    </div>
+
+                                    <div className = "bg-white p-2 rounded-xl shadow-lg mb-4">
+                                        <img 
+                                            src = {PLATFORM_QR}
+                                            alt = "Payment QR"
+                                            className = "w-40 h-40 object-contain"
+                                        />
+                                    </div>
+
+                                    <div className = "inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-800 border border-zinc-700">
+                                        <span className = "text-zinc-400 text-xs font-bold uppercase">
+                                            Total:
+                                        </span>
+
+                                        <span className = "text-white font-mono font-bold">
+                                            {event.ticket_price}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className = 'space-y-2 '>
+                                    <FormInput
+                                        id = 'transaction_id'
+                                        name = 'transaction_id'
+                                        placeholder = "Enter UPI Transaction ID"
+                                        value = {formData.transaction_id}
+                                        onChange = {handleInputChange}
+                                        required = {true}
+                                        className = {`${inputStyle} text-center tracking-widest font-mono uppercase`}
+                                    />
+
+                                    <p className = "text-[10px] text-zinc-500 text-center">
+                                        The 10-digit reference number from your payment app
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Buttons */}
+                        <div className = "flex gap-3 mt-8">
+                            {/* Back button (Only on step 2) */}
+                            {step === 2 && (
+                                <button
+                                    type = 'button'
+                                    onClick = {() => setStep(1)}
+                                    className = "px-6 py-3 rounded-xl font-bold text-zinc-400 bg-transparent border border-zinc-700 hover:text-white hover:border-zinc-500 transition-colors"
+                                >
+                                    Back
+                                </button>
+                            )}
+
+                            {/* Main action button */}
+                            <button
+                                type = 'submit'
+                                disabled = {loading}
+                                className = "group relative flex-1 px-6 py-3 rounded-xl text-white font-bold text-base shadow-lg shadow-purple-900/20 hover:shadow-orange-900/30 overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                            >
+                                <div className = "absolute inset-0 bg-gradient-to-r from-orange-600 via-pink-600 to-purple-600 group-hover:scale-105 transition-transform duration-500" />
+
+                                <span className = "relative flex items-center justify-center gap-2">                                        
+                                    {loading ? (
+                                        <>
+                                            <Loader2 className = "w-4 h-4 animate-spin" />
+
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        step === 1 && event.is_paid_event
+                                            ? "Next: Payment Details"
+                                            : (event.is_paid_event
+                                                ? "Verfiy Payment"
+                                                : "Confirm Registration"
+                                            )
+                                    )}
+                                </span>
+                            </button>
                         </div>
 
-                        <FormInput 
-                            id = 'email'
-                            name = 'email'
-                            type = 'email'
-                            placeholder = "Email ID"
-                            value = {formData.email}
-                            onChange = {handleInputChange}
-                        />
-
-                        {/* Smart Fields (Renders on condition) */}
-                        {event.collect_phone && (
-                            <div>
-                                <FormInput 
-                                    id = 'phone_number'
-                                    name = 'phone_number'
-                                    type = 'tel'
-                                    placeholder = "Phone Number"
-                                    value = {formData.phone_number}
-                                    onChange = {handleInputChange}
-                                />
-                                {error && error?.phone_number && <p className = "text-[#c90000] text-xs -mt-4 mb-4">{error.phone_number}</p>}
-                            </div>
-                        )}
-
-                        {event.collect_college_school && (
-                            <div>
-                                <FormInput 
-                                    id = 'school_college_name'
-                                    name = 'school_college_name'
-                                    placeholder = "School/College"
-                                    value = {formData.school_college_name}
-                                    onChange = {handleInputChange}
-                                />
-                                {error && error?.school_college_name && <p className = "text-[#c90000] text-xs -mt-4 mb-4">{error.school_college_name}</p>}
-                            </div>
-                        )}
-
-                        {event.collect_student_id && (
-                            <div>
-                                <FormInput 
-                                    id = 'student_id_number'
-                                    name = 'student_id_number'
-                                    placeholder = "Student ID"
-                                    value = {formData.student_id_number}
-                                    onChange = {handleInputChange}
-                                />
-                                {error && error?.student_id_number && <p className = "text-[#c90000] text-xs -mt-4 mb-4">{error.student_id_number}</p>}
-                            </div>
-                        )}
-
-                        {/* Submit Button */}
-                        <button
-                            type = 'submit'
-                            disabled = {loading}
-                            className = "w-full mt-4 px-4 py-3 rounded-lg text-white font-bold text-lg shadow-lg transition-all duration-200 hover:brightness-110 disabled:opacity-70 disabled:cursor-not-allowed"
-                            style = {{backgroundColor : '#c90000'}}
-                        >
-                            {loading ? 'Registering...' : "Confirm Registration"}
-                        </button>
                     </form>
                 )}
             </div>
         </div>
+    
     )
+
 }
