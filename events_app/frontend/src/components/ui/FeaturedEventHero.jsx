@@ -1,119 +1,222 @@
 // FeaturedEventHero.jsx
 
 
-import {Sparkles, Calendar, ArrowRight, ImageOff} from 'lucide-react'
+import {useRef} from 'react'
+import {motion, useScroll, useTransform} from 'framer-motion'
 
 import {getImageUrl} from '../../utils/imageHelper'
 
 
-const FeaturedEventHero = ({event, onRegisterClick, onDetailsClick}) => {
+export default function FeaturedEventHero({event, onRegisterClick, onDetailsClick}) {
+
+    const ref = useRef(null)
+    // Parallax logic: Tracks the scroll progress of this component
+    const {scrollYProgress} = useScroll({
+        target : ref,
+        offset : ["start start", "end start"]
+    })
+
+    // Moves the background down at 50% speed of scroll
+    const y = useTransform(scrollYProgress, [0, 1], ['0%', '30%'])
+    // Reduces the opacity as you scroll more
+    const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0])
+    // Smooth zoom out effect on scroll
+    const scale = useTransform(scrollYProgress, [0, 1], [1.1, 1])
 
     // We use a helper func. to help us fetch the images to be displayed in the event card.
     const posterUrl = getImageUrl(event.poster_field)
+
+    const stripHtml = (html) => {
+        if (!html) return ''
+
+        const tmp = document.createElement('DIV')
+
+        tmp.innerHTML = html
+
+        return tmp.textContent || tmp.innerText || ''
+
+    }
+
+    const cleanDescription = stripHtml(event.description)
 
     return (
 
         // 'relative' : This is the parent container. We set this so that the text overlay (which is 'absolute') will adjust itself within the container.
         // 'overflow-hidden' : So that the image's rounded corners can be clipped.
-        <div 
-            className = "group relative w-full h-[500px] md:h-[600px] rounded-3xl shadow-2xl shadow-purple-900/20 overflow-hidden border border-zinc-800 cursor-pointer"
+        <div
+            ref = {ref}
+            className = "group relative w-full h-[80vh] md:h-[90vh] overflow-hidden rounded-2xl md:rounded-[2rem] border border-zinc-800 bg-[#050505] cursor-pointer"
             onClick = {() => onDetailsClick(event)}
         >
             {/* Background Image */}
             {/* "w-full h-96" sets a fixed height for the hero-section */}
             {/* 'object-cover' ensures that the image fills the container without stretching */}
             {/* 'opacity-50' makes the image semi-transparent so that the text can be placed on top of it */}
-            <div className = "absolute inset-0 bg-zinc-900">
+            <motion.div 
+                style = {{
+                    y, 
+                    opacity,
+                    scale
+                }}
+                className = "absolute inset-0 z-0"
+            >
                 {posterUrl ? (
-                    <img
+                    <motion.img
                         src = {posterUrl}
                         alt = {event.event_name}
-                        className = "w-full h-full object-cover opacity-80 transition-transform duration-1000 ease-out group-hover:scale-105"
+                        className = "w-full h-full object-cover"
+                        initial = {{scale : 1.15}}
+                        animate = {{scale : 1}}
+                        transition = {{
+                            duration : 3,
+                            ease : [0.22, 1, 0.36, 1]
+                        }}
                     />
                 ) : (
-                    <div className = "w-full h-full flex flex-col items-center justify-center opacity-30">
-                        <ImageOff className = "w-16 h-16 text-zinc-500 mb-4" />
-
-                        <span className = "text-zinc-500 font-bold uppercase tracking-widest">
-                            Featured Event
-                        </span>
-                    </div>
+                    // Fallback for no image
+                    <div className = "w-full h-full bg-[radial-gradient(ellipse_at_center, _var(--tw-gradient-stops))] from-zinc-800 via-zinc-950 to-black" />
                 )}
-            </div>
+            </motion.div>
+
+            {/* Base tint - Lowers the brightness of the whole image*/}
+            <div className = "absolute inset-0 bg-black/40 z-0 pointer-events-none" />
+
+            {/* Gradient overlay - For the main text. Taller & smoother. */}
+            <div className = "absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/90 via-25% to-transparent z-0 pointer-events-none" />
+
+            {/* Vignette - Darkens corners to focus attention */}
+            <div className = "absolute inset-0 bg-[radial_gradient(circle_at_center, transparent_0%, rgba(0, 0, 0, 0.4)_100%)] z-0 pointer-events-none " />
             
-            {/* Gradient Overlay - This gradient fades from transparent at the top to black at the bottom. It ensures the White text is readable regardless of the
-            image brightness. */}
-            <div className = "absolute inset-0 bg-gradient-to-t from-[#09090b] via-[#09090b]/60 to-transparent opacity-90"></div>
-
-            {/* Text Overlay */}
-            {/* "absolute top-0 left-0 w-full h-full" stretches the overlay to be the exact same size as the parent, sitting on top of the image.*/}
-            {/* "flex flex-col justify-end" is a flex container that aligns all the text content to the bottom-left corner */}
-            <div className = "absolute inset-0 p-6 md:p-12 flex flex-col justify-end items-start z-10">
-
-                {/* Featured Badge */}
-                <div className = "animate-in slide-in-from-bottom-4 fade-in duration-700 delay-100 mb-4">
-                    <div className = "relative inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900/80 backdrop-blur-md border border-transparent group-hover:border-orange-500/50 transition-all overflow-hidden">
-                        <div className = "absolute inset-0 rounded-full p-[1px] bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 -z-10 opacity-70" />
-                        
-                        <Sparkles className = "w-3 h-3 text-orange-400 fill-orange-400" />
-
-                        <span className = "text-xs font-bold uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-orange-200 to-pink-200">
-                            Premier Event
-                        </span>
-                    </div>
-                </div>
-
-                {/* Event Title */}
-                <h1 className = "text-4xl md:text-7xl font-black text-white mb-4 uppercase tracking-tighter leading-[0.9] drop-shadow-lg max-w-4xl animate-in slide-in-from-bottom-4 fade-in duration-700 delay-200">
-                    {event.event_name}
-                </h1>
-
-                {/* The event date */}
-                <p className = "md:hidden text-sm text-gray-200 mb-4 font-mono">
-                    {event.start_date}
-                </p>
-                
-                {/* Metadata Row */}
-                <div className = "hidden md:flex flex-wrap items-center gap-6 text-zinc-300 mb-8 animate-in slide-in-from-bottom-4 fade-in duration-700 delay-300">
-                    <div className = "flex items-center gap-2 text-base font-mono">
-                        <Calendar className = "w-4 h-4 text-purple-400" />
-
-                        <span className = "uppercase tracking-wide">
-                            {event.start_date}
-                        </span>
-                    </div>
-
-                    {/* Category Tags */}
-                    <div className = "flex gap-2">
-                        {event.categories && event.categories.slice(0, 2).map(cat => (
-                            <span
-                                key = {cat}
-                                className = "text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded border border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:text-white hover:border-purple-500/50 transition-colors"
-                            >
-                                {cat}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-                
-                {/* Action Button */}
-                <button
-                    onClick = {(e) => {
-                        e.stopPropagation() 
-                        onRegisterClick(event)
+            {/* Glass badge */}
+            <div className = "absolute top-6 left-6 md:top-10 md:left-10 z-20">
+                <motion.div
+                    initial = {{
+                        y : -20,
+                        opacity : 0
                     }}
-                    className = "group/btn relative px-8 py-4 bg-white text-black rounded-xl font-bold uppercase tracking-widest text-sm md:text-base shadow-[0_0_20px_rgba(168, 85, 247, 0.2)] hover:shadow-[0_0_30px_rgba(249, 115, 22, 0.4)] hover:bg-gradient-to-r hover:from-white hover:to-orange-50 transition-all active:scale-95 flex items-center gap-3 animate-in slide-in-from-bottom-4 fade-in duration-700 delay-500"
+                    animate = {{
+                        y : 0,
+                        opacity : 1
+                    }}
+                    transition = {{
+                        duration : 1,
+                        delay : 0.5
+                    }}
+                    className = "inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl"
                 >
-                    Register Now
+                    <span className = "relative flex h-2 w-2">
+                        <span className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
 
-                    <ArrowRight className = "w-4 h-4 text-orange-600 transition-transform group-hover/btn:translate-x-1" />
-                </button>
+                        <span className = "relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
+                    </span>
+
+                    <span className = "text-white/90 font-mono text-[10px] md:text-xs uppercase tracking-[0.2em] font-bold">
+                        Featured
+                    </span>
+                </motion.div>
+            </div>
+
+            {/* Content Layer */}
+            <div className = "relative z-10 flex flex-col h-full justify-end px-6 pb-8 pt-32 md:px-12 md:pb-12 lg:px-16 lg:pb-16">
+                <div className = "max-w-[90rem] w-full">
+                    {/* Title */}
+                    <div className = "overflow-hidden -ml-1 mb-4 md:mb-6">
+                        <motion.h1
+                            initial = {{y : '110%'}}
+                            animate = {{y : 0}}
+                            transition = {{
+                                duration : 1,
+                                delay : 0.1,
+                                ease : [0.22, 1, 0.36, 1]
+                            }}
+                            className = "text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-black text-white uppercase tracking-tighter leading-[0.85] break-words hyphens-auto mix-blend-screen drop-shadow-2xl"
+                        >
+                            {event.event_name}
+                        </motion.h1>
+                    </div>
+
+                    {/* Description/Stats */}
+                    <div className = "grid grid-cols-1 md:grid-cols-[1.5fr_1fr] gap-8 md:gap-16 items-end">
+                        {/* Description */}
+                        <motion.p
+                            initial = {{
+                                opacity : 0, 
+                                y : 20
+                            }}
+                            animate = {{
+                                opacity : 1,
+                                y : 0
+                            }}
+                            transition = {{
+                                duration : 1,
+                                delay : 0.3,
+                            }}
+                            className = "text-zinc-400 text-sm md:text-lg lg:text-xl font-light leading-relaxed max-w-xl line-clamp-3 md:line-clamp-4"
+                        >
+                            {cleanDescription || "Experience the ultimate student gathering! Join us for an unforgettable experience!"}
+                        </motion.p>
+
+                        {/* Action area */}
+                        <div className = "flex flex-col md:items-end gap-6">    
+                            <motion.div
+                                initial = {{opacity : 0}}
+                                animate = {{opacity : 1}}
+                                transition = {{
+                                    duration : 1,
+                                    delay : 0.5
+                                }}
+                                className = "flex flex-wrap items-center gap-4 md:gap-8 text-xs font-mono text-zinc-500 uppercase tracking-widest"
+                            >
+                                <span className = "text-zinc-300 border-b border-zinc-800 pb-1">
+                                    {new Date(event.start_date).toLocaleDateString()}
+                                </span>
+
+                                <span className = "text-zinc-300 border-b border-zinc-800 pb-1">
+                                    {event.location_type === 'online' 
+                                        ? "Online Event"
+                                        : (event.physical_location || "Location TBA")
+                                    }
+                                </span>
+                            </motion.div>
+
+                            {/* Action buttons */}
+                            <motion.div
+                                initial = {{
+                                    opacity : 0,
+                                    y : 20
+                                }}
+                                animate = {{
+                                    opacity : 1,
+                                    y : 0
+                                }}
+                                transition = {{
+                                    duration : 0.8,
+                                    delay : 0.6
+                                }}
+                                className = "w-full md:w-auto"
+                            >
+                                <button
+                                    onClick = {(e) => {
+                                        e.stopPropagation()
+
+                                        onRegisterClick(event)
+                                    }}
+                                    className = "group relative w-full md:w-auto px-8 py-4 md:px-12 md:py-6 bg-white text-black overflow-hidden active:scale-[0.98] transition-transform duration-200"
+                                >
+                                    <span className = "relative z-10 font-bold uppercase tracking-[0.2em] text-xs md:text-sm group-hover:text-white transition-colors duration-300">
+                                        Secure Ticket
+                                    </span>
+
+                                    {/* Diagonal slide effect */}
+                                    <div className = "absolute inset-0 bg-orange-600 transform translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-[0.22, 1, 0.36, 1]" />
+                                </button>
+                            </motion.div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
     )
 
 }
-
-
-export default FeaturedEventHero
