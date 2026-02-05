@@ -4,56 +4,58 @@
 from celery import shared_task
 
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
+from django.contrib.auth import get_user_model
+from django.core.mail import EmailMultiAlternatives, send_mail
+from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
-from .models import Registrations
+from .models import Registration
 from .utils import generate_ticket_token, generate_qr_bytes
 
 
+User = get_user_model()
+
 @shared_task
-def send_ticket_email_task(registration_id):
+def send_ticket_email(registration_id):
     # Async task to generate QR code & send email
     try:
 
-        registration = Registrations.objects.get(id = registration_id)
+        registration = Registration.objects.get(id = registration_id)
+        event = registration.event
+        user = registration.student.user
 
         token = generate_ticket_token(registration.id, registration.event.id) # Generate token
         qr_bytes = generate_qr_bytes(token) # Get raw bytes
 
-        # Construct email
-        subject = f"Your Ticket: {registration.event.event_name}"
-        to_email = [registration.student.user.email]
+        context = {
+            'student_name' : user.first_name,
+            'event_name' : event.name,
+            'event_date' : event.start_date,
+            'event_location' : event.location if hasattr(event, 'location') else None
+        }
 
-        html_content = f"""
-        <html>
-            <body>
-                <h1>You're going to {registration.event.event_name}!</h1>
-                
-                <p>Hi {registration.student.user.first_name},</p>
-                <p>See attached QR code for your ticket.</p>
-            </body>
-        </html>
-        """
+        # Construct email
+        subject = f"Your Ticket: {event.name}"
+        html_content = render_to_string('emails/ticket_email.html', context)
         text_content = strip_tags(html_content)
 
         msg = EmailMultiAlternatives(
             subject,
             text_content,
             settings.DEFAULT_FROM_EMAIL,
-            to_email 
+            [user.email]
         )
 
         msg.attach_alternative(html_content, 'text/html')
 
         # Attach QR code bytes
-        msg.attach('ticket_qr.png', qr_bytes, 'image/png')
+        msg.attach(f'ticket_{event.id}.png', qr_bytes, 'image/png')
 
         msg.send()
 
-        return f"Email sent to {to_email}"
+        return f"Email sent to {user.email}"
     
-    except Registrations.DoesNotExist:
+    except Registration.DoesNotExist:
 
         return f"Registration {registration_id} not found."
     
@@ -62,57 +64,54 @@ def send_ticket_email_task(registration_id):
         return f"Failed to send email: {str(e)}"
     
 @shared_task
-def send_password_reset_email_task(email, link):
+def send_password_reset_email(email, reset_link):
+    subject = "Reset Your Password - PLUG."
+    html_message = render_to_string('emails/password_reset.html', {'reset_link' : reset_link})
+    plain_message = strip_tags(html_message)
+    
+    from_email = settings.DEFAULT_FROM_EMAIL
+    to_email = [email]
+
+    send_mail(
+        subject,
+        plain_message,
+        from_email,
+        to_email,
+        html_message = html_message,
+        fail_silently = False
+    )
+
+
+@shared_task
+def send_verification_email(user_id, otp):
     try:
-        subject = "Action Required: Reset Your Password"
-        from_email = settings.DEFAULT_FROM_EMAIL
-        to = [email]
+        user = User.objects.get(id = user_id)
+        subject = "Verify your PLUG Account"
 
-        html_content = f"""
-            <html>
-                <body style = "font-family : sans-serif; line-height : 1.6; color : #333;">
-                    <div style = "max-width : 600px; margin : 0 auto; padding : 20px;">
-                        <h2 style = "color : #000;">
-                            Reset Your Password
-                        </h2>
+        context = {
+            'first_name' : user.first_name,
+            'otp' : otp
+        }
 
-                        <p>We received a request to reset the password for your PLUG. account.</p>
-
-                        <p>Click the button below to set a new password:</p>
-
-                        <a 
-                            href = "{link}"
-                            style = "display : inline-block; padding : 12px 24px; background-color : #f97316; color : white; text-decoration : none; font-weight : bold; border-radius : 4px; margin : 20px 0;"
-                        >
-                            Reset Password
-                        </a>
-
-                        <p style = "font-size : 12px; color : #666;">
-                            If you didn't ask for this, you can ignore this email.
-                        </p>
-
-                        <p style = "font-size : 12px; color : #999; margin-top : 30px;">
-                            Button not working? Paste this link into your browser:<br>
-
-                            {link}
-                        </p>
-                    </div>
-                </body>
-            </html>
-        """
-
+        html_content = render_to_string('emails/verify_email.html', context)
+        
         text_content = strip_tags(html_content)
 
         msg = EmailMultiAlternatives(
             subject,
             text_content,
-            from_email,
-            to
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email]
         )
+
         msg.attach_alternative(html_content, 'text/html')
         msg.send()
 
-        return f"Password reset email sent to {email}"
+        return f"OTP sent to {user.email}"
+    except User.DoesNotExist:
+
+        return f"User {user_id} not found."
+    
     except Exception as e:
 
-        return f"Failed to send password reset email: {str(e)}"
+        return f"Failed to send OTP: {str(e)}"
