@@ -7,17 +7,19 @@
 
 # We're only getting data that we want to send to the frontend
 
-from django.db import transaction
-from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
+from django.db import transaction
 from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+from datetime import datetime
 
 from .models import Category, CustomUser, Event, EventDocument, OrganisationProfile, Registration, SchoolCollege, StudentProfile
 from .tasks import send_verification_email
@@ -86,7 +88,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'first_name' : user.first_name,
                 'last_name' : user.last_name,
                 'role' : user.role,
-                'is_profile_complete' : is_profile_complete
+                'is_profile_complete' : is_profile_complete,
+                'is_email_verified' : user.is_email_verified
             }
 
         }
@@ -195,7 +198,10 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
 
         model = User
-        fields = ['id', 'email', 'password', 'first_name', 'last_name', 'role', 'organisation_name', 'phone_number', 'date_of_birth', 'student_id_number', 'school_college_id', 'profile']
+        fields = [
+            'id', 'email', 'password', 'first_name', 'last_name', 'role', 'organisation_name', 'phone_number', 'date_of_birth', 'student_id_number', 'school_college_id', 
+            'profile', 'is_email_verified'
+        ]
         extra_kwargs = {
             'password' : {'write_only' : True}, # This ensures that when we're creating a new user, we accept a password but we don't want to return the
                                                 # password when we return info. about the user
@@ -224,17 +230,17 @@ class UserSerializer(serializers.ModelSerializer):
         user.save()
 
         if role == CustomUser.Role.HOST:
-            if not org_name or not phone_number:
-
-                raise ValidationError({'profile' : "Hosts must provide an Organisation Name & Phone Number."})
-            
-            OrganisationProfile.objects.create(user = user, name = org_name, phone_number = phone_number)
+            OrganisationProfile.objects.create(
+                user = user, 
+                name = org_name, 
+                phone_number = phone_number
+            )
         else:
             # Default to student
             StudentProfile.objects.create(user = user, phone_number = phone_number, date_of_birth = date_of_birth, student_id_number = student_id_number, school_college = school_college)
 
         # We use on_commit to ensure the user exists in DB before Celery tries to find them.
-        transaction.on_commit(lambda: send_verification_email.delay(user.id, otp))
+        transaction.on_commit(lambda otp = otp: send_verification_email.delay(str(user.id), otp))
 
         return user
     
@@ -330,6 +336,7 @@ class EventSerializer(serializers.ModelSerializer):
 
     # Computed fields
     start_date_formatted = serializers.DateTimeField(source = 'start_date', format = r"%B %d, %Y, %I:%M %p", read_only = True)
+    registration_deadline = serializers.DateTimeField(required = False, allow_null = True)
 
     is_registration_open = serializers.BooleanField(read_only = True)
 
@@ -339,8 +346,8 @@ class EventSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'start_date', 'start_date_formatted', 'end_date', 'location_type', 'physical_location', 'google_maps_link',
             'virtual_location', 'register_link', 'registration_deadline', 'is_native', 'is_featured', 'poster', 'is_paid_event', 'payment_qr_image',
-            'ticket_price', 'organisation', 'categories', 'category_ids', 'is_registration_open', 'age_restriction_cutoff', 'collect_phone', 'collect_college_school',
-            'collect_student_id', 'documents', 'uploaded_documents'
+            'ticket_price', 'max_tickets_per_user', 'organisation', 'categories', 'category_ids', 'is_registration_open', 'age_restriction_cutoff', 'collect_phone',
+            'collect_college_school', 'collect_student_id', 'documents', 'uploaded_documents'
         ]
 
     def validate(self, attrs):
@@ -367,8 +374,28 @@ class EventSerializer(serializers.ModelSerializer):
             temp_instance.clean()
         except ValidationError as e:
 
-            raise ValidationError(e.message_dict)
+            raise serializers.ValidationError(e.message_dict)
         
+        start_date = attrs.get('start_date') or (self.instance.start_date if self.instance else None)
+        end_date = attrs.get('end_date') or (self.instance.end_date if self.instance else None)
+
+        reg_deadline = attrs.get('registration_deadline')
+
+        if not reg_deadline and start_date:
+            attrs['registration_deadline'] = start_date
+            reg_deadline = start_date
+
+        if 'registration_deadline' not in attrs and self.instance:
+            reg_deadline = self.instance.registration_deadline
+
+        if start_date and end_date and start_date >= end_date:
+
+            raise ValidationError({'end_date' : "End date must be after the start date."})
+        
+        if reg_deadline and start_date and reg_deadline > start_date:
+
+            raise ValidationError({'registration_deadline' : "Registration deadline cannot be after the event starts."})
+
         return attrs
 
     def create(self, validated_data):
@@ -402,6 +429,8 @@ class EventSerializer(serializers.ModelSerializer):
 
                 current_count += 1
 
+        instance.save()
+
         return instance
     
 
@@ -410,30 +439,175 @@ class RegistrationSerializer(serializers.ModelSerializer):
 
     event = EventSerializer(read_only = True)
     qr_code = serializers.SerializerMethodField()
-    student_name = serializers.CharField(source = 'student.user.first_name', read_only = True)
+
+    attendee_name = serializers.CharField(read_only = True)
+    email = serializers.EmailField(read_only = True)
 
     class Meta:
 
         model = Registration
-        fields = ['id', 'event', 'student_name', 'created_at', 'is_checked_in', 'is_cancelled', 'qr_code', 'payment_status', 'transaction_id']
+        fields = ['id', 'event', 'attendee_name', 'email', 'created_at', 'is_checked_in', 'is_cancelled', 'qr_code', 'ticket_code', 'payment_status', 'transaction_id']
 
     def get_qr_code(self, obj):
-        token = generate_ticket_token(obj.id, obj.event.id)
+        token = generate_ticket_token(str(obj.id), str(obj.event.id))
 
         return generate_qr_code_base64(token)
+    
+
+class TicketAttendeeSerializer(serializers.Serializer):
+
+    first_name = serializers.CharField()
+    last_name = serializers.CharField(allow_blank = True)
+    email = serializers.EmailField()
+
+    # Smart Fields
+    phone_number = serializers.CharField(required = False, allow_blank = True)
+    student_id_number = serializers.CharField(required = False, allow_blank = True)
+    date_of_birth = serializers.DateField(required = False, allow_null = True)
+
+    school_college_id = serializers.IntegerField(required = False, allow_null = True)
+    school_college_name = serializers.CharField(required = False, allow_blank = True)
+    school_college_city = serializers.CharField(required = False, allow_blank = True)
+    school_college_state = serializers.CharField(required = False, allow_blank = True)
+
+
+class BulkRegistrationSerializer(serializers.Serializer):
+
+    event_id = serializers.UUIDField()
+    transaction_id = serializers.CharField(required = False, allow_blank = True)
+
+    attendees = TicketAttendeeSerializer(many = True, allow_empty = False)
+
+    def validate(self, data):
+        event_id = data.get('event_id')
+        attendees = data.get('attendees')
+        user = self.context['request'].user
+
+        try:
+            event = Event.objects.get(id = event_id)
+        except Event.DoesNotExist:
+
+            raise serializers.ValidationError({'event_id' : "Event not found."})
+        
+        if len(attendees) > event.max_tickets_per_user:
+
+            raise serializers.ValidationError(f"You can only book a maximum of {event.max_tickets_per_user} tickets.")
+        
+        for index, attendee in enumerate(attendees):
+            is_buyer = (index == 0)
+
+            if not is_buyer:
+                if not attendee.get('first_name'):
+
+                    raise serializers.ValidationError({f"attendees[{index}].first_name" : "Guest's first name is required."})
+                
+                if not attendee.get('last_name'):
+
+                    raise serializers.ValidationError({f"attendees[{index}].last_name" : "Guest's last name is required."})
+
+            # Phone Check
+            if event.collect_phone:
+                phone_number = attendee.get('phone_number')
+
+                if is_buyer:
+                    # phone for guest, phone_number for buyer.
+                    if not user.student_profile.phone_number and not phone_number:
+
+                        raise serializers.ValidationError({f"attendees[{index}].phone_number" : "Phone number is required."})
+                elif not phone_number:
+                    
+                    raise serializers.ValidationError({f"attendees[{index}].phone_number" : "Phone number is required."})
+                
+            # Student ID Check
+            if event.collect_student_id:
+                student_id_number = attendee.get('student_id_number')
+
+                if is_buyer:
+                    if not user.student_profile.student_id_number and not student_id_number:
+
+                        raise serializers.ValidationError({f"attendees[{index}].student_id_number" : "Student ID number is required."})
+                elif not student_id_number:
+                    
+                    raise serializers.ValidationError({f"attendees[{index}].student_id_number" : "Student ID number is required."})
+                    
+            # School/College Check
+            if event.collect_college_school:
+                if attendee.get('school_college_id'):
+                    pass
+                elif attendee.get('school_college_name'):
+                    raw_name = attendee.get('school_college_name').strip()
+                    raw_city = attendee.get('school_college_city').strip()
+                    raw_state = attendee.get('school_college_state').strip()
+
+                    if not raw_city or not raw_state:
+                        
+                        raise serializers.ValidationError({f"attendees[{index}].school_college" : "To add a new college, you MUST provide its City & State."})
+                    
+                    college_obj, created = SchoolCollege.objects.get_or_create(
+                        name__iexact = raw_name,
+                        city__iexact = raw_city,
+                        defaults = {
+                            'name' : raw_name.title(),
+                            'city' : raw_city.title(),
+                            'state' : raw_state.title()
+                        }
+                    )
+
+                    # After inserting into DB, inject that ID into this data
+                    attendee['school_college_id'] = college_obj.id
+                elif is_buyer and user.student_profile.school_college:
+                    pass
+                else:
+                    
+                    raise serializers.ValidationError({f"attendees[{index}].school_college" : "School/College is required."})
+                
+            # Age Check
+            if event.age_restriction_cutoff:
+                dob = attendee.get('date_of_birth')
+
+                if is_buyer and not dob:
+                    dob = user.student_profile.date_of_birth
+
+                if not dob:
+
+                    raise serializers.ValidationError({f"attendees[{index}].date_of_birth" : "Date of Birth is required."})
+
+                if dob > event.age_restriction_cutoff:
+                    name = attendee.get('first_name', f"Attendee #{index + 1}")
+
+                    raise serializers.ValidationError(f"Sorry, {name} does not meet the age requirement.")
+
+        data['event'] = event
+
+        return data
 
 
 # Serializer for hosts to view list of attendees.
 class AttendeeListSerializer(serializers.ModelSerializer):
 
-    first_name = serializers.CharField(source = 'student.user.first_name')
-    last_name = serializers.CharField(source = 'student.user.last_name')
-    email = serializers.EmailField(source = 'student.user.email')
-    phone = serializers.CharField(source = 'student.phone_number')
-    college = serializers.CharField(source = 'student.school_college.name', default = 'N/A')
-    student_id_number = serializers.CharField(source = 'student.student_id_number')
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    email = serializers.EmailField()
+    phone_number = serializers.SerializerMethodField()
+    school_college = serializers.SerializerMethodField()
+    student_id_number = serializers.SerializerMethodField()
 
     class Meta:
 
         model = Registration
-        fields = ['id', 'first_name', 'last_name', 'email', 'phone', 'college', 'student_id_number', 'is_checked_in', 'created_at', 'payment_status', 'transaction_id']
+        fields = [
+            'id', 'first_name', 'last_name', 'email', 'phone_number', 'school_college', 'student_id_number', 'is_checked_in', 'created_at', 'payment_status', 
+            'transaction_id'
+        ]
+
+    def get_phone_number(self, obj):
+        
+        return obj.guest_data.get('phone_number') or obj.student.phone_number or 'N/A'
+    
+    def get_school_college(Self, obj):
+
+        return obj.guest_data.get('school_college_name') or (str(obj.student.school_college) if obj.student.school_college else 'N/A')
+    
+    def get_student_id_number(self, obj):
+
+        return obj.guest_data.get('student_id_number') or obj.student.student_id_number or 'N/A'
