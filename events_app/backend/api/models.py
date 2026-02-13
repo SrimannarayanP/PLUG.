@@ -1,14 +1,15 @@
 # models.py
 
 
+from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator, URLValidator
-from django.contrib.auth.models import AbstractUser, BaseUserManager
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-import uuid
+import secrets, string, uuid
 
 # CONSTANTS
 MAX_BROCHURE_SIZE_MB = 10
@@ -73,6 +74,7 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('role', CustomUser.Role.ADMIN)
 
         if extra_fields.get('is_staff') is not True:
 
@@ -130,7 +132,7 @@ class Category(models.Model):
 # Standardized names for colleges to prevent dirty data
 class SchoolCollege(TimeStampedModel):
 
-    name = models.CharField(max_length = 255, unique = True)
+    name = models.CharField(max_length = 255)
     city = models.CharField(max_length = 255, blank = True, null = True)
     state = models.CharField(max_length = 255, blank = True, null = True)
 
@@ -138,22 +140,28 @@ class SchoolCollege(TimeStampedModel):
 
         verbose_name_plural = 'School/College'
         ordering = ['name'] # Arrange the records in alphabetical order by default
+        constraints = [
+            models.UniqueConstraint(
+                fields = ['name', 'city'],
+                name = 'unique_school_per_city'
+            )
+        ]
 
     def __str__(self):
 
-        return self.name
+        return f"{self.name} ({self.city})"
 
 
 # --- Profiles ---
 class OrganisationProfile(TimeStampedModel):
 
     user = models.OneToOneField(CustomUser, on_delete = models.CASCADE, primary_key = True, related_name = 'organisation_profile')
-    name = models.CharField(max_length = 255)
-    phone_number = models.CharField(max_length = 20, unique = True)
+    name = models.CharField(max_length = 255, null = True, blank = True)
+    phone_number = models.CharField(max_length = 20, unique = True, blank = True, null = True)
 
     def __str__(self):
 
-        return self.name
+        return self.name or f"Incomplete Host Profile ({self.user.email})"
 
 
 class StudentProfile(TimeStampedModel):
@@ -184,6 +192,8 @@ class Event(UUIDModel, TimeStampedModel):
     description = models.TextField()
     start_date = models.DateTimeField()
     end_date = models.DateTimeField()
+
+    max_tickets_per_user = models.PositiveIntegerField(default = 1, help_text = "Max tickets a single user can book")
 
     # Location
     location_type = models.CharField(max_length = 10, choices = LocationType.choices)
@@ -316,6 +326,16 @@ class Registration(UUIDModel, TimeStampedModel):
     student = models.ForeignKey(StudentProfile, on_delete = models.CASCADE, related_name = 'registrations')
     event = models.ForeignKey(Event, on_delete = models.CASCADE, related_name = 'registrations')
 
+    first_name = models.CharField(max_length = 255)
+    last_name = models.CharField(max_length = 255, blank = True)
+    email = models.EmailField(db_index = True)
+
+    # Guest details
+    guest_data = models.JSONField(default = dict, blank = True, null = True)
+
+    # Manual Entry Ticket Code
+    ticket_code = models.CharField(max_length = 6, unique = True, db_index = True, blank = True)
+
     # Status flags
     is_cancelled = models.BooleanField(default = False)
     is_checked_in = models.BooleanField(default = False)
@@ -327,11 +347,12 @@ class Registration(UUIDModel, TimeStampedModel):
 
     class Meta:
 
-        verbose_name_plural = 'Registration'
+        verbose_name_plural = 'Registrations'
 
         indexes = [
             # Get all verified attendees for some event X
-            models.Index(fields = ['event', 'payment_status'])
+            models.Index(fields = ['event', 'payment_status']),
+            models.Index(fields = ['event', 'is_checked_in']),
         ]
 
     # Manually enforce that a student cannot have more than 1 active registrations but can have many cancelled registrations for the same event.
@@ -341,17 +362,50 @@ class Registration(UUIDModel, TimeStampedModel):
         existing_active = Registration.objects.filter(
             student = self.student,
             event = self.event,
-            is_cancelled = False
-        ).exclude(id = self.id) # Exclude self if we are editing.
+            is_cancelled = False # Exclude self if we are editing.
+        )
 
-        if existing_active.exists() and not self.is_cancelled:
+        if self.id:
+            existing_active = existing_active.exclude(id = self.id)
 
-            raise ValidationError("You already have an active registration for this event.")
+        existing_count = existing_active.count()
+
+        if existing_count >= self.event.max_tickets_per_user and not self.is_cancelled:
+
+            raise ValidationError(f"You cannot book more than {self.event.max_tickets_per_user} tickets for this event.")
 
     def save(self, *args, **kwargs):
+        if not self.email:
+            self.email = self.student.user.email
+
+        if not self.first_name:
+            self.first_name = self.student.user.first_name
+
+        if not self.last_name:
+            self.last_name = self.student.user.last_name or ''
+
+        if not self.ticket_code:
+            self.ticket_code = self._generate_unique_code()
+
         self.clean()
         
         super().save(*args, **kwargs)
+
+    def _generate_unique_code(self):
+        """Generates a unique 6-character alphanumeric code (uppercase)"""
+        characters = string.ascii_uppercase + string.digits
+
+        while True:
+            code = ''.join(secrets.choice(characters) for _ in range(6))
+
+            if not Registration.objects.filter(ticket_code = code).exists():
+
+                return code
+            
+    @property
+    def attendee_name(self):
+        
+        return f"{self.first_name} {self.last_name}".strip()
 
     def __str__(self):
         
