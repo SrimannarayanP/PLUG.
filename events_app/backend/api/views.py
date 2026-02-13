@@ -1,6 +1,8 @@
 # views.py
 
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
@@ -19,11 +21,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from datetime import timedelta
-
 from .models import Category, CustomUser, Event, OrganisationProfile, Registration, SchoolCollege, StudentProfile
 from .permissions import IsEmailVerified, IsEventOwner, IsHostUser 
-from .serializers import (AttendeeListSerializer, CategorySerializer, CustomTokenObtainPairSerializer, EventSerializer, RegistrationSerializer,
+from .serializers import (AttendeeListSerializer, BulkRegistrationSerializer, CategorySerializer, CustomTokenObtainPairSerializer, EventSerializer, RegistrationSerializer,
                           SchoolCollegeSerializer, SetNewPasswordSerializer, UserSerializer)
 from .tasks import send_password_reset_email, send_ticket_email, send_verification_email
 from .utils import generate_qr_code_base64, generate_ticket_token, generate_otp
@@ -165,7 +165,7 @@ class ResendOTPView(APIView):
         if user.otp_created_at and timezone.now() < user.otp_created_at + timedelta(minutes = 1):
             wait_time = int(60 - (timezone.now() - user.otp_created_at).total_seconds())
 
-            return Response({'error' : "Please wait {wait_time} seconds before resending."}, status = 429)
+            return Response({'error' : f"Please wait {wait_time} seconds before resending."}, status = 429)
         
         new_otp = generate_otp()
         
@@ -173,7 +173,7 @@ class ResendOTPView(APIView):
         user.otp_created_at = timezone.now()
         user.save()
 
-        transaction.on_commit(lambda: send_verification_email.delay(user.id, new_otp))
+        transaction.on_commit(lambda otp = new_otp: send_verification_email.delay(str(user.id), otp))
 
         return Response({'message' : "New verification code sent."}, status = 200)
 
@@ -194,11 +194,18 @@ class UpcomingEventListView(generics.ListAPIView):
 
     def get_queryset(self):
 
-        return Event.objects.filter(is_featured = False, start_date__gte = timezone.now()).select_related('organisation').order_by('start_date')
+        queryset = Event.objects.filter(is_featured = False, start_date__gte = timezone.now()).select_related('organisation').order_by('start_date')
+
+        category_id = self.request.query_params.get('category_id')
+
+        if category_id:
+            queryset = queryset.filter(categories__id = category_id)
+
+        return queryset
 
 
-# Returns all the events that have is_featured = True for the Featured section of the website
 class FeaturedEventListView(generics.ListAPIView):
+    """Returns all the events that have is_featured = True for the Featured section of the website"""
 
     serializer_class = EventSerializer
     permission_classes = [AllowAny]
@@ -216,48 +223,7 @@ class EventDetailsView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = 'id'
     parser_classes = [MultiPartParser, FormParser] # Required for file uploads (poster/brochure)
 
-    # def update(self, request, *args, **kwargs):
-    #     if not request.user.is_authenticated:
-
-    #         return Response(
-    #             {'error' : "Authentication required"}, 
-    #             status = 401
-    #         )
-
-    #     # Get event object
-    #     instance = self.get_object()
-
-    #     # We assume the user has an 'organisationprofile'. If not, they can't edit the event. Also, check if the event actually belongs to this host
-    #     if not hasattr(request.user, 'organisationprofile') or instance.organisation != request.user.organisationprofile:
-            
-    #         return Response(
-    #             {'error' : "Permission denied"}, 
-    #             status = 403
-    #         )
-        
-    #     return super().update(request, *args, **kwargs)
-    
-    # def destroy(self, request, *args, **kwargs):
-    #     if not request.user.is_authenticated:
-
-    #         return Response(
-    #             {'error' : "Authentication required"}, 
-    #             status = 401
-    #         )
-        
-    #     instance = self.get_object()
-
-    #     if not hasattr(request.user, 'organisationprofile') or instance.organisation != request.user.organisationprofile:
-
-    #         return Response(
-    #             {'error' : "Permission denied"}, 
-    #             status = 403
-    #         )
-        
-    #     return super().destroy(request, *args, **kwargs)
-
     def get_permissions(self):
-        
         if self.request.method in permissions.SAFE_METHODS:
 
             return [AllowAny()]
@@ -269,7 +235,7 @@ class EventDetailsView(generics.RetrieveUpdateDestroyAPIView):
 class CreateEventView(APIView):
 
     permission_classes = [IsAuthenticated, IsHostUser, IsEmailVerified]
-    parser_classes = [MultiPartParser, FormParser] # Parses multipart HTML form content, which supports file uploads. Typically dono, FormParser & MultiPartParser use
+    parser_classes = [FormParser, MultiPartParser] # Parses multipart HTML form content, which supports file uploads. Typically dono, FormParser & MultiPartParser use
                                                     # krte hain HTML forms ke liye.
 
     def post(self, request, *args, **kwargs):
@@ -312,8 +278,8 @@ class CreateEventView(APIView):
         return Response(serializer.errors, status = 400)
                                                                 
 
-# Returns events where the logged-in user is the organiser
 class HostEventListView(generics.ListAPIView):
+    """Returns events where the logged-in user is the organiser"""
 
     serializer_class = EventSerializer
     permission_classes = [IsAuthenticated, IsHostUser]
@@ -325,8 +291,8 @@ class HostEventListView(generics.ListAPIView):
         return Event.objects.filter(organisation = user.organisation_profile).order_by('-start_date')
 
 
-# Returns stats & list of attendees for a specific event. Only hosts can access this.
 class HostEventDetailView(APIView):
+    """Returns stats & list of attendees for a specific event. Only hosts can access this."""
 
     permission_classes = [IsAuthenticated, IsHostUser]
 
@@ -337,15 +303,25 @@ class HostEventDetailView(APIView):
 
         event = get_object_or_404(Event, id = event_id, organisation = profile)
         
-        # Stats
-        total_registrations = Registration.objects.filter(event = event, is_cancelled = False).count()
-        checked_in_count = Registration.objects.filter(event = event, is_checked_in = True, is_cancelled = False).count()
-
         # Attendee List (.select_related avoids the problem of running 100 SQL queries for 100 students)
         registrations = Registration.objects.filter(
             event = event, 
             is_cancelled = False
         ).select_related('student__user', 'student__school_college').order_by('-created_at')
+
+        search_query = request.query_params.get('search', None)
+
+        if search_query:
+            registrations = registrations.filter(
+                Q(first_name__icontains = search_query) |
+                Q(last_name__icontains = search_query) |
+                Q(email__icontains = search_query) |
+                Q(student__student_id_number__icontains = search_query)
+            )
+        
+        # Stats
+        total_registrations = Registration.objects.filter(event = event, is_cancelled = False).count()
+        checked_in_count = Registration.objects.filter(event = event, is_checked_in = True, is_cancelled = False).count()
 
         attendee_serializer = AttendeeListSerializer(registrations, many = True)
 
@@ -364,12 +340,12 @@ class HostEventUpdateView(generics.RetrieveUpdateDestroyAPIView):
 
     serializer_class = EventSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [FormParser, MultiPartParser]
 
     def get_queryset(self):
-        if hasattr(self.request.user, 'organisationprofile'):
+        if hasattr(self.request.user, 'organisation_profile'):
 
-            return Event.objects.filter(organisation = self.request.user.organisationprofile)
+            return Event.objects.filter(organisation = self.request.user.organisation_profile)
 
         return Event.objects.none()
 
@@ -415,7 +391,7 @@ class ProcessPaymentView(APIView):
             registration.is_cancelled = False
             registration.save()
 
-            transaction.on_commit(lambda: send_ticket_email.delay(registration.id))
+            transaction.on_commit(lambda: send_ticket_email.delay(str(registration.id)))
 
             return Response({'message' : "Payment verified. Ticket sent to student."}, status = 200)
         
@@ -423,7 +399,7 @@ class ProcessPaymentView(APIView):
 # --- Student & Ticket Views ---
 class RegisterForEventView(APIView):
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def _validate_event_requirements(self, event, data, user):
         """Helper to validate smart fields & user data"""
@@ -448,215 +424,134 @@ class RegisterForEventView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        serializer = BulkRegistrationSerializer(data = request.data, context = {'request' : request})
 
-        data = request.data
-        event_id = data.get('event_id')
+        if not serializer.is_valid():
+
+            return Response(serializer.errors, status = 400)
+
+        data = serializer.validated_data
+        event = data['event']
+        attendees = data['attendees']
         user = request.user
-
-        # User identity check
-        if not hasattr(user, 'student_profile'):
-
-            return Response({'error' : "Only students can register."}, status = 403)
-        
         student_profile = user.student_profile
 
-        # Lock the event. Prevents race conditions by locking the event for this transaction. Ensures there's no overbooking if we add capacity limits later.
-        try:
-            event = Event.objects.select_for_update().get(id = event_id, is_native = True)
-        except Event.DoesNotExist:
-            
-            return Response({'error' : "Event not found."}, status = 404)
-        
+        # Deadline check
         if not event.is_registration_open:
 
             return Response({'error' : f"Registration for this event closed on {event.registration_deadline.strftime(r"%d %b, %I:%M %p")}."}, status = 400)
 
-        # Smart Profile Update - Check what the user has vs what the event needs
-        profile_needs_saving = False
-        missing_fields = {}
-        
+        buyer_data = attendees[0]
+        profile_updated = False
+
         # Phone check
         if event.collect_phone and not student_profile.phone_number:
-            incoming_phone_number = data.get('phone_number')
+            student_profile.phone_number = buyer_data.get('phone_number')
 
-            if incoming_phone_number:
-                student_profile.phone_number = incoming_phone_number
-                profile_needs_saving = True
-            else:
-                missing_fields['phone_number'] = "Phone number is required."
+            profile_updated = True
 
         # College check
         if event.collect_college_school and not student_profile.school_college:
-            incoming_school_college_id = data.get('school_college_id')
+            sid = data.get('school_college_id')
 
-            if incoming_school_college_id:
-                try:
-                    school_college = SchoolCollege.objects.get(id = incoming_school_college_id)
-                    student_profile.school_college = school_college
-                    profile_needs_saving = True
-                except SchoolCollege.DoesNotExist:
-                    missing_fields['school_college'] = "Invalid college selected."
-            else:
-                missing_fields['school_college'] = "College information is required."
+            if sid:
+                student_profile.school_college_id = sid
+
+                profile_updated = True
 
         # Student ID check
         if event.collect_student_id and not student_profile.student_id_number:
-            incoming_student_id = data.get('student_id_number')
+            student_profile.student_id_number = buyer_data.get('student_id_number')
 
-            if incoming_student_id:
-                student_profile.student_id_number = incoming_student_id
-                profile_needs_saving = True
-            else:
-                missing_fields['student_id_number'] = "Student ID is required."
+            profile_updated = True
 
-        # Stop if data is still missing,
-        if missing_fields:
+        if event.age_restriction_cutoff and not student_profile.date_of_birth:
+            dob = buyer_data.get('date_of_birth')
 
-            # We send a specific error code so the frontend will know when to ask the user to submit these details
-            return Response({
-                'error' : "Profile incomplete",
-                'missing_fields' : missing_fields,
-                'code' : 'PROFILE_INCOMPLETE'
-            }, status = 400)
+            if dob:
+                student_profile.date_of_birth = dob
+
+                profile_updated = True
 
         # Save the new data if we found any.
-        if profile_needs_saving:
+        if profile_updated:
             student_profile.save()
-            student_profile.refresh_from_db()
 
-        # Age check
-        if event.age_restriction_cutoff:
-            if not student_profile.date_of_birth:
-
-                return Response({
-                    'error' : "Date of Birth required",
-                    'missing_fields' : {'date_of_birth' : "Date of birth is required for this event"},
-                    'code' : 'PROFILE_INCOMPLETE'
-                }, status = 400)
-            
-            if student_profile.date_of_birth > event.age_restriction_cutoff:
-
-                return Response({
-                    'error' : "You do not meet the age requirement for this event.",
-                    'code' : 'AGE_RESTRICTION'
-                }, status = 403)
-
-        # # Validate payload
-        # validation_errors = self._validate_event_requirements(event, data, user)
-
-        # if validation_errors:
-
-        #     return Response({'error' : validation_errors}, status = 400)
+        created_registrations = []
         
-        # # Get or create the user's profile
-        # if user.is_authenticated:
-        #     if not hasattr(user, 'student_profile'):
+        for i, attendee in enumerate(attendees):
+            is_buyer = (i == 0)
 
-        #         return Response({'error' : "Only students can register for events."}, status = 403)
-            
-        #     student_profile = user.student_profile
-        # else:
-        #     email = data.get('email')
+            if is_buyer:
+                reg_email = user.email
+                reg_first_name = user.first_name
+                reg_last_name = user.last_name
+            else:
+                reg_email = attendee.get('email', user.email)
+                reg_first_name = attendee.get('first_name', 'Guest')
+                reg_last_name = attendee.get('last_name', '')
 
-        #     # Check if user exists but isn't logged in
-        #     if CustomUser.objects.filter(email = email).exists():
+            # String form of college name
+            school_college_name_str = None
+            school_college_id = attendee.get('school_college_id')
 
-        #         return Response({'error' : "An account with this email already exists. Please log in to register."}, status = 403)
-            
-        #     user = CustomUser.objects.create_user(
-        #         first_name = data.get('first_name'),
-        #         last_name = data.get('last_name'),
-        #         role = CustomUser.Role.STUDENT,
-        #         email = email,
-        #     )
-            
-        #     user.set_unusable_password()
-        #     user.save()
+            if school_college_id:
+                try:
+                    sc = SchoolCollege.objects.get(id = attendee['school_college_id'])
+                    school_college_name_str = f"{sc.name} ({sc.city})"
+                except SchoolCollege.DoesNotExist:
+                    pass
+            elif attendee.get('school_college_name'):
+                school_college_name_str = attendee.get('school_college_name')
+            elif is_buyer and student_profile.school_college:
+                sc = student_profile.school_college
+                school_college_name_str = f"{sc.name} ({sc.city})"
 
-        #     student_profile = StudentProfile.objects.create(user = user)
+            guest_extra_info = {}
 
-        # # Update the profile with the "Smart Fields" data (Saving the user's data for auto pick-up next time)
-        # if event.collect_phone:
-        #     student_profile.phone_number = data.get('phone_number')
+            if school_college_name_str:
+                guest_extra_info['school_college_name'] = school_college_name_str
+            if attendee.get('phone_number'):
+                guest_extra_info['phone_number'] = attendee.get('phone_number')
+            if attendee.get('student_id_number'):
+                guest_extra_info['student_id_number'] = attendee.get('student_id_number')
+            if attendee.get('date_of_birth'):
+                guest_extra_info['date_of_birth'] = str(attendee.get('date_of_birth'))
 
-        # if event.collect_college_school:
-        #     school_college_id = data.get('school_college_id')
+            registration = Registration.objects.create(
+                student = student_profile,
+                event = event,
+                email = reg_email,
+                first_name = reg_first_name,
+                last_name = reg_last_name,
+                guest_data = guest_extra_info,
+                is_cancelled = False,
+                payment_status = Registration.PaymentStatus.PENDING if event.is_paid_event else Registration.PaymentStatus.VERIFIED,
+                transaction_id = data.get('transaction_id')
+            )
 
-        #     if school_college_id:
-        #         try:
-        #             student_profile.school_college = SchoolCollege.objects.get(id = school_college_id)
-        #         except SchoolCollege.DoesNotExist:
-
-        #             return Response(
-        #                 {'error' : "Invalid college selected."},
-        #                 status = 400
-        #             )
-
-        # if event.collect_student_id:
-        #     student_profile.student_id_number = data.get('student_id_number')
-
-        # student_profile.save()
-            
-        # Create the registration
-        # registration, reg_created = Registration.objects.get_or_create(student = student_profile, event = event)
-
-        # if not reg_created and not registration.cancelled:
-            
-        #     return Response(
-        #         {'message' : "You are already registered."}, 
-        #         status = 200
-        #     )
-        
-        # registration.cancelled = False
-        
-        existing_reg = Registration.objects.filter(student = student_profile, event = event, is_cancelled = False).first()
-
-        if existing_reg:
-
-            return Response({'message' : "Already registered"}, status = 200)
-        
-        registration = Registration.objects.create(
-            student = student_profile,
-            event = event,
-            is_cancelled = False,
-            payment_status = Registration.PaymentStatus.PENDING if event.is_paid_event else Registration.PaymentStatus.VERIFIED
-        )
+            created_registrations.append(registration)
 
         # Handling payment state
         if event.is_paid_event:
-            if not data.get('transaction_id'):
-
-                raise ValueError("Transaction ID missing")
-
-            registration.transaction_id = data.get('transaction_id')
-            registration.save()
 
             return Response({
                 'message' : "Payment submitted. Waiting for host's approval.",
-                'payment_needed' : True,
-                'registration' : {
-                    'id' : registration.id,
-                    'status' : registration.payment_status,
-                }
+                'count' : len(created_registrations)
             }, status = 201)
         
-        ticket_token = generate_ticket_token(registration.id, event.id)
+        ticket_token = generate_ticket_token(str(registration.id), str(event.id))
         qr_code_image = generate_qr_code_base64(ticket_token)
 
         # Trigger async task to send ticket email only after the transaction is committed. This is to ensure that Celery & Django go hand-in-hand. Pehle kya hota tha,
         # Django user ko register krta, phir send_ticket_email_task.delay() ko call krta, lekin ye abhi tak DB me reflect hi nhi hua ki naya user bna hai. Isliye Celery
         # task fail ho jata hai, kyunki wo user ko DB me dhundh nhi pata.
-        transaction.on_commit(lambda: send_ticket_email.delay(registration.id))
+        for reg in created_registrations:
+            transaction.on_commit(lambda r = reg: send_ticket_email.delay(str(r.id)))
 
         return Response({
             'message' : "Registration successful! Check your email.",
-            'ticket' : {
-                'token' : ticket_token,
-                'qr_code' : qr_code_image,
-                'attendee_name' : f"{user.first_name} {user.last_name}",
-                'event_name' : event.name,
-                'is_pending' : False,
-            }
+            'tickets' : len(created_registrations)
         }, status = 201)
 
 
@@ -669,7 +564,7 @@ class RegisteredEventsView(generics.ListAPIView):
 
         return Registration.objects.filter(
             student__user = self.request.user,
-            cancelled = False
+            is_cancelled = False
         ).select_related(
             'event', # Fetches event details
             'event__organisation', # Fetches host details 
@@ -685,7 +580,7 @@ class ResendTicketView(APIView):
     def post(self, request, ticket_id):
         registration = get_object_or_404(Registration, id = ticket_id, student__user = request.user, is_cancelled = False)
 
-        transaction.on_commit(lambda: send_ticket_email.delay(registration.id))
+        transaction.on_commit(lambda: send_ticket_email.delay(str(registration.id)))
 
         return Response({'message' : "Ticket sent to your email!"}, status = 200)
     
@@ -693,67 +588,103 @@ class ResendTicketView(APIView):
 # Scans a QR code. Verifies signature. Checks user in.
 class VerifyTicketView(APIView):
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, IsHostUser]
 
     def post(self, request):
         token = request.data.get('token')
+        ticket_code = request.data.get('ticket_code')
+        event_id = request.data.get('event_id')
 
-        if not token:
+        registration_id = None  
 
-            return Response({'error' : "No token provided."}, status = 400)
+        if token:
+            try:
+                # Ensures that the QR code wasn't forged by a student
+                payload = jwt.decode(token, settings.TICKET_SIGNING_KEY, algorithms = ['HS256'])
 
-        try:
-            # Ensures that the QR code wasn't forged by a student
-            payload = jwt.decode(token, settings.TICKET_SIGNING_KEY, algorithms = ['HS256'])
+                registration_id = payload.get('rid')
+                token_event_id = payload.get('eid')
 
-            registration_id = payload.get('rid')
-            event_id = payload.get('eid')
+                if event_id and str(token_event_id) != str(event_id):
 
-            # Database lookup
-            registration = Registration.objects.get(id = registration_id, event_id = event_id)
+                    return Response({'error' : "This ticket belongs to a different event."}, status = 400)
+            except jwt.ExpiredSignatureError:
+
+                return Response({'error' : "Ticket has EXPIRED"}, status = 400)
             
-            if registration.is_cancelled:
+            except jwt.InvalidTokenError:
 
-                return Response({'error' : "Ticket is CANCELLED"}, status = 400)
+                return Response({'error' : "INVALID TICKET. Please check again."}, status = 400)
+        elif ticket_code:
+            if not event_id:
 
-            if registration.is_checked_in:
-
-                return Response({
-                    'status' : 'warning',
-                    'message' : "ALREADY CHECKED IN",
-                    'attendee' : f"{registration.student.user.first_name} {registration.student.user.last_name}",
-                    'time' : registration.checked_in_at
-                }, status = 200)
+                return Response({'error' : "Event ID is required for manual entry."}, status = 400)
             
-            registration.is_checked_in = True
-            registration.checked_in_at = timezone.now()
-            registration.save()
+            try:
+                registration_id = Registration.objects.values_list('id', flat = True).get(ticket_code__iexact = ticket_code, event_id = event_id)
+            except Registration.DoesNotExist:
+
+                return Response({'error' : "Invalid ticket code for this event."}, status = 404)
+        else:
+
+            return Response({'error' : "No ticket token or code provided."}, status = 400)
+
+        # Try to check in ONLY if currently checked out. This returns the number of rows modified.
+        rows_updated = Registration.objects.filter(
+            id = registration_id,
+            event_id = event_id,
+            is_checked_in = False,
+            is_cancelled = False,
+        ).update(
+            is_checked_in = True,
+            checked_in_at = timezone.now()
+        )
+
+        if rows_updated == 1:
+            registration = Registration.objects.get(id = registration_id)
+
+            school_college_display = 'N/A'
+
+            if registration.guest_data and 'school_college_name'in registration.guest_data:
+                school_college_display = registration.guest_data['school_college_name']
+            elif registration.student.school_college:
+                school_college_display = f"{registration.student.school_college.name} ({registration.student.school_college.city})"
 
             return Response({
                 'status' : 'success',
                 'message' : "VALID TICKET",
                 'attendee' : {
-                    'name' : f"{registration.student.user.first_name} {registration.student.user.last_name}",
-                    'email' : registration.student.user.email,
-                    'college' : registration.student.school_college_name or 'N/A',
-                    'student_id' : registration.student.student_id_number or 'N/A',
-                    'dob' : registration.student.date_of_birth,
+                    'name' : registration.attendee_name,
+                    'email' : registration.email,
+                    'college' : school_college_display,
+                    'student_id' : registration.guest_data.get('student_id_number', registration.student.student_id_number or 'N/A') ,
                 },
                 'event' : registration.event.name,
             }, status = 200)
         
-        except jwt.ExpiredSignatureError:
+        try:
+            # Failure case : The update failed. Why? Now we check the DB for a specific error message.
+            registration = Registration.objects.get(id = registration_id, event_id = event_id)
 
-            return Response({'error' : "Ticket has EXPIRED"}, status = 400)
-        
-        except jwt.InvalidTokenError:
+            if registration.checked_in:
 
-            return Response({'error' : "INVALID TICKET. Please check again."}, status = 400)
-        
+                return Response({
+                    'status' : 'warning',
+                    'message' : "ALREADY CHECKED IN",
+                    'time' : registration.checked_in_at,
+                    'attendee' : registration.attendee_name
+                }, status = 200)
+            
+            if registration.is_cancelled:
+
+                return Response({'error' : "Ticket is CANCELLED."}, status = 400)
+
         except Registration.DoesNotExist:
 
-            return Response({'error' : "Ticket not found in system."}, status = 404)
-
+            return Response({'error' : "Ticket was not found in system."}, status = 404)
+        
+        return Response({'error' : "Unable to verify ticket."}, status = 400)
+        
 
 # --- Dropdown Data Views ---
 # Public endpoint to fetch all categories
