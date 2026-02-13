@@ -17,41 +17,58 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-
-from api.views import (
-    CreateUserView, CustomTokenObtainPairView, EventListView, RegisterForEventView, UpcomingEventListView, UserProfileView, FeaturedEventListView, VerifyTicketView, 
-    CreateEventView, HostEventListView, RegisteredEventsView, HostEventDetailView, ProcessPaymentView, SetNewPasswordView, RequestPasswordResetView, EventDetailsView, 
-    CategoryListView, SchoolCollegeListView
-)
+from django.contrib import admin
+from django.urls import path, include
 
 from rest_framework_simplejwt.views import TokenRefreshView
+
+from api.views import (
+    CategoryListView, CreateEventView, CreateUserView, CustomTokenObtainPairView, EventDetailsView, EventListView, FeaturedEventListView,
+    HostEventDetailView, HostEventListView, HostEventUpdateView, ProcessPaymentView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView,
+    ResendTicketView, SchoolCollegeListView, SetNewPasswordView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, ResendOTPView
+)
+from api.utils import delete_event_document
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/token/', CustomTokenObtainPairView.as_view(), name = 'get-token'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name = 'refresh-token'),
-    path('api/user/register/', CreateUserView.as_view(), name = 'register-user'),
+    # --- Authentication & Onboarding ---
+    path('api/auth/login/', CustomTokenObtainPairView.as_view(), name = 'login'),
+    path('api/auth/refresh/', TokenRefreshView.as_view(), name = 'refresh-token'),
+    path('api/auth/signup/', CreateUserView.as_view(), name = 'signup'),
+    # --- Password Management ---
+    path('api/auth/password-set/', SetNewPasswordView.as_view(), name = 'password-set'),
+    path('api/auth/password-reset/', RequestPasswordResetView.as_view(), name = 'password-reset'),
+    # --- Email Verification ---
+    path('api/auth/verify-otp/', VerifyEmailOTPView.as_view(), name = 'verify-otp'),
+    path('api/auth/resend-otp/', ResendOTPView.as_view(), name = 'resend-otp'),
+    # --- User Profile ---
     path('api/user/profile/', UserProfileView.as_view(), name = 'user-profile'),
+    # --- Public Data ---
+    path('api/data/categories/', CategoryListView.as_view(), name = 'category-list'),
+    path('api/data/colleges/', SchoolCollegeListView.as_view(), name = 'school-college-list'),
+    # --- Event Discovery (Public) ---
     path('api/events/', EventListView.as_view(), name = 'event-list'),
-    path('api/events/register/', RegisterForEventView.as_view(), name = 'register-for-event'),
-    path('api/events/registered/', RegisteredEventsView.as_view(), name = 'registered-events'),
     path('api/events/upcoming/', UpcomingEventListView.as_view(), name = 'upcoming-events'),
     path('api/events/featured/', FeaturedEventListView.as_view(), name = 'featured-events'),
-    path('api/ticket/verify-ticket/', VerifyTicketView.as_view(), name = 'verify-ticket'),
-    path('api/events/create-event/', CreateEventView.as_view(), name = 'create-event'),
-    path('api/host/events/', HostEventListView.as_view(), name = 'host-event-list'),
-    path('api/host/event/<int:event_id>/', HostEventDetailView.as_view(), name = 'host-event-detail'),
+    path('api/events/<uuid:id>/', EventDetailsView.as_view(), name = 'event-detail'),
+    # --- Student Actions ---
+    path('api/events/register/', RegisterForEventView.as_view(), name = 'event-register'),
+    path('api/events/my-tickets/', RegisteredEventsView.as_view(), name = 'my-tickets'),
+    path('api/ticket/resend<uuid:ticket_id>', ResendTicketView.as_view(), name = 'resend-ticket'),
+    # --- Host Dashboard ---
+    path('api/host/events/', HostEventListView.as_view(), name = 'host-event-list'),    
+    path('api/host/create-event/', CreateEventView.as_view(), name = 'create-event'),
+    # --- Management Endpoints ---
+    path('api/host/event/<uuid:event_id>/', HostEventDetailView.as_view(), name = 'host-event-detail'),
+    path('api/host/edit/<uuid:pk>/', HostEventUpdateView.as_view(), name = 'host-event-edit'),
     path('api/host/process-payment/', ProcessPaymentView.as_view(), name = 'process-payment'),
-    path('api/auth/set-new-password/', SetNewPasswordView.as_view(), name = 'set-password'),
-    path('api/auth/request-password-reset/', RequestPasswordResetView.as_view(), name = 'request_password_reset'),
-    path('api/events/<int:id>/', EventDetailsView.as_view(), name = 'event-detail'),
-    path('api/categories/', CategoryListView.as_view(), name = 'category-list'),
-    path('api/colleges/', SchoolCollegeListView.as_view(), name = 'school-college-list'),
+    # --- Document Deletion ---
+    path('api/host/document/<int:doc_id>/delete/', delete_event_document, name = 'delete-doc'),
+    # --- Scanner App ---
+    path('api/scanner/verify/', VerifyTicketView.as_view(), name = 'verify-ticket'),
     path('api-auth/', include('rest_framework.urls')),
 ]
 
