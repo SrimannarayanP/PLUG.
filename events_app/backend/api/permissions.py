@@ -28,7 +28,7 @@ class IsEmailVerified(permissions.BasePermission):
 
     message = "You must verify your email address to perform this action."
     
-    def has_permission(self, request):
+    def has_permission(self, request, view):
         # Ensure the user is logged in.
         if not request.user or not request.user.is_authenticated:
             
