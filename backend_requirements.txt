@@ -13,3 +13,6 @@ Pillow
 celery
 redis
 pymysql
+django-cloudinary-storage
+cloudinary
+dj_database_url
