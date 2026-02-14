@@ -8,11 +8,13 @@ pytz
 sqlparse
 psycopg2-binary
 python-dotenv
+python3-dev
+default-libmysqlclient-dev
 qrcode
 Pillow
 celery
 redis
-pymysql
+mysqlclient==2.2.4
 django-cloudinary-storage
 cloudinary
 dj_database_url
