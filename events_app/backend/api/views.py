@@ -25,7 +25,7 @@ from .models import Category, CustomUser, Event, OrganisationProfile, Registrati
 from .permissions import IsEmailVerified, IsEventOwner, IsHostUser 
 from .serializers import (AttendeeListSerializer, BulkRegistrationSerializer, CategorySerializer, CustomTokenObtainPairSerializer, EventSerializer, RegistrationSerializer,
                           SchoolCollegeSerializer, SetNewPasswordSerializer, UserSerializer)
-from .tasks import send_password_reset_email, send_ticket_email, send_verification_email
+from .tasks import send_password_reset_email, send_ticket_email, send_verification_email, test_task
 from .utils import generate_qr_code_base64, generate_ticket_token, generate_otp
 
 import jwt, os
@@ -715,4 +715,10 @@ class SchoolCollegeListView(generics.ListAPIView):
             )[:20] # Limits to 20 results for speed
         
         # Returns top 20 by default so dropdown isn't empty
-        return queryset[:20] 
+        return queryset[:20]
+
+
+def trigger_task(request):
+  test_task.delay()
+
+  return Response({'message' : "Task triggered"})
