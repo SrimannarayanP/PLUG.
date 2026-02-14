@@ -1,15 +1,18 @@
 // FeaturedEventHero.jsx
 
 
-import {useRef} from 'react'
+import {useRef, useMemo} from 'react'
 import {motion, useScroll, useTransform} from 'framer-motion'
+import {Calendar, MapPin, ArrowRight} from 'lucide-react'
 
 import {getImageUrl} from '../../utils/imageHelper'
+import {stripHtml} from '../../utils/textHelper'
 
 
 export default function FeaturedEventHero({event, onRegisterClick, onDetailsClick}) {
 
     const ref = useRef(null)
+
     // Parallax logic: Tracks the scroll progress of this component
     const {scrollYProgress} = useScroll({
         target : ref,
@@ -19,25 +22,18 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
     // Moves the background down at 50% speed of scroll
     const y = useTransform(scrollYProgress, [0, 1], ['0%', '30%'])
     // Reduces the opacity as you scroll more
-    const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0])
+    const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
     // Smooth zoom out effect on scroll
-    const scale = useTransform(scrollYProgress, [0, 1], [1.1, 1])
+    const scale = useTransform(scrollYProgress, [0, 1], [1, 1.1])
 
     // We use a helper func. to help us fetch the images to be displayed in the event card.
-    const posterUrl = getImageUrl(event.poster_field)
+    const posterUrl = getImageUrl(event.poster)
 
-    const stripHtml = (html) => {
-        if (!html) return ''
+    const cleanDescription = useMemo(() => {
 
-        const tmp = document.createElement('DIV')
-
-        tmp.innerHTML = html
-
-        return tmp.textContent || tmp.innerText || ''
-
-    }
-
-    const cleanDescription = stripHtml(event.description)
+        return stripHtml(event.description)
+    
+    }, [event.description])
 
     return (
 
@@ -45,7 +41,7 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
         // 'overflow-hidden' : So that the image's rounded corners can be clipped.
         <div
             ref = {ref}
-            className = "group relative w-full h-[80vh] md:h-[90vh] overflow-hidden rounded-2xl md:rounded-[2rem] border border-zinc-800 bg-[#050505] cursor-pointer"
+            className = "group relative w-full h-[85svh] min-h-[600px] overflow-hidden rounded-2xl md:rounded-[2rem] border border-zinc-800 bg-[#050505] cursor-pointer"
             onClick = {() => onDetailsClick(event)}
         >
             {/* Background Image */}
@@ -63,122 +59,124 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
                 {posterUrl ? (
                     <motion.img
                         src = {posterUrl}
-                        alt = {event.event_name}
-                        className = "w-full h-full object-cover"
-                        initial = {{scale : 1.15}}
-                        animate = {{scale : 1}}
-                        transition = {{
-                            duration : 3,
-                            ease : [0.22, 1, 0.36, 1]
-                        }}
+                        alt = {event.name}
+                        loading = 'eager'
+                        fetchPriority = 'high'
+                        className = "h-full w-full object-cover transition-transform duration-700"
                     />
                 ) : (
                     // Fallback for no image
-                    <div className = "w-full h-full bg-[radial-gradient(ellipse_at_center, _var(--tw-gradient-stops))] from-zinc-800 via-zinc-950 to-black" />
+                    <div className = "h-full w-full bg-[radial-gradient(ellipse_at_center, _var(--tw-gradient-stops))] from-zinc-800 via-zinc-950 to-black" />
                 )}
             </motion.div>
 
             {/* Base tint - Lowers the brightness of the whole image*/}
-            <div className = "absolute inset-0 bg-black/40 z-0 pointer-events-none" />
+            <div className = "absolute inset-0 bg-black/20 z-0 pointer-events-none" />
 
             {/* Gradient overlay - For the main text. Taller & smoother. */}
-            <div className = "absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/90 via-25% to-transparent z-0 pointer-events-none" />
-
-            {/* Vignette - Darkens corners to focus attention */}
-            <div className = "absolute inset-0 bg-[radial_gradient(circle_at_center, transparent_0%, rgba(0, 0, 0, 0.4)_100%)] z-0 pointer-events-none " />
+            <div className = "absolute inset-0 bg-gradient-to-t from-black via-black/80 via-30% to-transparent z-0 pointer-events-none" />
             
             {/* Glass badge */}
-            <div className = "absolute top-6 left-6 md:top-10 md:left-10 z-20">
-                <motion.div
-                    initial = {{
-                        y : -20,
-                        opacity : 0
-                    }}
-                    animate = {{
-                        y : 0,
-                        opacity : 1
-                    }}
-                    transition = {{
-                        duration : 1,
-                        delay : 0.5
-                    }}
-                    className = "inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl"
-                >
+            <motion.div
+                initial = {{
+                    y : -20,
+                    opacity : 0
+                }}
+                animate = {{
+                    y : 0,
+                    opacity : 1
+                }}
+                transition = {{
+                    duration : 0.6,
+                    delay : 0.2
+                }}
+                className = "absolute top-6 left-6 md:top-10 md:left-10 z-20"
+            >
+                <div className = "inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl">
                     <span className = "relative flex h-2 w-2">
-                        <span className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                        <span className = "absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75" />
 
                         <span className = "relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
                     </span>
 
-                    <span className = "text-white/90 font-mono text-[10px] md:text-xs uppercase tracking-[0.2em] font-bold">
+                    <span className = "font-mono text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-white/90">
                         Featured
                     </span>
-                </motion.div>
-            </div>
+                </div>
+            </motion.div>
 
             {/* Content Layer */}
-            <div className = "relative z-10 flex flex-col h-full justify-end px-6 pb-8 pt-32 md:px-12 md:pb-12 lg:px-16 lg:pb-16">
-                <div className = "max-w-[90rem] w-full">
+            <div className = "relative z-10 flex flex-col h-full justify-end px-6 md:px-12 lg:px-16 pb-8 md:pb-12 lg:pb-16 pt-32">
+                <div className = "w-full max-w-[95rem]">
                     {/* Title */}
-                    <div className = "overflow-hidden -ml-1 mb-4 md:mb-6">
+                    <div className = "overflow-hidden mb-6 md:mb-8">
                         <motion.h1
-                            initial = {{y : '110%'}}
+                            initial = {{y : '100%'}}
                             animate = {{y : 0}}
                             transition = {{
-                                duration : 1,
-                                delay : 0.1,
+                                duration : 0.8,
                                 ease : [0.22, 1, 0.36, 1]
                             }}
-                            className = "text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-black text-white uppercase tracking-tighter leading-[0.85] break-words hyphens-auto mix-blend-screen drop-shadow-2xl"
+                            className = "text-balance text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black uppercase leading-[0.9] tracking-tighter text-white drop-shadow-2xl break-words"
                         >
-                            {event.event_name}
+                            {event.name}
                         </motion.h1>
                     </div>
 
                     {/* Description/Stats */}
                     <div className = "grid grid-cols-1 md:grid-cols-[1.5fr_1fr] gap-8 md:gap-16 items-end">
-                        {/* Description */}
-                        <motion.p
-                            initial = {{
-                                opacity : 0, 
-                                y : 20
-                            }}
-                            animate = {{
-                                opacity : 1,
-                                y : 0
-                            }}
-                            transition = {{
-                                duration : 1,
-                                delay : 0.3,
-                            }}
-                            className = "text-zinc-400 text-sm md:text-lg lg:text-xl font-light leading-relaxed max-w-xl line-clamp-3 md:line-clamp-4"
-                        >
-                            {cleanDescription || "Experience the ultimate student gathering! Join us for an unforgettable experience!"}
-                        </motion.p>
+                        <div className = 'space-y-6'>
+                            {/* Description */}
+                            <motion.p
+                                initial = {{
+                                    opacity : 0, 
+                                    y : 20
+                                }}
+                                animate = {{
+                                    opacity : 1,
+                                    y : 0
+                                }}
+                                transition = {{
+                                    duration : 0.8,
+                                    delay : 0.2,
+                                }}
+                                className = "line-clamp-3 md:line-clamp-4 max-w-2xl text-base md:text-lg lg:text-xl font-light leading-relaxed text-zinc-300"
+                            >
+                                {cleanDescription || "Experience the ultimate student gathering! Join us for an unforgettable experience!"}
+                            </motion.p>
 
-                        {/* Action area */}
-                        <div className = "flex flex-col md:items-end gap-6">    
+                            {/* Action area */}    
                             <motion.div
                                 initial = {{opacity : 0}}
                                 animate = {{opacity : 1}}
                                 transition = {{
-                                    duration : 1,
-                                    delay : 0.5
+                                    duration : 0.8,
+                                    delay : 0.4
                                 }}
-                                className = "flex flex-wrap items-center gap-4 md:gap-8 text-xs font-mono text-zinc-500 uppercase tracking-widest"
+                                className = "flex flex-wrap items-center gap-6 text-xs font-bold uppercase tracking-widest text-zinc-400"
                             >
-                                <span className = "text-zinc-300 border-b border-zinc-800 pb-1">
-                                    {new Date(event.start_date).toLocaleDateString()}
-                                </span>
+                                <div className = "flex items-center gap-2">
+                                    <Calendar className = "h-4 w-4 text-orange-500" />
 
-                                <span className = "text-zinc-300 border-b border-zinc-800 pb-1">
-                                    {event.location_type === 'online' 
-                                        ? "Online Event"
-                                        : (event.physical_location || "Location TBA")
-                                    }
-                                </span>
+                                    <span>{new Date(event.start_date).toLocaleDateString(undefined, {month : 'long', day : 'numeric'})}</span>
+                                </div>
+
+                                <div className = "h-1 w-1 rounded-full bg-zinc-700" />
+
+                                <div className = "flex items-center gap-2">
+                                    <MapPin className = "h-4 w-4 text-pink-500" />
+
+                                    <span className = "truncate max-w-[200px]">
+                                        {event.location_type === 'online' 
+                                            ? "Online Event"
+                                            : (event.physical_location || "Location TBA")
+                                        }
+                                    </span>
+                                </div>
                             </motion.div>
-
+                        </div>
+                        
+                        <div className = "flex flex-col md:items-end">
                             {/* Action buttons */}
                             <motion.div
                                 initial = {{
@@ -191,7 +189,7 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
                                 }}
                                 transition = {{
                                     duration : 0.8,
-                                    delay : 0.6
+                                    delay : 0.5
                                 }}
                                 className = "w-full md:w-auto"
                             >
@@ -201,11 +199,13 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
 
                                         onRegisterClick(event)
                                     }}
-                                    className = "group relative w-full md:w-auto px-8 py-4 md:px-12 md:py-6 bg-white text-black overflow-hidden active:scale-[0.98] transition-transform duration-200"
+                                    className = "group relative w-full md:w-auto overflow-hidden bg-white px-8 md:px-10 py-5 md:py-6 transition-transform active:scale-[0.98]"
                                 >
-                                    <span className = "relative z-10 font-bold uppercase tracking-[0.2em] text-xs md:text-sm group-hover:text-white transition-colors duration-300">
-                                        Secure Ticket
-                                    </span>
+                                    <div className = "relative z-10 flex items-center justify-center gap-3 font-bold uppercase tracking-[0.2em] text-black transition-colors duration-300 group-hover:text-white">
+                                        <span>Secure Ticket</span>
+
+                                        <ArrowRight className = "h-4 w-4" />
+                                    </div>
 
                                     {/* Diagonal slide effect */}
                                     <div className = "absolute inset-0 bg-orange-600 transform translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-[0.22, 1, 0.36, 1]" />
