@@ -716,9 +716,3 @@ class SchoolCollegeListView(generics.ListAPIView):
         
         # Returns top 20 by default so dropdown isn't empty
         return queryset[:20]
-
-
-def trigger_task(request):
-  test_task.delay()
-
-  return Response({'message' : "Task triggered"})
