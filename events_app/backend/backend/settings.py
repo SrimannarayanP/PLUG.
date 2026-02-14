@@ -156,6 +156,8 @@ CORS_ALLOW_ALL_ORIGINS = os.getenv('DEBUG') == 'True'
 CORS_ALLOWED_ORIGINS = ['https://plug-gold.vercel.app', 'http://localhost:5173']
 CORS_ALLOW_CREDENTIALS = True
 
+CSRF_TRUSTED_ORIGINS = ['https://plug-gold.vercel.app']
+
 AUTH_USER_MODEL = 'api.CustomUser'
 
 MEDIA_URL = '/media/' # URL path for browser
