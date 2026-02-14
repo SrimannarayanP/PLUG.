@@ -28,6 +28,7 @@ from api.views import (
     CategoryListView, CreateEventView, CreateUserView, CustomTokenObtainPairView, EventDetailsView, EventListView, FeaturedEventListView,
     HostEventDetailView, HostEventListView, HostEventUpdateView, ProcessPaymentView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView,
     ResendTicketView, SchoolCollegeListView, SetNewPasswordView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, ResendOTPView
+    trigger_task
 )
 from api.utils import delete_event_document
 
@@ -69,6 +70,9 @@ urlpatterns = [
     path('api/host/document/<int:doc_id>/delete/', delete_event_document, name = 'delete-doc'),
     # --- Scanner App ---
     path('api/scanner/verify/', VerifyTicketView.as_view(), name = 'verify-ticket'),
+
+    path('api/test-task/', trigger_task),
+    
     path('api-auth/', include('rest_framework.urls')),
 ]
 
