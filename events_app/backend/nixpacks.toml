@@ -10,12 +10,5 @@ cmds = ["python -m venv /opt/venv && /opt/venv/bin/pip install -r requirements.t
 
 [phases.build]
 # Prepare your static files for Whitenoise
-cmds = ["python manage.py collectstatic --noinput"]
+cmds = ["/opt/venv/bin/python manage.py collectstatic --noinput"]
 
-[start]
-# This starts your web server. 
-# Note: You must have 'gunicorn' in your requirements.txt
-cmd = "gunicorn backend.wsgi"
-
-# If you want to run Celery on a separate Railway service:
-cmd = "celery -A backend worker --loglevel=info"
