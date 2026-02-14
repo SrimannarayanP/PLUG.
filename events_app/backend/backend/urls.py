@@ -27,8 +27,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from api.views import (
     CategoryListView, CreateEventView, CreateUserView, CustomTokenObtainPairView, EventDetailsView, EventListView, FeaturedEventListView,
     HostEventDetailView, HostEventListView, HostEventUpdateView, ProcessPaymentView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView,
-    ResendTicketView, SchoolCollegeListView, SetNewPasswordView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, ResendOTPView,
-    trigger_task
+    ResendTicketView, SchoolCollegeListView, SetNewPasswordView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, ResendOTPView
 )
 from api.utils import delete_event_document
 
