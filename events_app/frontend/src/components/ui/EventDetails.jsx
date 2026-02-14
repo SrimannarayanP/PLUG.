@@ -1,80 +1,127 @@
 // EventDetails.jsx
 
 
-import {useState} from 'react'
+import {useState, useEffect} from 'react'
 import DOMPurify from 'dompurify'
-import {X, Calendar, MapPin, FileText, Clock, ExternalLink, AlertCircle} from 'lucide-react'
+import {X, Calendar, MapPin, FileText, Clock, ExternalLink, AlertCircle, Laptop, TicketIcon, Download} from 'lucide-react'
 
 import {getImageUrl} from '../../utils/imageHelper'
 
 
-export default function EventDetails({event, onClose, onRegisterClick}) {
-    
-    if (!event) return null
+const CountdownTimer = ({deadline, onExpire}) => {
+    const [timeLeft, setTimeLeft] = useState({
+        days : 0,
+        hours : 0, 
+        minutes : 0
+    })
 
-    const calculateTimeLeft = () => {
-        if (!event.registration_deadline) {
+    useEffect(() => {
+        const calculate = () => {
+            const diff = new Date(deadline) - new Date()
 
-            return {days : 0, hours : 0, minutes : 0, seconds : 0, total : 0}
+            if (diff <= 0) {
+                onExpire()
 
-        }
-
-        const deadline =  new Date(event.registration_deadline)
-        const now = new Date()
-        const difference = deadline - now
-
-        if (difference <= 0) {
-
-            return {days : 0, hours : 0, minutes : 0, seconds : 0, total : 0}
-
-        }
-
-        return {
-            days : Math.floor(difference / (1000 * 60 * 60 * 24)),
-            hours : Math.floor(difference / (1000 * 60 * 60) % 24),
-            minutes : Math.floor((difference / 1000 / 60) % 60),
-            seconds : Math.floor((difference / 1000) % 60),
-            total : difference
-        }
-    }
-
-    // Set this state immediately so it's never null after execution
-    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft())
-
-    // Set closed state immediately after calculating time left
-    const [isRegistrationClosed, setIsRegistrationClosed] = useState(
-        (event.registration_deadline && new Date(event.registration_deadline) - new Date() <= 0)
-            ? true
-            : false
-    )
-
-    useState(() => {
-        const timer = setInterval(() => {
-            const newTime = calculateTimeLeft()
-
-            setTimeLeft(newTime)
-
-            // Update in real time
-            if (newTime.total <= 0 && event.registration_deadline) {
-                setIsRegistrationClosed(true)
+                return {days : 0, hours : 0, minutes : 0}
             }
-        }, 1000)
+
+            return {
+
+                days : Math.floor(diff / (1000 * 60 * 60 *24)),
+                hours : Math.floor((diff / (1000 * 60 * 60)) % 24),
+                minutes : Math.floor((diff / 1000 / 60) % 60)
+            
+            }
+        }
+
+        setTimeLeft(calculate())
+
+        const timer = setInterval(() => {
+            setTimeLeft(calculate())
+        }, 1000 * 60) // Update every minute
 
         return () => clearInterval(timer)
-    }, [event])
+    }, [deadline, onExpire])
 
-    const posterUrl = getImageUrl(event.poster_field)
+    return (
+
+        <div className = "flex items-center gap-3">
+            <div className = "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-orange-500">
+                <Clock className = "h-5 w-5" />
+            </div>
+
+            <div className = "flex gap-3 text-center">
+                {[
+                    {label : 'Days', val : timeLeft.days},
+                    {label : 'Hrs', val : timeLeft.hours},
+                    {label : 'Mins', val : timeLeft.minutes}
+                ].map((item) => (
+                    <div
+                        key = {item.label}
+                        className = "flex flex-col"
+                    >
+                        <span className = "font-mono text-lg font-bold leading-none text-white">
+                            {item.val}
+                        </span>
+
+                        <span className = "text-[9px] uppercase tracking-wider text-zinc-500">
+                            {item.label}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+
+    )
+}
+
+
+export default function EventDetails({event, onClose, onRegisterClick}) {
+    
+    // Scroll locking
+    useEffect(() => {
+        document.body.style.overflow = 'hidden'
+
+        return (() => {
+            document.body.style.overflow = 'unset'
+        })
+    }, [])
+
+    const [isRegistrationClosed, setIsRegistrationClosed] = useState(
+        event?.registration_deadline && new Date(event.registration_deadline) < new Date()
+    )
+
+    const locationDisplay = event.location_type === 'online'
+        ? (event.virtual_location || "Online Event")
+        : (event.physical_location || 'TBA')
+
+    const hostName = event.organisation?.name || "Unknown Host"
+
+    const formattedData = event.start_date
+        ? new Date(event.start_date).toLocaleDateString('en-US', {
+            weekday : 'short',
+            month : 'short',
+            day : 'numeric',
+            hour : '2-digit',
+            minute : '2-digit'
+        })
+        : 'TBA'
+
+    if (!event) return null
+
+    const posterUrl = getImageUrl(event.poster)
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
 
     return (
 
         <div 
-            className = "fixed inset-0 z-60 flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm p-0 md:p-6 transition-all duration-300"
+            className = "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-6 backdrop-blur-sm transition-all duration-300"
             onClick = {onClose}
+            role = 'dialog'
         >
             <div 
-                className = "bg-[#18181b] w-full max-w-3xl h-[85vh] md:h-auto md:max-h-[90vh] rounded-t-3xl md:rounded-3xl shadow-2xl overflow-hidden relative animate-in slide-in-from-bottom-10 duration-300 border border-zinc-800 flex flex-col"
+                className = "relative flex flex-col max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-t-3xl border border-zinc-800 bg-zinc-950 shadow-2xl animate-in slide-in-from-bottom-10 sm:rounded-3xl"
                 onClick = {(e) => e.stopPropagation()}
             >
                 {/* flex-1 & overflow-y-auto makes the footer sticky */}
@@ -82,155 +129,181 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                     {/* Close button */}
                     <button
                         onClick = {onClose}
-                        className = "absolute top-4 right-4 z-30 bg-black/40 hover:bg-zinc-800 text-white rounded-full p-2 border border-white/10 transition-all backdrop-blur-md"
+                        className = "absolute top-4 right-4 z-30 rounded-full bg-black/50 p-2 text-white backdrop-blur-md transition-colors hover:bg-zinc-800"
                     >
-                        <X className = "w-5 h-5" />
+                        <X className = "h-5 w-5" />
                     </button>
 
-                    {/* Event Poster */}
-                    <div className = "w-full h-56 md:h-80 overflow-hidden relative shrink-0">
-                        {posterUrl ? (
-                            <img 
-                                src = {posterUrl}
-                                alt = {event.event_name}
-                                className = "w-full h-full object-cover"
-                            />
-                        ) : (
-                            <div className = "w-full h-full bg-zinc-900 flex items-center justify-center">
-                                <span className = "text-zinc-700 font-bold uppercase tracking-widest text-xs md:text-sm">
-                                    No Poster Available
+                    <div className = "flex-1 overflow-y-auto overflow-x-hidden">
+                        {/* Event Poster */}
+                        <div className = "relative h-56 sm:h-80 w-full overflow-hidden shrink-0">
+                            {posterUrl ? (
+                                <img 
+                                    src = {posterUrl}
+                                    alt = {event.name}
+                                    className = "h-full w-full object-cover"
+                                />
+                            ) : (
+                                <div className = "flex h-full w-full items-center justify-center bg-zinc-900">
+                                    <span className = "text-zinc-700 font-bold uppercase tracking-widest text-xs">
+                                        No Poster Available
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Gradient Fade */}
+                            <div className = "absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+
+                            {/* Badge */}
+                            <div className = "absolute top-6 left-6">
+                                <span 
+                                    className = {`
+                                        inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-md
+                                        ${!event.is_native 
+                                            ? 'bg-blue-500/20' 
+                                            : isRegistrationClosed
+                                                ? "bg-red-500/20 border-red-500/30"
+                                                : 'bg-orange-500/20'
+                                        }
+                                    `}
+                                >
+                                    {!event.is_native 
+                                        ? "External Event" 
+                                        : isRegistrationClosed
+                                            ? "Registration Closed"
+                                            : "Registration Open" 
+                                    }
                                 </span>
-                            </div>
-                        )}
-
-                        {/* Gradient Fade */}
-                        <div className = "absolute inset-0 bg-gradient-to-t from-[#18181b] via-[#18181b]/50 to-transparent" />
-
-                        {/* Badge */}
-                        <div className = "absolute top-6 left-6 z-20">
-                            <span className = {`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-white border border-white/10 backdrop-blur-md ${event.is_native ? 'bg-orange-500/20' : 'bg-zinc-800/80'}`}>
-                                {event.is_native ? "Registration Open" : "External Event"}
-                            </span>
-                        </div> 
-                    </div>
-
-                    {/* Text Content */}
-                    <div className = "px-5 md:px-10 pb-6">
-                        {/* Title Section */}
-                        <div className = "-mt-12 relative z-10 mb-8">
-                            <h2 className = "text-3xl md:text-5xl font-black text-white mb-2 uppercase tracking-tighter leading-none drop-shadow-xl break-words">
-                                {event.event_name}
-                            </h2>
-
-                            <p className = "text-zinc-400 font-medium flex flex-wrap items-center gap-2 text-sm md:text-base">
-                                Hosted by <span className = "text-white border-b border-orange-500/50 pb-0.5">{event.organiser}</span>
-                            </p>
+                            </div> 
                         </div>
 
-                        {/* Info grid */}
-                        <div className = "grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
-                            <div className = "bg-zinc-900/50 p-3 md:p-4 rounded-2xl border border-zinc-800 flex items-center gap-3">
-                                <div className = "w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-orange-500 shrink-0">
-                                    <Calendar className = "w-5 h-5" />
-                                </div>
+                        {/* Text Content */}
+                        <div className = "px-5 sm:px-10 pb-8">
+                            {/* Title Section */}
+                            <div className = "relative -mt-12 mb-8">
+                                <h2 className = "mb-2 break-words font-black uppercase leading-none tracking-tighter text-white drop-shadow-xl text-3xl sm:text-5xl">
+                                    {event.name}
+                                </h2>
 
-                                <div className = "min-w-0">
-                                    <p className = "text-[10px] uppercase tracking-wide text-zinc-500 font-bold">
-                                        Date & Time
-                                    </p>
-
-                                    <p className = "text-zinc-200 font-bold text-sm truncate">
-                                        {event.start_date}
-                                    </p>
-                                </div>
+                                <p className = "flex flex-wrap items-center gap-2 text-sm sm:text-base font-medium text-zinc-400">
+                                    Hosted by <span className = "text-white border-b border-orange-500/50 pb-0.5">{hostName}</span>
+                                </p>
                             </div>
 
-                            <div className = "bg-zinc-900/50 p-3 md:p-4 rounded-2xl border border-zinc-800 flex items-center gap-3">
-                                <div className = "w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-pink-500 shrink-0">
-                                    <MapPin className = "w-5 h-5" />
-                                </div>
+                            {/* Info grid */}
+                            <div className = "mb-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className = "flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-3 sm:p-4">
+                                    <div className = "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-orange-500">
+                                        <Calendar className = "h-5 w-5" />
+                                    </div>
 
-                                <div className = "min-w-0 flex-1">
-                                    <p className = "text-[10px] uppercase tracking-wide text-zinc-500 font-bold">
-                                        Location
-                                    </p>
-
-                                    {event.google_maps_link ? (
-                                        <a
-                                            href = {event.google_maps_link}
-                                            target = '_blank'
-                                            rel = "noopener noreferrer"
-                                            className = "group flex items-center gap-2 text-zinc-200 font-bold text-sm hover:text-pink-500 transition-colors w-full"
-                                        >
-                                            <span className = 'truncate'>
-                                                {event.location}
-                                            </span>
-
-                                            <ExternalLink className = "w-3 h-3 opacity-50 group-hover:opacity-100 transition-opacity shrink-0" />
-                                        </a>
-                                    ) : (
-                                        <p className = "text-zinc-200 font-bold text-sm truncate">
-                                            {event.location}
+                                    <div className = "min-w-0">
+                                        <p className = "text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                                            Date & Time
                                         </p>
-                                    )}
+
+                                        <p className = "text-zinc-200 font-bold text-sm truncate">
+                                            {formattedData}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className = "bg-zinc-900/50 p-3 md:p-4 rounded-2xl border border-zinc-800 flex items-center gap-3">
+                                    <div className = "flex h-10 w-10 shrink-0 rounded-full bg-zinc-800 items-center justify-center text-pink-500">
+                                        {event.location_type === 'online' ? (
+                                            <Laptop className = "h-5 w-5" />
+                                        ) : (
+                                            <MapPin className = "h-5 w-5" />
+                                        )}
+                                    </div>
+
+                                    <div className = "min-w-0 flex-1">
+                                        <p className = "text-[10px] uppercase tracking-wide text-zinc-500 font-bold">
+                                            Location
+                                        </p>
+
+                                        {event.google_maps_link ? (
+                                            <a
+                                                href = {event.google_maps_link}
+                                                target = '_blank'
+                                                rel = "noopener noreferrer"
+                                                className = "group flex items-center gap-2 text-zinc-200 font-bold text-sm hover:text-pink-500"
+                                            >
+                                                <span className = 'truncate'>
+                                                    {locationDisplay}
+                                                </span>
+
+                                                <ExternalLink className = "h-3 w-3 opacity-50 group-hover:opacity-100 transition-opacity shrink-0" />
+                                            </a>
+                                        ) : (
+                                            <p className = "text-zinc-200 font-bold text-sm truncate">
+                                                {locationDisplay}
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Description */}
-                        <div className = 'mb-8'>
-                            <h3 className = "text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                Event Details
-                            </h3>
-
-                            <div 
-                                className = "prose prose-invert prose-sm max-w-none text-zinc-400 leading-relaxed"
-                                dangerouslySetInnerHTML = {{
-                                    __html : DOMPurify.sanitize(event.description)
-                                }}
-                            />
-                        </div>
-
-                        {/* Brochure */}
-                        {event.brochure && (
-                            <div className = 'mb-4'>
-                                <h3 className = "text-lg font-bold text-white mb-3">
-                                    Resources
+                            {/* Description */}
+                            <div className = 'mb-8'>
+                                <h3 className = "text-lg font-bold text-white mb-3 flex">
+                                    Event Details
                                 </h3>
 
-                                <a
-                                    href = {event.brochure.startsWith('http') ? event.brochure : getImageUrl(event.brochure)}
-                                    target = '_blank'
-                                    rel = "noopener noreferrer"
-                                    className = "flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border-zinc-800 hover:border-zinc-600 transition-all group cursor-pointer no-underline"
-                                >
-                                    <div className = "bg-zinc-800 p-2.5 rounded-lg group-hover:bg-zinc-700 transition-colors">
-                                        <FileText className = "w-5 h-5 text-zinc-300" />
-                                    </div>
-
-                                    <div className = "flex-1 min-w-0">
-                                        <p className = "font-bold text-white text-sm group-hover:text-orange-500 transition-colors truncate">
-                                            Event Brochure
-                                        </p>
-
-                                        <p className = "text-[10px] text-zinc-500">
-                                            PDF Document
-                                        </p>
-                                    </div>
-
-                                    <ExternalLink className = "w-4 h-4 text-zinc-600 group-hover:text-white transition-colors" />
-                                </a>
+                                <div 
+                                    className = "prose prose-invert prose-sm max-w-none text-zinc-400"
+                                    dangerouslySetInnerHTML = {{
+                                        __html : DOMPurify.sanitize(event.description)
+                                    }}
+                                />
                             </div>
-                        )}
+
+                            {/* Brochure */}
+                            {event.documents && event.documents.length > 0 && (
+                                <div className = 'mb-4'>
+                                    <h3 className = "text-lg font-bold text-white mb-3">
+                                        Resources
+                                    </h3>
+
+                                    <div className = "grid gap-2">
+                                        {event.documents.map((doc) => (
+                                            <a
+                                                key = {doc.id}
+                                                href = {getImageUrl(doc.file)}
+                                                target = '_blank'
+                                                rel = "noopener noreferrer"
+                                                className = "flex items-center gap-3 p-3 bg-zinc-900 hover:bg-zinc-800 rounded-xl border-zinc-800 hover:border-zinc-600 transition-all group cursor-pointer"
+                                            >
+                                                <div className = "bg-zinc-800 p-2.5 rounded-lg group-hover:bg-zinc-700 transition-colors text-zinc-300 group-hover:text-white">
+                                                    <FileText className = "h-5 w-5" />
+                                                </div>
+
+                                                <div className = "flex-1 min-w-0">
+                                                    <p className = "font-bold text-white text-sm group-hover:text-orange-500 transition-colors truncate">
+                                                        {doc.file || "Event Document"}
+                                                    </p>
+
+                                                    <p className = "text-[10px] text-zinc-500">
+                                                        View Document
+                                                    </p>
+                                                </div>
+
+                                                <Download className = "h-4 w-4 text-zinc-600 group-hover:text-white transition-colors" />
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
                 {/* Sticky Footer Area */}
-                <div className = "bg-[#18181b] border-t border-zinc-800 p-4 md:px-10 md:py-6 shrink-0 z-20 pb-safe">
+                <div className = "shrink-0 border-t border-zinc-800 bg-zinc-950 p-4 pb-safe sm:px-10 sm:py-6">
                     {isRegistrationClosed ? (
-                        <div className = "flex items-center justify-between gap-4">
+                        <div className = "flex w-full items-center justify-between rounded-xl bg-red-950/30 p-4 border border-red-900/50">
                             <div className = "flex items-center gap-3 text-red-400">
-                                <AlertCircle className = "w-5 h-5" />
+                                <AlertCircle className = "h-5 w-5" />
 
                                 <div>
                                     <p className = "font-bold text-sm">
@@ -242,52 +315,25 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                                     </p>
                                 </div>
                             </div>
-
-                            <button
-                                disabled
-                                className = "px-6 py-3 rounded-xl bg-zinc-800 text-zinc-500 font-bold text-sm cursor-not-allowed"
-                            >
-                                Closed
-                            </button>
                         </div>
                     ) : (
-                        <div className = "flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className = "flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
                             {/* Timer Display */}
-                            {timeLeft && (
-                                <div className = "flex items-center justify-center md:justify-start gap-3 w-full md:w-auto">
-                                    <div className = "p-2 bg-zinc-900 rounded-lg text-orange-500 shrink-0">
-                                        <Clock className = "w-5 h-5" />
-                                    </div>
-
-                                    <div className = "flex gap-2 md:gap-3 text-center">
-                                        {[
-                                            {label : 'Days', val : timeLeft.days},
-                                            {label : 'Hrs', val : timeLeft.hours},
-                                            {label : 'Mins', val : timeLeft.minutes}
-                                        ].map(item => (
-                                            <div
-                                                key = {item.label}
-                                                className = 'min-w-[40px]'
-                                            >
-                                                <p className = "font-mono font-bold text-white text-lg leading-none">
-                                                    {item.val}
-                                                </p>
-
-                                                <p className = "text-[9px] md:text-[10px] text-zinc-500 uppercase tracking-wider">
-                                                    {item.label}
-                                                </p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
+                            {event.registration_deadline && (
+                                <CountdownTimer 
+                                    deadline = {event.registration_deadline}
+                                    onExpire = {() => setIsRegistrationClosed(true)}
+                                />
                             )}
 
                             {/* Register Button */}
                             <button
                                 onClick = {() => onRegisterClick(event)}
-                                className = {`w-full md:w-auto px-8 py-3.5 rounded-xl text-white font-black uppercase tracking-widest text-sm shadow-lg hover:shadow-orange-500/20 transition-transform active:scale-95 ${festiveGradient}`}
+                                className = {`group relative flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl ${festiveGradient} px-8 py-3.5 text-sm font-black uppercase tracking-widest text-white shadow-lg transition-all active:scale-95 hover:shadow-[0_0_20px_rgba(236, 72, 153, 0.4)]`}
                             >
                                 {event.is_native ? "Register Now" : "External Link"}
+
+                                <TicketIcon className = "h-4 w-4 transition-transform group-hover:-rotate-12" />
                             </button>
                         </div>
                     )}
