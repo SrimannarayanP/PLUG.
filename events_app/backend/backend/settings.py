@@ -5,10 +5,8 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 
-import os, pymysql, dj_database_url
+import os, dj_database_url
 
-
-pymysql.install_as_MySQLdb()
 
 load_dotenv() # Loads an enviroment file
  
