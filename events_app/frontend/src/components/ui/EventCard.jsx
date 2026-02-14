@@ -1,149 +1,194 @@
 // EventCard.jsx
 
 
-import {Calendar, MapPin, User, Ticket, ExternalLink, ImageOff, Laptop} from 'lucide-react'
+import {Calendar, MapPin, User, Ticket, ExternalLink, ImageOff, Laptop, IndianRupee} from 'lucide-react'
 
 import {getImageUrl} from '../../utils/imageHelper'
 
 
+const formatDate = (dateString) => {
+    if (!dateString) return 'TBA'
+    
+    return new Date(dateString).toLocaleDateString('en-US', {
+        month : 'short',
+        day : 'numeric'
+    })
+}
+
+
 const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
 
-    const posterUrl = getImageUrl(event.poster_field)
+    const posterUrl = getImageUrl(event.poster)
 
-    const festiveGradient = "from orange-500 via-pink-500 to-purple-600"
+    const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+
+            onDetailsClick(event)
+        }
+    }
 
     const getLocationDisplay = () => {
-
         if (event.location_type === 'online') {
 
             return (
 
-                <span className = "flex items-center gap-1">
+                <span className = "flex items-center gap-1 truncate">
                     <Laptop className = "w-3 h-3" />
 
-                    Online Event
+                    <span className = 'truncate'>
+                        {event.virtual_location || "Online Event"}
+                    </span>
                 </span>
 
             )
 
         }
 
-        return event.physical_location || 'TBA'
+        return (
 
+            <span className = 'truncate'>
+                {event.physical_location || "Venue TBA"}
+            </span>
+
+        )
     }
 
     return (
 
-        <div
-            onClick = {() => onDetailsClick(event)} 
-            className = "group relative bg-[#18181b] border border-zinc-800 rounded-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl cursor-pointer h-full"
+        <article
+            className = "group relative h-full flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-900/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+            onClick = {() => onDetailsClick(event)}
+            onKeyDown = {handleKeyDown}
+            role = 'button'
+            tabIndex = '0'
         >
             {/* Hover gradient border effect */}
-            <div className = {`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl bg-gradient-to-r ${festiveGradient} -z-10 p-[1px]`}>
-                <div className = "w-full h-full bg-[#18181b] rounded-2xl" />
-            </div>
+            <div className = {`absolute inset-0 pointer-events-none rounded-2xl ${festiveGradient} opacity-0 transition-opacity duration-500 group-hover:opacity-100`} />
 
-            {/* Image section */}
-            <div className = "h-48 w-full overflow-hidden relative bg-zinc-900 border-b border-zinc-800">
-                {posterUrl ? (
-                    // If an image exists, render it
-                    <img 
-                        src = {posterUrl}
-                        alt = {event.event_name}
-                        className = "w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                ) : (
-                    // Fallback for events with no image
-                    <div className = "w-full h-full flex flex-col items-center justify-center text-zinc-700 gap-2">
-                        <ImageOff className = "w-8 h-8 opacity-50" />
+            <div className = "absolute inset-[1px] rounded-2xl bg-zinc-950 pointer-events-none" />
 
-                        <span className = "text-xs font-mono uppercase tracking-widest opacity-50">No Poster</span>
+            {/* Content container */}
+            <div className = "relative z-10 flex flex-col h-full">
+                {/* Image section */}
+                <div className = "relative aspect-video w-full overflow-hidden border-b border-zinc-800 bg-zinc-900">
+                    {posterUrl ? (
+                        <img 
+                            src = {posterUrl}
+                            alt = {event.name}
+                            loading = 'lazy'
+                            decoding = 'async'
+                            className = "h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        />
+                    ) : (
+                        <div className = "flex h-full w-full flex-col items-center justify-center gap-2 bg-zinc-900/50 text-zinc-700">
+                            <ImageOff className = "h-8 w-8 opacity-40" />
+
+                            <span className = "font-mono text-xs uppercase tracking-widest opacity-60">
+                                No Poster
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Badges container */}
+                    <div className = "absolute top-3 right-3 flex flex-col items-end gap-2">
+                        {/* Date badge */}
+                        <div className = "flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md">
+                            <Calendar className = "h-3 w-3 text-orange-500" />
+
+                            {formatDate(event.start_date)}
+                        </div>
+
+                        {/* Price badge */}
+                        {event.is_paid_event && (
+                            <div className = "flex items-center gap-1 rounded-md border border-emerald-400/20 bg-emerald-950/80 px-2.5 py-1 text-xs font-bold text-white backdrop-blur-md">
+                                <IndianRupee className = "h-3 w-3 text-emerald-400" />
+
+                                {event.ticket_price}
+                            </div>
+                        )}
                     </div>
-                )}
-
-                <div className = "absolute top-3 right-3 bg-black/70 backdrop-blur-md border border-white/10 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-2">
-                    <Calendar className = "w-3 h-3 text-orange-500" />
-
-                    {event.start_date 
-                        ? new Date(event.start_date).toLocaleDateString(undefined, {month : 'short', day : 'numeric'})
-                        : 'TBA'
-                    }
                 </div>
-            </div>
 
-            {/* Content section */}
-            {/* 'flex-1' ensures this section expands to fill remaining space */}
-            {/* "flex flex-col" ensures that button is placed at the bottom */}
-            <div className = "p-5 flex flex-col justify-between flex-1 relative z-10 bg-[#18181b]">
-                {/* Top half of the content */}
-                <div>
+                {/* Details section */}
+                <div className = "flex flex-1 flex-col p-4 sm:p-5">
                     {/* Categories */}
-                    <div className = "flex flex-wrap gap-2 mb-3">
-                        {event.categories && event.categories.slice(0, 3).map((category) => (
+                    <div className = "mb-3 flex flex-wrap gap-2">
+                        {event.categories?.slice(0, 3).map((category) => (
                             <span
                                 key = {category.id}
-                                className = "inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border border-zinc-800 bg-zinc-900 text-zinc-400 group-hover:border-zinc-700 transition-colors"
+                                className = "rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-zinc-400"
                             >
-                                {category.name} 
+                                {category.name}
                             </span>
                         ))}
                     </div>
 
-                    {/* Event name */}
-                    <h3 className = "text-xl font-bold text-white mb-2 line-clamp-1 group-hover:text-pink-500 transition-all">
-                        {event.event_name}
+                    {/* Title */}
+                    <h3 className = "mb-2 line-clamp-1 text-base font-bold text-white transition-colors group-hover:text-orange-500 sm:text-lg">
+                        {event.name}
                     </h3>
 
-                    {/* Organiser name */}
-                    <p className = "text-xs text-zinc-500 mb-4 flex items-center gap-1.5">
-                        <User className = "w-3 h-3" />
+                    <div className = "mb-4 flex flex-col gap-2 text-xs text-zinc-400 sm:flex-row sm:items-center sm:gap-4">
+                        <p className = "flex items-center gap-1.5 truncate">
+                            <User className = "h-3 w-3 shrink-0 text-zinc-500" />
 
-                        Hosted by
-                        <span className = "font-medium text-zinc-300">
-                            {event.organisation?.name || 'Unknown'}
-                        </span>
-                    </p>
+                            <span className = 'truncate'>
+                                By {event.organisation?.name || 'Unknown'}
+                            </span>
+                        </p>
 
-                    {/* Location */}
-                    <div className = "flex items-start gap-2 text-xs text-zinc-400 mb-6">
-                        <MapPin className = "w-3 h-3 mt-0.5 text-zinc-500" />
+                        <div className = "flex items-center gap-1.5 truncate">
+                            <MapPin className = "h-3 w-3 shrink-0 text-zinc-500" />
 
-                        <span className = 'line-clamp-1'>
-                            {getLocationDisplay()}
-                        </span>
+                            {event.location_type === 'online' ? (
+                                <span className = "flex items-center gap-1 truncate">
+                                    <Laptop className = "h-3 w-3" />
+
+                                    {event.virtual_location || 'Online'}
+                                </span>
+                            ) : (
+                                <span className = 'truncate'>
+                                    {event.physical_location || 'TBA'}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Action button */}
+                    <div className = "mt-auto pt-4">
+                        {event.is_native ? (
+                            <button
+                                onClick = {(e) => {
+                                    e.stopPropagation()
+
+                                    onRegisterClick(event)
+                                }}
+                                className = "group/btn flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-bold uppercase tracking-wider text-black shadow-lg transition-all hover:bg-zinc-200 hover:shadow-white/10 active:scale-95"
+                            >
+                                <Ticket className = "h-4 w-4 text-orange-600 transition-transform group-hover/btn:rotate-12" />
+
+                                Register
+                            </button>
+                        ) : (
+                            <a
+                                href = {event.register_link}
+                                target = '_blank'
+                                rel = "noopener noreferrer"
+                                onClick = {(e) => e.stopPropagation()}
+                                className = "flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 text-sm font-bold uppercase tracking-wider text-zinc-300 transition-all hover:bg-zinc-700 hover:text-white active:scale-95"
+                            >
+                                Register
+
+                                <ExternalLink className = "h-3 w-3" />
+                            </a>
+                        )}
                     </div>
                 </div>
-
-                {/* Button section */}
-                <div className = "mt-auto pt-4 border-t border-zinc-800/50">
-                    {event.is_native ? (
-                        <button
-                            onClick = {(e) => {
-                                e.stopPropagation();
-                                onRegisterClick(event);
-                            }}
-                            className = "w-full px-4 py-3 rounded-xl bg-white text-black text-sm font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors duration-200 flex items-center justify-center gap-2 group/btn"
-                        >
-                            <Ticket className = "w-4 h-4 text-orange-600 transition-transform group-hover/btn:rotate-12" />
-
-                            Register Now
-                        </button>
-                    ) : (
-                        <a
-                            href = {event.register_link}
-                            target = '_blank'
-                            rel = "noopener noreferrer"
-                            onClick = {(e) => e.stopPropagation()}
-                            className = "w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm font-bold uppercase tracking-wider hover:bg-zinc-700 hover:text-white transition-colors duration-200 flex items-center justify-center gap-2"
-                        >
-                            Register
-
-                            <ExternalLink className = "h-3 w-3" />
-                        </a>
-                    )}
-                </div>
             </div>
-        </div>
+        </article>
 
     )
     
