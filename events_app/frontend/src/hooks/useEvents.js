@@ -21,8 +21,8 @@ export function useEvents() {
 
         try {
             const [featuredRes, upcomingRes] = await Promise.allSettled([
-                apiPublic.get('api/events/featured'),   
-                apiPublic.get('api/events/upcoming')
+                apiPublic.get('/api/events/featured/'),   
+                apiPublic.get('/api/events/upcoming/')
             ])
             
             // Featured events
