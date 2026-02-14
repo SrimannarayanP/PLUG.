@@ -10,7 +10,7 @@ import {ACCESS_TOKEN} from '../constants'
 
 const api = axios.create({
 
-    baseURL : import.meta.env.VITE_API_URL // This will basically import anything that is stored in the .env file with the key VITE_API_URL
+    baseURL : import.meta.env.VITE_API_URL || 'https://plug-production.up.railway.app' // This will basically import anything that is stored in the .env file with the key VITE_API_URL
                                             // All I have to do is specify the path I want to access & I don't have to mention the base URL again & again
 
 })
