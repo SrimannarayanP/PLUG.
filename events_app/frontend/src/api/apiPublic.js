@@ -6,7 +6,7 @@ import axios from 'axios'
 
 
 const apiPublic = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://plug-production.up.railway.app'
+  baseURL: import.meta.env.VITE_API_URL
 })
 
 
