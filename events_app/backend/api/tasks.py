@@ -115,3 +115,10 @@ def send_verification_email(user_id, otp):
     except Exception as e:
 
         return f"Failed to send OTP: {str(e)}"
+
+
+@shared_task
+def test_task():
+    print("Celery is working!")
+
+    return 'Done'
