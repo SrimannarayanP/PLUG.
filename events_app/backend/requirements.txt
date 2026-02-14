@@ -14,7 +14,7 @@ qrcode
 Pillow
 celery
 redis
-mysqlclient==2.2.4
+mysqlclient==2.2.1
 django-cloudinary-storage
 cloudinary
 dj_database_url
