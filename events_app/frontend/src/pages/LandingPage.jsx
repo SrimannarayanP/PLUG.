@@ -6,7 +6,7 @@ import {CalendarX, Zap, Loader2} from 'lucide-react'
 import {useInView} from 'react-intersection-observer'
 import {useLocation, useNavigate} from 'react-router-dom'
 
-import {useEvents} from '../hooks/useEvents.js'
+import {useEvents} from '../hooks/useEvents'
 
 import apiPublic from '../api/apiPublic' // Public API instance. Used for non-authenticated calls to the backend
 
