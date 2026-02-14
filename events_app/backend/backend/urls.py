@@ -69,10 +69,7 @@ urlpatterns = [
     # --- Document Deletion ---
     path('api/host/document/<int:doc_id>/delete/', delete_event_document, name = 'delete-doc'),
     # --- Scanner App ---
-    path('api/scanner/verify/', VerifyTicketView.as_view(), name = 'verify-ticket'),
-
-    path('api/test-task/', trigger_task),
-    
+    path('api/scanner/verify/', VerifyTicketView.as_view(), name = 'verify-ticket'),  
     path('api-auth/', include('rest_framework.urls')),
 ]
 
