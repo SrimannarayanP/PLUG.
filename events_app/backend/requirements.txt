@@ -1,5 +1,9 @@
+django>=5.2
+celery==5.3.6
+redis==5.0.1
+mysqlclient==2.2.1
+gunicorn==21.2.0
 asgiref
-Django
 django-cors-headers
 djangorestframework
 djangorestframework-simplejwt
@@ -10,10 +14,6 @@ psycopg2-binary
 python-dotenv
 qrcode
 Pillow
-celery
-redis
-mysqlclient==2.2.1
 django-cloudinary-storage
 cloudinary
 dj_database_url
-gunicorn
