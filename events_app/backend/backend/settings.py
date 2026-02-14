@@ -30,7 +30,7 @@ ALLOWED_HOSTS = [
  '127.0.0.1'
 ]
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') # Allows any different host to host our Django app
+# ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') # Allows any different host to host our Django app
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES' : (
