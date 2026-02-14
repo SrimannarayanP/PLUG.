@@ -12,6 +12,9 @@ import LoadingSpinner from './components/common/LoadingSpinner'
 // Lazy loading: Tells React to not include in index.js. Make separate files.
 const LandingPage = lazy(() => import('./pages/LandingPage'))
 const LoginSignup = lazy(() => import('./pages/LoginSignup'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
+const Onboarding = lazy(() => import('./pages/Onboarding'))
+const UserProfile = lazy(() => import('./pages/UserProfile'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const StudentDashboard = lazy(() => import('./pages/StudentDashboard'))
 const HostDashboard = lazy(() => import('./pages/HostDashboard'))
@@ -20,15 +23,12 @@ const CreateEvent = lazy(() => import('./pages/CreateEvent'))
 const HostScanner = lazy(() => import('./pages/HostScanner'))
 const SetPassword = lazy(() => import('./pages/SetPassword'))
 const RequestPasswordLink = lazy(() => import('./pages/RequestPasswordLink'))
-const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 
 
 function Logout() {
-
     localStorage.clear()
 
     return <Navigate to = '/login' />
-
 }
 
 export default function App() {
@@ -65,16 +65,27 @@ export default function App() {
                     } 
                 />
 
-                {/* <Route 
-                    path = '/success_login'
+                <Route 
+                    path = '/verify-email'
                     element = {
                         <ProtectedRoute>
                             <Suspense fallback = {<LoadingSpinner />}>
-                                <SuccessfulLogin />
+                                <VerifyEmail />
                             </Suspense>
                         </ProtectedRoute>
-                    }    
-                /> */}
+                    }
+                />
+
+                <Route 
+                    path = '/onboarding'
+                    element = {
+                        <ProtectedRoute>
+                            <Suspense fallback = {<LoadingSpinner />}>
+                                <Onboarding />
+                            </Suspense>
+                        </ProtectedRoute>
+                    }
+                />
 
                 {/* Password reset links */}
                 <Route 
@@ -95,12 +106,15 @@ export default function App() {
                     }
                 />
 
+                {/* Profile route */}
                 <Route 
-                    path = '/reset-password'
+                    path = '/profile'
                     element = {
-                        <Suspense fallback = {<LoadingSpinner />}>
-                            <ResetPassword />
-                        </Suspense>
+                        <ProtectedRoute>
+                            <Suspense fallback = {<LoadingSpinner />}>
+                                <UserProfile />
+                            </Suspense>
+                        </ProtectedRoute>
                     }
                 />
 
