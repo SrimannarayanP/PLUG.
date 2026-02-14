@@ -18,3 +18,4 @@ Pillow
 django-cloudinary-storage
 cloudinary
 dj_database_url
+requests
