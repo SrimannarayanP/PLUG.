@@ -1,2 +1,2 @@
-web: /opt/venv/bin/gunicorn backend.wsgi --bind 0.0.0.0:$PORT
-worker: /opt/venv/bin/celery -A backend worker --loglevel=info
+web: gunicorn backend.wsgi --bind 0.0.0.0:$PORT
+worker: celery -A backend worker --loglevel=info
