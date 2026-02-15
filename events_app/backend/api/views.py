@@ -63,9 +63,9 @@ class UserProfileView(APIView):
             profile = request.user.student_profile
 
             school_college_id = request.data.get('school_college_id')
-            school_college_name = request.data.get('school_college_name').strip()
-            school_college_city = request.data.get('school_college_city').strip()
-            school_college_state = request.data.get('school_college_state').strip()
+            school_college_name = request.data.get('school_college_name', '').strip()
+            school_college_city = request.data.get('school_college_city', '').strip()
+            school_college_state = request.data.get('school_college_state', '').strip()
 
             if school_college_id:
                 profile.school_college_id = school_college_id
@@ -74,8 +74,7 @@ class UserProfileView(APIView):
             elif school_college_name:
                 school_college = SchoolCollege.objects.filter(
                     name__iexact = school_college_name.strip(),
-                    city__iexact = school_college_city.strip(),
-                    state__iexact = school_college_state.strip()
+                    city__iexact = school_college_city.strip()
                 ).first()
 
                 if not school_college:
