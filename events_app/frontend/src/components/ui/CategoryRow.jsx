@@ -21,7 +21,7 @@ export default function CategoryRow({category, onRegisterClick, onDetailsClick})
                 const res = await apiPublic.get(`/api/events/upcoming/?category_id=${category.id}`)
 
                 if (isMounted) {
-                    const data = response.data.results || response.data
+                    const data = res.data.results || res.data
 
                     setEvents(data)
                 }
