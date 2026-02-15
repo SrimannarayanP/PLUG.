@@ -429,7 +429,7 @@ class ProcessPaymentView(APIView):
 # --- Student & Ticket Views ---
 class RegisterForEventView(APIView):
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def _validate_event_requirements(self, event, data, user):
         """Helper to validate smart fields & user data"""
