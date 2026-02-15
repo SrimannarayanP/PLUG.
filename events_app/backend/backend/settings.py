@@ -24,9 +24,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
-
-# ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') # Allows any different host to host our Django app
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') # Allows any different host to host our Django app
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES' : (
@@ -158,8 +156,6 @@ CORS_ALLOW_ALL_ORIGINS = os.getenv('DEBUG') == 'True'
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
-
 AUTH_USER_MODEL = 'api.CustomUser'
 
 MEDIA_URL = '/media/' # URL path for browser
@@ -176,11 +172,15 @@ CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_TIMEZONE = 'UTC'
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' # For development, emails will be printed to console
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 465
-EMAIL_USE_TLS = False # TLS (Transport Layer Security): Ensures encryption when sent over the internet
-EMAIL_USE_SSL = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' # For development, emails will be printed to console
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_PORT = 465
+# EMAIL_USE_TLS = False # TLS (Transport Layer Security): Ensures encryption when sent over the internet
+# EMAIL_USE_SSL = True
+# EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+# EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+# DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
+
+BREVO_API_KEY = os.getenv('BREVO_API_KEY')
+BREVO_FROM_EMAIL = os.getenv('BREVO_FROM_EMAIL')
+BREVO_FROM_NAME = os.getenv('BREVO_FROM_NAME')
