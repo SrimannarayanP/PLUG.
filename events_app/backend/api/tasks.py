@@ -15,7 +15,7 @@ import base64
 
 User = get_user_model()
 
-@shared_task
+@shared_task(bind = True)
 def send_ticket_email(self, registration_id):
     # Async task to generate QR code & send email
     try:
@@ -46,7 +46,6 @@ def send_ticket_email(self, registration_id):
         )
 
         return f"Email sent to {user.email}"
-    
     except Registration.DoesNotExist:
 
         return f"Registration {registration_id} not found."
@@ -55,7 +54,7 @@ def send_ticket_email(self, registration_id):
 
         raise self.retry(exc = e, countdown = 10)
     
-@shared_task
+@shared_task(bind = True)
 def send_password_reset_email(self, email, reset_link):
     try:
         html_content = render_to_string(
@@ -76,7 +75,7 @@ def send_password_reset_email(self, email, reset_link):
         raise self.retry(exc = e, countdown = 10)
 
 
-@shared_task
+@shared_task(bind = True)
 def send_verification_email(self, user_id, otp):
     try:
         user = User.objects.get(id = user_id)
@@ -103,4 +102,4 @@ def send_verification_email(self, user_id, otp):
     
     except Exception as e:
 
-        raise self.retry(exc = e, conutdown = 10)
+        raise self.retry(exc = e, countdown = 10)
