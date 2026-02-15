@@ -3,55 +3,47 @@
 
 from celery import shared_task
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.mail import EmailMultiAlternatives, send_mail
 from django.template.loader import render_to_string
-from django.utils.html import strip_tags
 
 from .models import Registration
 from .utils import generate_ticket_token, generate_qr_bytes
+from .email_service import send_email
+
+import base64
 
 
 User = get_user_model()
 
 @shared_task
-def send_ticket_email(registration_id):
+def send_ticket_email(self, registration_id):
     # Async task to generate QR code & send email
     try:
-
         registration = Registration.objects.get(id = registration_id)
         event = registration.event
         user = registration.student.user
 
-        token = generate_ticket_token(registration.id, registration.event.id) # Generate token
+        token = generate_ticket_token(registration.id, event.id) # Generate token
         qr_bytes = generate_qr_bytes(token) # Get raw bytes
+        qr_base64 = base64.b64encode(qr_bytes).decode('UTF-8')
 
-        context = {
-            'student_name' : user.first_name,
-            'event_name' : event.name,
-            'event_date' : event.start_date,
-            'event_location' : event.location if hasattr(event, 'location') else None
-        }
-
-        # Construct email
-        subject = f"Your Ticket: {event.name}"
-        html_content = render_to_string('emails/ticket_email.html', context)
-        text_content = strip_tags(html_content)
-
-        msg = EmailMultiAlternatives(
-            subject,
-            text_content,
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email]
+        html_content = render_to_string(
+            'emails/ticket_email.html',
+            {
+                'student_name' : user.first_name,
+                'event_name' : event.name,
+                'event_date' : event.start_date,
+                'event_location' : event.location if hasattr(event, 'location') else None,
+                'qr_image' : f"data:image/png;base64,{qr_base64}"
+            },
         )
 
-        msg.attach_alternative(html_content, 'text/html')
-
-        # Attach QR code bytes
-        msg.attach(f'ticket_{event.id}.png', qr_bytes, 'image/png')
-
-        msg.send()
+        send_email(
+            to_email = user.email,
+            to_name = user.first_name,
+            subject = f"Your ticket: {event.name}", 
+            html_content = html_content
+        )
 
         return f"Email sent to {user.email}"
     
@@ -61,51 +53,48 @@ def send_ticket_email(registration_id):
     
     except Exception as e:
 
-        return f"Failed to send email: {str(e)}"
+        raise self.retry(exc = e, countdown = 10)
     
 @shared_task
-def send_password_reset_email(email, reset_link):
-    subject = "Reset Your Password - PLUG."
-    html_message = render_to_string('emails/password_reset.html', {'reset_link' : reset_link})
-    plain_message = strip_tags(html_message)
-    
-    from_email = settings.DEFAULT_FROM_EMAIL
-    to_email = [email]
-
-    send_mail(
-        subject,
-        plain_message,
-        from_email,
-        to_email,
-        html_message = html_message,
-        fail_silently = False
-    )
-
-
-@shared_task
-def send_verification_email(user_id, otp):
+def send_password_reset_email(self, email, reset_link):
     try:
-        user = User.objects.get(id = user_id)
-        subject = "Verify your PLUG Account"
-
-        context = {
-            'first_name' : user.first_name,
-            'otp' : otp
-        }
-
-        html_content = render_to_string('emails/verify_email.html', context)
-        
-        text_content = strip_tags(html_content)
-
-        msg = EmailMultiAlternatives(
-            subject,
-            text_content,
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email]
+        html_content = render_to_string(
+            'emails/password_reset.html',
+            {'reset_link' : reset_link}
         )
 
-        msg.attach_alternative(html_content, 'text/html')
-        msg.send()
+        send_email(
+            to_email = email,
+            to_name = 'User',
+            subject = "Reset your Password - PLUG.",
+            html_content = html_content,
+        )
+
+        return f"Password reset email sent to {email}"
+    except Exception as e:
+
+        raise self.retry(exc = e, countdown = 10)
+
+
+@shared_task
+def send_verification_email(self, user_id, otp):
+    try:
+        user = User.objects.get(id = user_id)
+        
+        html_content = render_to_string(
+            'emails/verify_email.html',
+            {
+                'first_name' : user.first_name,
+                'otp' : otp,
+            }
+        )
+
+        send_email(
+            to_email = user.email,
+            to_name = user.first_name,
+            subject = "Verify your PLUG Account",
+            html_content = html_content
+        )
 
         return f"OTP sent to {user.email}"
     except User.DoesNotExist:
@@ -114,4 +103,4 @@ def send_verification_email(user_id, otp):
     
     except Exception as e:
 
-        return f"Failed to send OTP: {str(e)}"
+        raise self.retry(exc = e, conutdown = 10)
