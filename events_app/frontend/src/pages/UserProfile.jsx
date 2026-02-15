@@ -3,7 +3,7 @@
 
 import {useEffect, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
-import {Mail, Shield, Building2, LogOut, ArrowLeft, GraduationCap, Phone, Calendar, CheckCircle2, AlertTriangle, MapPin, Edit2, Save} from 'lucide-react'
+import {Mail, Shield, Building2, LogOut, ArrowLeft, GraduationCap, Phone, Calendar, CheckCircle2, AlertTriangle, MapPin, Edit2, Save, X, User, Check} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
 import api from '../api/api'
@@ -196,7 +196,7 @@ export default function UserProfile() {
 
     return (
 
-        <div className = "min-h-[100dvh] bg-[#09090b] text-white p-4 sm:p-6 lg:p-12 font-sans relative overflow-x-hidden selection:bg-pink-500 selection:text-white pt-6 md:pt-12 pb-24">
+        <div className = "min-h-screen bg-[#09090b] text-white p-4 sm:p-6 lg:p-8 font-sans relative overflow-x-hidden selection:bg-pink-500 selection:text-white pb-24">
             {/* Background Texture */}
             <div 
                 className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0"
@@ -208,212 +208,257 @@ export default function UserProfile() {
 
             <div className = "max-w-5xl mx-auto relative z-10">
                 {/* Header/Nav */}
-                <div className = "flex items-center justify-between mb-6 md:mb-10">
+                <div className = "flex items-center justify-between mb-8 sticky top-0 z-50 bg-[#09090b]/80 backdrop-blur-md py-4 -mx-4 sm:mx-0 px-4 sm:px-0">
                     <button
                         onClick = {() => navigate(-1)} // Go back to previous page
-                        className = "group flex items-center text-zinc-500 hover:text-white transition-colors uppercase tracking-widest text-xs font-bold p-2 -ml-2"
+                        className = "group flex items-center text-zinc-400 hover:text-white transition-colors text-sm font-bold uppercase tracking-widest"
                     >
                         <ArrowLeft className = "w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
 
                         Back
                     </button>
 
-                    <div className = "flex gap-2">
+                    <div className = "flex gap-3">
                         {/* Edit Button */}
-                        {!isEditing && (
+                        {!isEditing ? (
                             <button
                                 onClick = {() => setIsEditing(true)}
-                                className = "flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 transition-colors text-xs font-bold uppercase tracking-wider"
+                                className = "flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 transition-all text-xs font-bold uppercase tracking-wider"
                             >
                                 <Edit2 className = "h-4 w-4" />
 
-                                Edit Profile
+                                <span className = "hidden sm:inline">
+                                    Edit Profile
+                                </span>
                             </button>
+                        ) : (
+                            <>
+                                <button
+                                    onClick = {() => {
+                                        setIsEditing(false)
+                                        initializeFormData(profile)
+                                    }}
+                                    disabled = {isSaving}
+                                    className = "flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 transition-all text-xs font-bold uppercase tracking-wider"
+                                >
+                                    <X className = "h-3.5 w-3.5" />
+
+                                    Cancel
+                                </button>
+
+                                <button
+                                    onClick = {handleSave}
+                                    disabled = {isSaving}
+                                    className = {`flex items-center gap-2 px-4 py-2 rounded-xl text-white font-bold uppercase tracking-wider text-xs shadow-lg ${festiveGradient}`}
+                                >
+                                    {isSaving
+                                        ? <LoadingSpinner size = 'sm' />
+                                        : <><Save className = "h-3.5 w-3.5" /> Save</>
+                                    }
+                                </button>
+                            </>
                         )}
 
                         <button
                             onClick = {handleLogout}
-                            className = "flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 transition-colors text-xs font-bold uppercase tracking-wider active:scale-95"
+                            className = "p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 transition-colors"
                         >
-                            <LogOut className = "h-4 w-4" />
-
-                            <span className = "hidden sm:inline">
-                                Sign Out
-                            </span>
+                            <LogOut className = "h-5 w-5" />
                         </button>
                     </div>
                 </div>
                 
                 {/* Main grid layout */}
-                <div className = "grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* Left side : Identity card */}
-                    <div className = "lg:col-span-2 space-y-6">
-                        {/* Identity card */}
-                        <div className = "bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-2xl">
-                            {/* Ambient glow */}
-                            <div className = {`absolute top-0 right-0 h-64 w-64 ${festiveGradient} blur-[100px] opacity-20 pointer-events-none rounded-full transform translate-x-1/2 -translate-y-1/2`} />
+                    <div className = "md:col-span-2 relative overflow-hidden bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-10 shadow-2xl flex flex-col md:flex-row items-center md:items-start gap-8">
+                        {/* Ambient glow */}
+                        <div className = {`absolute top-0 right-0 h-64 w-64 ${festiveGradient} blur-[120px] opacity-15 pointer-events-none rounded-full transform translate-x-1/3 -translate-y-1/3`} />
 
-                            <div className = "flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10">
-                                {/* Avatar */}
-                                <div className = "shrink-0 relative group">
-                                    {profile.profile_picture ? (
-                                        <img 
-                                            src = {getImageUrl(profile.profile_picture)}
-                                            alt = 'Profile'
-                                            className = "h-24 sm:h-32 w-24 sm:w-32 rounded-full object-cover border-4 border-zinc-900 shadow-2xl"
-                                        />
-                                    ) : (
-                                        <div className = {`h-24 sm:h-32 w-24 sm:w-32 rounded-full ${festiveGradient} flex items-center justify-center border-4 border-zinc-900 shadow-2xl`}>
-                                            <span className = "text-3xl sm:text-4xl font-black text-white tracking-tighter">
-                                                {getInitials()}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    <div className = "absolute bottom-1 right-1 bg-zinc-900 p-2 rounded-full border border-zinc-800 shadow-lg">
-                                        {isHost
-                                            ? <Shield className = "h-5 w-5 text-orange-500" />
-                                            : <GraduationCap className = "h-5 w-5 text-blue-500" />
-                                        }
-                                    </div>
-                                </div>
-
-                                {/* Name & info */}
-                                <div className = "text-center sm:text-left space-y-3 w-full">
-                                    {isEditing ? (
-                                        <div className = "grid grid-cols-2 gap-2 animate-in fad-in">
-                                            <FormInput
-                                                name = 'first_name'
-                                                placeholder = "First Name"
-                                                value = {formData.first_name}
-                                                onChange = {handleChange}
-                                                className = {inputStyle}
-                                            />
-
-                                            <FormInput 
-                                                name = 'last_name'
-                                                placeholder = "Last Name"
-                                                value = {formData.last_name}
-                                                onChange = {handleChange}
-                                                className = {inputStyle}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <h1 className = "text-2xl sm:text-4xl font-black text-white tracking-tight leading-none mb-2">
-                                                {profile.first_name} {profile.last_name}
-                                            </h1>
-
-                                            <div className = "flex flex-wrap justify-center sm:justify-start gap-2">
-                                                <span className = {`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${isHost ? "bg-orange-500/10 text-orange-500 border-orange-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"}`}>
-                                                    {isHost ? "Event Host" : "Student"}
-                                                </span>
-
-                                                {/* Verification Status */}
-                                                {profile.is_email_verified ? (
-                                                    <div className = "flex items-center gap-1.5 text-emerald-500 text-[10px] font-bold uppercase tracking-wide bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">
-                                                        <CheckCircle2 className = "h-3 w-3" />
-
-                                                        Verified
-                                                    </div>
-                                                ) : (
-                                                    <div className = "flex items-center gap-1.5 text-yellow-500 text-[10px] font-bold uppercase tracking-wide bg-yellow=500/10 px-2 py-1 rounded-full border border-yellow-500/20">
-                                                        <AlertTriangle className = "h-3 w-3" />
-
-                                                        Unverified
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className = "flex items-center justify-center sm:justify-start gap-2 text-zinc-400 text-xs sm:text-sm bg-zinc-900/50 px-3 py-2 rounded-lg border border-zinc-800 w-fit mx-auto sm:mx-0">
-                                        <Mail className = "h-4 w-4 text-zinc-500" />
-
-                                        <span className = "truncate max-w-[200px] sm:max-w-xs">
-                                            {profile.email}
+                        <div className = "relative shrink-0">
+                            {/* Avatar */}
+                            <div className = "h-32 w-32 md:h-40 md:w-40 rounded-full p-1 bg-gradient-to-br from-zinc-800 to-zinc-950 shadow-2xl relative z-10">
+                                {profile.profile_picture ? (
+                                    <img 
+                                        src = {getImageUrl(profile.profile_picture)}
+                                        alt = 'Profile'
+                                        className = "h-full w-full rounded-full object-cover border-4 border-[#18181b]"
+                                    />
+                                ) : (
+                                    <div className = {`h-full w-full rounded-full ${festiveGradient} flex items-center justify-center border-4 border-[#18181b]`}>
+                                        <span className = "text-5xl font-black text-white">
+                                            {getInitials()}
                                         </span>
-
-                                        {isEditing && (
-                                            <span className = "text-[10px] text-zinc-600 ml-2">
-                                                (Cannot change)
-                                            </span>
-                                        )}
                                     </div>
+                                )}
+
+                                <div className = "absolute bottom-2 right-2 z-20 bg-zinc-900 p-2 rounded-full border border-zinc-800 shadow-lg text-white">
+                                    {isHost
+                                        ? <Shield className = "h-5 w-5 text-orange-500" />
+                                        : <GraduationCap className = "h-5 w-5 text-blue-500" />
+                                    }
                                 </div>
                             </div>
                         </div>
-                        
-                        {/* Personal Details Grid */}
-                        <div className = "grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {/* Phone Card */}
-                            <div className = "bg-[#18181b] border border-zinc-800 p-5 rounded-2xl flex items-center gap-4 hover:border-zinc-700 transition-colors group">
-                                <div className = "h-12 w-12 rounded-xl bg-zinc-900 flex items-center justify-center group-hover:bg-zinc-800 transition-colors shrink-0">
-                                    <Phone className = "h-5 w-5 text-zinc-400 group-hover:text-white" />
-                                </div>
 
-                                <div className = 'min-w-0'>
-                                    <p className = "text-xs font-bold text-zinc-500 uppercase tracking-wider mb-0.5">
-                                        Phone
-                                    </p>
-                                    
-                                    {isEditing ? (
-                                        <FormInput
-                                            name = 'phone_number'
-                                            value = {formData.phone_number}
-                                            onChange = {handleChange}
+                        {/* Name & info */}
+                        <div className = "flex-1 text-center md:text-left space-y-4 w-full relative z-10">
+                            {isEditing ? (
+                                <div className = "grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in">
+                                    <div>
+                                        <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block ml-1">
+                                            First Name
+                                        </label>
+
+                                        <FormInput 
+                                            name = 'first_name' 
+                                            value = {formData.first_name} 
+                                            onChange = {handleChange} 
+                                            className = {inputStyle} 
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block ml-1">
+                                            Last Name
+                                        </label>
+                                        
+                                        <FormInput 
+                                            name = 'last_name' 
+                                            value = {formData.last_name} 
+                                            onChange = {handleChange} 
                                             className = {inputStyle}
                                         />
-                                    ) : (
-                                        <p className = "text-sm font-medium text-white font-mono truncate">
-                                            {phone}
-                                        </p>
-                                    )}
+                                    </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <div>
+                                    <h1 className = "text-3xl md:text-5xl font-black text-white tracking-tight mb-3">
+                                        {profile.first_name} {profile.last_name}
+                                    </h1>
+                                    
+                                    <div className = "flex flex-wrap items-center justify-center md:justify-start gap-3">
+                                        <span 
+                                            className={`
+                                                px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border 
+                                                ${isHost 
+                                                    ? "bg-orange-500/10 text-orange-500 border-orange-500/20" 
+                                                    : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                                }
+                                            `}
+                                        >
+                                            {isHost ? "Event Host" : 'Student'}
+                                        </span>
 
-                            {/* DOB Card */}
-                            <div className = "bg-[#18181b] border border-zinc-800 hover:border-zinc-700 p-5 rounded-2xl flex items-center gap-4 transition-colors group">
-                                <div className = "h-12 w-12 rounded-xl bg-zinc-900 flex items-center justify-center group-hover:bg-zinc-800 transition-colors shrink-0">
-                                    <Calendar className = "h-5 w-5 text-zinc-400 group-hover:text-white" />
+                                        <div 
+                                            className = {`
+                                                flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border 
+                                                ${profile.is_email_verified 
+                                                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+                                                    : "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
+                                                }
+                                            `}
+                                        >
+                                            {profile.is_email_verified ? (
+                                                <>
+                                                    <CheckCircle2 className="h-3 w-3" /> 
+                                                    
+                                                    Verified
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <AlertTriangle className="h-3 w-3" /> 
+                                                    
+                                                    Unverified
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
+                            )}
 
-                                <div className = 'min-w-0'>
-                                    <p className = "text-xs font-bold text-zinc-500 uppercase tracking-wider mb-0.5">
-                                        Date of Birth
-                                    </p>
+                            <div className = "inline-flex items-center gap-2 px-4 py-2 bg-zinc-900/50 rounded-xl border border-zinc-800 text-zinc-400 text-sm">
+                                <Mail className = "h-4 w-4" />
 
-                                    {isEditing ? (
-                                        <FormInput 
-                                            type = 'date'
-                                            name = 'date_of_birth'
-                                            value = {formData.date_of_birth}
-                                            onChange = {handleChange}
-                                            className = {`${inputStyle} [color-scheme:dark]`}
-                                        />
-                                    ) : (
-                                        <p className = "text-sm font-medium text-white truncate">
-                                            {formatDate(dob)}
-                                        </p>
-                                    )}
-                                </div>
+                                <span className = 'truncate'>
+                                    {profile.email}
+                                </span>
                             </div>
                         </div>
                     </div>
+                        
+                    {/* Personal Details Grid */}
+                    <div className = "bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-8 flex flex-col justify-center space-y-6">
+                        <div className = "flex items-center gap-3 text-zinc-500 mb-2">
+                            <User className = "h-5 w-5" />
 
-                    {/* Right column : Organisation / College info */}
-                    <div className = "flex flex-col h-full">
-                        <div className = "bg-[#18181b] border border-zinc-800 rounded-3xl p-6 h-full flex flex-col relative overflow-hidden group">
-                            <div className = "flex items-center gap-2 mb-2">
-                                <Building2 className = "h-4 w-4 text-zinc-500" />
+                            <h3 className = "text-xs font-bold uppercase tracking-widest">
+                                Personal Details
+                            </h3>
+                        </div>
+                        
+                        {/* Phone */}
+                        <div className = 'space-y-1'>
+                            <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
+                                <Phone className = "h-3 w-3" />
 
-                                <h2 className = "text-xs font-bold text-zinc-500 uppercase tracking-widest">
-                                    {isHost ? 'Organisation' : 'Institution'}
-                                </h2>
-                            </div>
-                            
+                                Phone Number
+                            </label>
+
                             {isEditing ? (
-                                <div className = "flex flex-col gap-4 animate-in fade-in">
+                                <FormInput 
+                                    name = 'phone_number'
+                                    value = {formData.phone_number}
+                                    onChange = {handleChange}
+                                    className = {inputStyle}
+                                    placeholder = "+91..."
+                                />
+                            ) : (
+                                <p className = "text-lg font-medium text-white font-mono">
+                                    {phone}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* DOB */}
+                        <div className = 'space-y-1'>
+                            <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
+                                <Calendar className = "h-3 w-3" />
+
+                                Date of Birth
+                            </label>
+
+                            {isEditing ? (
+                                <FormInput 
+                                    type = 'date'
+                                    name = 'date_of_birth'
+                                    value = {formData.date_of_birth}
+                                    onChange = {handleChange}
+                                    className = {`${inputStyle} [color-scheme:dark]`}
+                                />
+                            ) : (
+                                <p className = "text-lg font-medium text-white">
+                                    {formatDate(dob)}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                        
+                    {/* Right column : Organisation / College info */}
+                    <div className = "md:col-span-2 lg:col-span-3 bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden group">
+                        <div className = "absolute top-0 right-0 p-32 bg-zinc-800/20 blur-[80px] rounded-full pointer-events-none" />
+
+                        <div className = "flex items-center gap-3 text-zinc-500 mb-6 relative z-10">
+                            <Building2 className = "h-5 w-5" />
+
+                            <h3 className = "text-xs font-bold uppercase tracking-widest">
+                                {isHost ? 'Organisation' : 'Institution'}
+                            </h3>
+                        </div>
+                        
+                        <div className = "relative z-10">
+                            {isEditing ? (
+                                <div className = "max-w-xl space-y-6 animate-in fade-in">
                                     {isHost ? (
                                         <div>
                                             <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
@@ -428,7 +473,7 @@ export default function UserProfile() {
                                             />
                                         </div>
                                     ) : (
-                                        <div className = 'space-y-2'>
+                                        <div className = 'space-y-4'>
                                             <div>
                                                 <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
                                                     Search School/College
@@ -445,41 +490,29 @@ export default function UserProfile() {
                                             </div>
 
                                             {isCreatingNewCollege && (
-                                                <div className = "animate-in slide-in-from-top-2 fade-in space-y-3 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800">
-                                                    <div className = "flex items-center gap-2 text-orange-400 text-xs font-bold uppercase tracking-wider">
+                                                <div className = "p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 animate-in slide-in-from-top-2">
+                                                    <div className = "flex items-center gap-2 text-orange-400 text-xs font-bold uppercase tracking-wider mb-3">
                                                         <AlertTriangle className = "h-3 w-3" />
 
-                                                        New Institution Details
+                                                        Adding New Institution
                                                     </div>
 
-                                                    <div className = "grid grid-cols-2 gap-2">
-                                                        <div>
-                                                            <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
-                                                                City
-                                                            </label>
+                                                    <div className = "grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <FormInput 
+                                                            name = 'school_college_city'
+                                                            placeholder = 'City'
+                                                            value = {formData.school_college_city}
+                                                            onChange = {handleChange}
+                                                            className = {inputStyle}
+                                                        />
 
-                                                            <FormInput 
-                                                                name = 'school_college_city'
-                                                                placeholder = 'City'
-                                                                value = {formData.school_college_city}
-                                                                onChange = {handleChange}
-                                                                className = {inputStyle}
-                                                            />
-                                                        </div>
-
-                                                        <div>
-                                                            <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
-                                                                State
-                                                            </label>
-
-                                                            <FormInput 
-                                                                name = 'school_college_state'
-                                                                placeholder = 'State'
-                                                                value = {formData.school_college_state}
-                                                                onChange = {handleChange}
-                                                                className = {inputStyle}
-                                                            />
-                                                        </div>
+                                                        <FormInput 
+                                                            name = 'school_college_state'
+                                                            placeholder = 'State'
+                                                            value = {formData.school_college_state}
+                                                            onChange = {handleChange}
+                                                            className = {inputStyle}
+                                                        />
                                                     </div>
                                                 </div>
                                             )}
@@ -487,74 +520,43 @@ export default function UserProfile() {
                                     )}
                                 </div>
                             ) : (
-                                organisation ? (
-                                    <div className = "flex flex-col items-center justify-center flex-1 text-center relative z-10">
-                                        <div className = "absolute top-0 right-0 h-32 w-32 bg-zinc-800/20 blur-[50px] rounded-full translate-x-1/2 -translate-y-1/2 pointer-events-none" />
-
-                                        <div className = "h-24 w-24 rounded-2xl bg-black border border-zinc-800 flex items-center justify-center mb-4 shadow-xl p-2">
-                                            {organisation.logo ? (
-                                                <img 
-                                                    src = {getImageUrl(organisation.logo)}
-                                                    alt = {organisation.name}
-                                                    className = "h-full w-full object-cover rounded-xl"
-                                                />
-                                            ) : (
-                                                <Building2 className = "h-10 w-10 text-zinc-700" />
-                                            )}
-                                        </div>
-
-                                        <h3 className = "text-xl font-bold text-white mb-2 leading-tight max-w-[200px]">
-                                            {organisation.name}
-                                        </h3>
-
-                                        {organisation.city && (
-                                            <div className = "flex items-center gap-1 text-zinc-500 text-xs uppercase tracking-wide mt-2">
-                                                <MapPin className = "h-3 w-3" />
-
-                                                {organisation.city}
-                                            </div>
+                                <div className = "flex items-start gap-6">
+                                    <div className = "h-20 w-20 rounded-2xl bg-black border border-zinc-800 flex items-center justify-center shadow-lg shrink-0">
+                                        {organisation?.logo ? (
+                                            <img 
+                                                src = {getImageUrl(organisation.logo)}
+                                                alt = {organisation.name}
+                                                className = "h-full w-full object-cover rounded-xl"
+                                            />
+                                        ) : (
+                                            <Building2 className = "h-8 w-8 text-zinc-700" />
                                         )}
                                     </div>
-                                ) : (
-                                    <div className = "flex flex-col flex-1 items-center justify-center text-center border-2 border-dashed border-zinc-800/50 rounded-2xl p-6">
-                                        <p className = "text-zinc-500 text-sm font-medium">
-                                            No institution linked
-                                        </p>
+
+                                    <div className = 'pt-2'>                 
+                                        {organisation ? (
+                                            <>
+                                                <h2 className = "text-2xl font-bold text-white mb-1">
+                                                    {organisation.name}
+                                                </h2>
+
+                                                {organisation.city && (
+                                                    <div className = "flex items-center gap-1.5 text-zinc-500 text-sm font-medium">
+                                                        <MapPin className = "h-3.5 w-3.5" />
+
+                                                        {organisation.city}
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <p className = "text-zinc-500 italic">
+                                                No institution details added yet.
+                                            </p>
+                                        )}
                                     </div>
-                                )
+                                </div>
                             )}
                         </div>
-
-                        {isEditing && (
-                            <div className = "grid grid-cols-2 gap-3 animate-in slide-in-from-bottom-2">
-                                <button
-                                    onClick = {() => {
-                                        setIsEditing(false)
-                                        initializeFormData(profile)
-                                    }}
-                                    disabled = {isSaving}
-                                    className = "py-3 rounded-xl text-zinc-400 font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 border border-zinc-800 hover:bg-zinc-800 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-
-                                <button
-                                    onClick = {handleSave}
-                                    disabled = {isSaving}
-                                    className = {`py-3 rounded-xl text-white font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg ${festiveGradient}`}
-                                >
-                                    {isSaving
-                                        ? <LoadingSpinner size = 'sm' />
-                                        : 
-                                            <>
-                                                <Save className = "h-4 w-4" />
-
-                                                Save Changes
-                                            </>
-                                    }
-                                </button>
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>
