@@ -59,6 +59,36 @@ class UserProfileView(APIView):
     def patch(self, request):
         serializer = UserSerializer(request.user, data = request.data, partial = True) # Allows us to store only some fields instead of all
 
+        if hasattr(request.user, 'student_profile'):
+            profile = request.user.student_profile
+
+            school_college_id = request.data.get('school_college_id')
+            school_college_name = request.data.get('school_college_name').strip()
+            school_college_city = request.data.get('school_college_city').strip()
+            school_college_state = request.data.get('school_college_state').strip()
+
+            if school_college_id:
+                profile.school_college_id = school_college_id
+
+                profile.save()
+            elif school_college_name:
+                school_college = SchoolCollege.objects.filter(
+                    name__iexact = school_college_name.strip(),
+                    city__iexact = school_college_city.strip(),
+                    state__iexact = school_college_state.strip()
+                ).first()
+
+                if not school_college:
+                    school_college = SchoolCollege.objects.create(
+                        name = school_college_name.strip(),
+                        city = school_college_city.strip(),
+                        state = school_college_state.strip()
+                    )
+
+                profile.school_college = school_college
+
+                profile.save()
+
         if serializer.is_valid():
             serializer.save()
 
@@ -452,10 +482,31 @@ class RegisterForEventView(APIView):
 
         # College check
         if event.collect_college_school and not student_profile.school_college:
-            sid = data.get('school_college_id')
+            school_college_id = data.get('school_college_id')
+            school_college_name = data.get('school_college_name')
 
-            if sid:
-                student_profile.school_college_id = sid
+            if school_college_id:
+                student_profile.school_college_id = school_college_id
+
+                profile_updated = True
+            elif school_college_name:
+                school_college_city = data.get('school_college_city').strip()
+                school_college_state = data.get('school_college_state').strip()
+
+                school_college = SchoolCollege.objects.filter(
+                    name__iexact = school_college_name.strip(),
+                    city__iexact = school_college_city.strip(),
+                    state__iexact = school_college_state.strip()
+                ).first()
+
+                if not school_college:
+                    school_college = SchoolCollege.objects.create(
+                        name = school_college_name.strip(),
+                        city = school_college_city.strip(),
+                        state = school_college_state.strip()
+                    )
+
+                student_profile.school_college = school_college
 
                 profile_updated = True
 
