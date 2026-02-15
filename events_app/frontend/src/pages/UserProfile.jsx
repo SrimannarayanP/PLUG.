@@ -150,12 +150,12 @@ export default function UserProfile() {
 
     const userDetails = profile.profile || {}
 
-    const isStudentData = !!userDetails.school_college
-    const isHost = !isStudentData && (profile.role === 'host' || profile.role === 'student')
+    const isStudent = profile.role === 'student'
+    const isHost = profile.role === 'host'
 
     const phone = userDetails.phone_number || "Not Provided"
     const dob = userDetails.date_of_birth || null
-    const organisation = isStudentData
+    const organisation = isStudent
         ? userDetails.school_college
         : (isHost ? {name : userDetails.name || profile.first_name, logo : profile.profile_picture} : null)
 
