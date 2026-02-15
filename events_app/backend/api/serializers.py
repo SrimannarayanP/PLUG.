@@ -240,7 +240,7 @@ class UserSerializer(serializers.ModelSerializer):
             StudentProfile.objects.create(user = user, phone_number = phone_number, date_of_birth = date_of_birth, student_id_number = student_id_number, school_college = school_college)
 
         # We use on_commit to ensure the user exists in DB before Celery tries to find them.
-        transaction.on_commit(lambda otp = otp: send_verification_email.delay(str(user.id), otp))
+        send_verification_email.delay(str(user.id), otp)
 
         return user
     
