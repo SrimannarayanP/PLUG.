@@ -3,7 +3,7 @@
 
 import {useEffect, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
-import {Mail, Shield, Building2, LogOut, ArrowLeft, GraduationCap, Phone, Calendar, CheckCircle2, AlertTriangle, MapPin, User, Check, Edit2, Save, X} from 'lucide-react'
+import {Mail, Shield, Building2, LogOut, ArrowLeft, GraduationCap, Phone, Calendar, CheckCircle2, AlertTriangle, MapPin, Edit2, Save} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
 import api from '../api/api'
@@ -80,12 +80,28 @@ export default function UserProfile() {
             if (profile.role === 'host') {
                 delete payload.school_college_id
                 delete payload.school_college_name
+                delete payload.school_college_city
+                delete payload.school_college_state
             } else {
                 delete payload.organisation_name
 
-                if (!payload.school_college_id && !payload.school_college_name) {
+                if (payload.school_college_id) {
+                    delete payload.school_college_name
+                    delete payload.school_college_city
+                    delete payload.school_college_state
+                } else if (payload.school_college_name) {
+                    if (!payload.school_college_city || !payload.school_college_state) {
+                        toast.error("City & State are required for new schools/colleges.")
+
+                        setIsSaving(false)
+
+                        return
+                    }
+                } else {
                     delete payload.school_college_id
                     delete payload.school_college_name
+                    delete payload.school_college_city
+                    delete payload.school_college_state
                 }
             }
 
@@ -110,11 +126,25 @@ export default function UserProfile() {
     }
 
     const handleCollegeChange = (selection) => {
+        if (!selection) {
+            setFormData(prev => ({
+                ...prev,
+                school_college_id : '',
+                school_college_name : '',
+                school_college_city : '',
+                school_college_state : ''
+            }))
+
+            return
+        }
+
         if (selection.isNew) {
             setFormData(prev => ({
                 ...prev,
                 school_college_id : '',
-                school_college_name : selection.name
+                school_college_name : selection.name,
+                school_college_city : '',
+                school_college_state : ''
             }))
         } else {
             setFormData(prev => ({
@@ -161,6 +191,8 @@ export default function UserProfile() {
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
     const inputStyle = "bg-zinc-900 border-zinc-800 focus:border-orange-500 text-white"
+
+    const isCreatingNewCollege = !formData.school_college_id && formData.school_college_name.length > 0
 
     return (
 
@@ -397,18 +429,60 @@ export default function UserProfile() {
                                         </div>
                                     ) : (
                                         <div className = 'space-y-2'>
-                                            <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
-                                                Search School/College
-                                            </label>
+                                            <div>
+                                                <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
+                                                    Search School/College
+                                                </label>
 
-                                            <SearchableSelect 
-                                                value = {{
-                                                    id : formData.school_college_id, 
-                                                    name : formData.school_college_name
-                                                }}
-                                                onChange = {handleCollegeChange}
-                                                endpoint = '/api/data/colleges/'
-                                            />
+                                                <SearchableSelect 
+                                                    value = {{
+                                                        id : formData.school_college_id, 
+                                                        name : formData.school_college_name
+                                                    }}
+                                                    onChange = {handleCollegeChange}
+                                                    endpoint = '/api/data/colleges/'
+                                                />
+                                            </div>
+
+                                            {isCreatingNewCollege && (
+                                                <div className = "animate-in slide-in-from-top-2 fade-in space-y-3 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800">
+                                                    <div className = "flex items-center gap-2 text-orange-400 text-xs font-bold uppercase tracking-wider">
+                                                        <AlertTriangle className = "h-3 w-3" />
+
+                                                        New Institution Details
+                                                    </div>
+
+                                                    <div className = "grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
+                                                                City
+                                                            </label>
+
+                                                            <FormInput 
+                                                                name = 'school_college_city'
+                                                                placeholder = 'City'
+                                                                value = {formData.school_college_city}
+                                                                onChange = {handleChange}
+                                                                className = {inputStyle}
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
+                                                                State
+                                                            </label>
+
+                                                            <FormInput 
+                                                                name = 'school_college_state'
+                                                                placeholder = 'State'
+                                                                value = {formData.school_college_state}
+                                                                onChange = {handleChange}
+                                                                className = {inputStyle}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -455,9 +529,17 @@ export default function UserProfile() {
                             <div className = "grid grid-cols-2 gap-3 animate-in slide-in-from-bottom-2">
                                 <button
                                     onClick = {() => {
-                                        setIsEditing(false) 
+                                        setIsEditing(false)
                                         initializeFormData(profile)
                                     }}
+                                    disabled = {isSaving}
+                                    className = "py-3 rounded-xl text-zinc-400 font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 border border-zinc-800 hover:bg-zinc-800 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+
+                                <button
+                                    onClick = {handleSave}
                                     disabled = {isSaving}
                                     className = {`py-3 rounded-xl text-white font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg ${festiveGradient}`}
                                 >
