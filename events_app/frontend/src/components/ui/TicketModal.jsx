@@ -2,17 +2,25 @@
 
 
 import {useEffect, useState} from 'react'
-import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User} from 'lucide-react'
+import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, AlertCircle, Ban} from 'lucide-react'
+import {toast} from 'react-hot-toast'
+
+import api from '../api/api'
 
 
-export default function TicketModal({tickets, closeModal}) {
+export default function TicketModal({tickets : initialTickets, closeModal}) {
 
+    const [tickets, setTickets] = useState(initialTickets)
     const [activeIndex, setActiveIndex] = useState(0)
+    const [cancelling, setCancelling] = useState(false)
 
     const currentTicket = tickets[activeIndex]
     const event = currentTicket.event
+
     const isPending = currentTicket.payment_status === 'pending'
+    const isRefundPending = currentTicket.payment_status === 'refund_pending'
     const isVerified = currentTicket.payment_status === 'verified' || currentTicket.checked_in
+    const isCancelled = currentTicket.is_cancelled
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
     const textGradient = "bg-clip-text text-transparent bg-gradient-to-r from-orange-400 via-pink-500 to-purple-600"
@@ -34,6 +42,41 @@ export default function TicketModal({tickets, closeModal}) {
         e.stopPropagation()
 
         setActiveIndex((prev) => (prev - 1 + tickets.length) % tickets.length)
+    }
+
+    const handleCancelTicket = async () => {
+        if (!window.confirm("Are you sure you want to cancel this ticket? This action cannot be undone.")) return
+
+        setCancelling(true)
+
+        try {
+            const res = await api.post(`/api/ticket/cancel/${currentTicket.id}`)
+
+            toast.success(res.data.message || "Ticket Cancelled")
+
+            setTickets(prev => {
+                const newTickets = [...prev]
+                const updatedTicket = {...newTickets[activeIndex]}
+
+                updatedTicket.is_cancelled = true
+
+                if (updatedTicket.payment_status === 'verified') {
+                    updatedTicket.payment_status = 'refund_pending'
+                } else if (updatedTicket.payment_status === 'pending') {
+                    updatedTicket.payment_status = 'rejected'
+                }
+
+                newTickets[activeIndex] = updatedTicket
+
+                return newTickets
+            })
+        } catch (err) {
+            console.error(err)
+
+            toast.error(err.response?.data?.error || "Failed to cancel ticket")
+        } finally {
+            setCancelling(false)
+        }
     }
 
     return (
@@ -61,7 +104,7 @@ export default function TicketModal({tickets, closeModal}) {
                         </button>
 
                         {/* Subtle background blurs */}
-                        <div className = {`absolute top-0 right-0 w-24 h-24 ${festiveGradient} opacity-20 blur-2xl -translate-y-1/2 -translate-x-1/2 pointer-events-none`} />
+                        <div className = {`absolute top-0 right-0 h-24 w-24 ${festiveGradient} opacity-20 blur-2xl -translate-y-1/2 -translate-x-1/2 pointer-events-none`} />
 
                         {tickets.length > 1 && (
                             <div className = "flex justify-center mb-4">
@@ -109,10 +152,25 @@ export default function TicketModal({tickets, closeModal}) {
                     <div className = "flex flex-col flex-1 overflow-y-auto p-6 pt-4 items-center bg-black relative">
                         {/* Status Badges */}
                         <div className = 'mb-4'>
-                            {isPending ? (
-                                <span className = "text-yellow-500 text-xs font-bold flex items-center gap-2">
+                            {isCancelled ? (
+                                <span className = "text-red-500 text-xs font-bold flex items-center gap-2 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
+                                    <Ban size = {10}/>
+
+                                    Ticket Cancelled
+                                </span>
+                            ) : isRefundPending ? (
+                                <span className = "text-yellow-500 text-xs font-bold flex items-center gap-2 bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">
                                     <Loader2 
                                         className = 'animate-spin' 
+                                        size = {12}
+                                    />
+
+                                    Refund Processing
+                                </span>
+                            ) : isPending ? (
+                                <span className = "text-yellow-500 text-xs font-bold flex items-center gap-2">
+                                    <Loader2 
+                                        className = 'animate-spin'
                                         size = {12}
                                     />
 
@@ -128,13 +186,23 @@ export default function TicketModal({tickets, closeModal}) {
                                 </span>
                             )}
                         </div>
-{/* ------------------------------------------------------- */}
-                        <div className = "relative group mb-6 shrink-0 transition-all duration-300">
-                            {/* Gradient frame around QR */}
-                            <div className = {`absolute -inset-1 ${festiveGradient} rounded-2xl opacity-75 blur-sm group-hover:opacity-100 transition duration-500`} />
 
-                            <div className = "relative bg-white p-3 rounded-xl">
-                                {isVerified ? (
+                        <div className = "relative group mb-6 shrink-0 transition-all duration-300">
+                            {!isCancelled && !isRefundPending && (
+                                // Gradient frame around QR
+                                <div className = {`absolute -inset-1 ${festiveGradient} rounded-2xl opacity-75 blur-sm group-hover:opacity-100 transition duration-500`} />
+                            )}
+                            
+                            <div 
+                                className = {`
+                                    relative bg-white p-3 rounded-xl
+                                    ${isCancelled || isRefundPending
+                                        ? "opacity-50 grayscale"
+                                        : ''
+                                    }
+                                `}
+                            >
+                                {(isVerified && !isCancelled && !isRefundPending) ? (
                                     <img
                                         key = {currentTicket.id} 
                                         src = {currentTicket.qr_code}
@@ -143,8 +211,20 @@ export default function TicketModal({tickets, closeModal}) {
                                         style = {{colorAdjust : 'exact'}}
                                     />
                                 ) : (
-                                    <div className = "h-40 sm:h-48 w-40 sm:w-48 flex items-center justify-center text-xs text-gray-500 text-center font-mono p-4 border-2 border-dashed border-gray-300 rounded-lg">
-                                        {isPending ? 'Verifying' : 'Void'}
+                                    <div className = "h-40 sm:h-48 w-40 sm:w-48 flex flex-col items-center justify-center text-xs text-gray-500 text-center font-mono p-4 border-2 border-dashed border-gray-300 rounded-lg">
+                                        {isCancelled ? (
+                                            <>
+                                                <Ban className = "h-8 w-8 mb-2 opacity-50" />
+
+                                                <span>INVALID</span>
+                                            </>
+                                        ) : isRefundPending ? (
+                                            <>
+                                                <Loader2 className = "h-8 w-8 mb-2 animate-spin opacity-50" />
+
+                                                <span>REFUND<br />IN PROGRESS</span>
+                                            </>
+                                        ) : isPending ? 'Verifying...' : 'Void'}
                                     </div>
                                 )}
                             </div>
@@ -190,16 +270,16 @@ export default function TicketModal({tickets, closeModal}) {
                                         {event.location_type === 'online' ? (
                                             <Laptop 
                                                 size = {14}
-                                                className = "text-purple-500 justify-end"
+                                                className = 'text-purple-500'
                                             />
                                         ) : (
                                             <MapPin 
                                                 size = {14}
-                                                className = "text-purple-500 shrink-0"
+                                                className = 'text-purple-500'
                                             />
                                         )}
 
-                                        {event.google_maps_link ? (
+                                        {event.google_maps_link && event.location_type !== 'online' ? (
                                             <a
                                                 href = {event.google_maps_link}
                                                 target = '_blank'
@@ -207,14 +287,14 @@ export default function TicketModal({tickets, closeModal}) {
                                                 className = "font-medium text-xs hover:text-purple-400 flex items-center gap-1 underline decoration-dashed underline-offset-4 decoration-purple-500/50"
                                             >
                                                 <span className = "truncate max-w-[100px]">
-                                                    {event.physical_location || (event.location_type === 'online' ? 'Online' : "TBA")}
+                                                    {event.physical_location || 'TBA'}
                                                 </span>
 
                                                 <ExternalLink size = {10}/>
                                             </a>
                                         ) : (
                                             <span className = "font-medium text-xs truncate max-w-[100px]">
-                                                {event.physical_slocation || (event.location_type === 'online' ? 'Online' : "TBA")}
+                                                {event.physical_slocation || (event.location_type === 'online' ? 'Online' : 'TBA')}
                                             </span>
                                         )}
                                     </div>
@@ -222,12 +302,29 @@ export default function TicketModal({tickets, closeModal}) {
                             </div>
                             
                             {/* Action Button */}
-                            <button
-                                onClick = {closeModal}
-                                className = {`flex w-full py-3.5 rounded-xl font-bold text-white shadow-lg active:scale-[0.98] ${festiveGradient} items-center justify-center gap-2 text-sm uppercase tracking-widest`}
-                            >
-                                {isVerified ? "Done" : "Close"}
-                            </button>
+                            <div className = "space-y-2 pt-2">
+                                {!isCancelled && !currentTicket.checked_in && !isRefundPending && (
+                                    <button
+                                        onClick = {handleCancelTicket}
+                                        disabled = {cancelling}
+                                        className = "w-full py-3 rounded-xl font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        {cancelling
+                                            ? <Loader2 className = "h-3 w-3 animate-spin" />
+                                            : <Ban size = {14} />
+                                        }
+
+                                        {cancelling ? 'Cancelling...' : "Cancel Ticket"}
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick = {closeModal}
+                                    className = "w-full py-3 rounded-xl font-bold text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 text-xs uppercase tracking-widest transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -235,5 +332,4 @@ export default function TicketModal({tickets, closeModal}) {
         </div>
 
     )
-
 }
