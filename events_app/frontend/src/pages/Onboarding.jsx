@@ -3,7 +3,7 @@
 
 import {useState, useEffect} from 'react'
 import {useNavigate} from 'react-router-dom'
-import {ArrowRight, Building2, Phone, GraduationCap, Loader2, Calendar, Search, MapPin, X} from 'lucide-react'
+import {ArrowRight, Building2, Phone, GraduationCap, Loader2, Calendar, Search, MapPin, X, ChevronDown, ChevronRight} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
 import api from '../api/api'
@@ -30,11 +30,6 @@ export default function Onboarding() {
         school_college_city : '',
         school_college_state : '',
     })
-
-    const [colleges, setColleges] = useState([])
-    const [searchQuery, setSearchQuery] = useState('')
-    const [isSearching, setIsSearching] = useState(false)
-    const [showDropdown, setShowDropdown] = useState(false)
 
     // Fetch user profile
     useEffect(() => {
@@ -66,6 +61,18 @@ export default function Onboarding() {
     }, [navigate])
 
     const handleCollegeChange = (selection) => {
+        if (!selection) {
+            setFormData(prev => ({
+                ...prev,
+                school_college_id : '',
+                school_college_name : '',
+                school_college_city : '',
+                school_college_state : '',
+            }))
+
+            return
+        }
+
         if (selection.isNew) {
             setFormData(prev => ({
                 ...prev,
@@ -80,6 +87,14 @@ export default function Onboarding() {
                 school_college_city : '',
                 school_college_state : ''
             }))
+        }
+    }
+
+    const handleSkip = () => {
+        if (user.role === 'host') {
+            navigate('/host/dashboard')
+        } else {
+            navigate('/')
         }
     }
 
@@ -101,22 +116,29 @@ export default function Onboarding() {
             } else {
                 delete payload.organisation_name
 
-                if (!payload.school_college_id && !payload.school_college_name) {
+                if (!payload.school_college_id && payload.school_college_name) {
                     if (!payload.school_college_city || !payload.school_college_state) {
-                        toast.error("Please provide City & State for the new school/college.")
-
-                        setSubmitting(false)
-
-                        return
-                    } else if (!payload.school_college_id) {
-                        toast.error("Please select a valid college.")
+                        toast.error("Since you are adding a new college, City & State are required.")
 
                         setSubmitting(false)
 
                         return
                     }
                 }
+
+                if (!payload.school_college_name) {
+                    delete payload.school_college_id
+                    delete payload.school_college_name
+                    delete payload.school_college_city
+                    delete payload.school_college_state
+                }
             }
+
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === '' || payload[key] === null) {
+                    delete payload[key]
+                }
+            })
 
             await api.patch('/api/user/profile/', payload)
 
@@ -159,7 +181,14 @@ export default function Onboarding() {
 
             {/* Ambient glow */}
             <div className = {`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-64 sm:h-96 w-64 sm:w-96 ${festiveGradient} blur-[100px] sm:blur-[120px] opacity-20 pointer-events-none rounded-full z-0`} />
-                
+            
+            <button
+                onClick = {handleSkip}
+                className = "absolute top-6 right-6 z-20 text-zinc-500 hover:text-white text-sm font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+            >
+                Skip for now <ChevronRight className = "h-4 w-4" />
+            </button>
+
             <div className = "w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-500">
                 {/* Header */}
                 <div className = "text-center mb-8 sm:mb-10">
