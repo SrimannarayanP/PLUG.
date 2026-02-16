@@ -204,7 +204,7 @@ export default function Onboarding() {
                     </h1>
 
                     <p className = "text-zinc-500 text-sm sm:text-base font-medium max-w-[280px] sm:max-w-none mx-auto">
-                        Let's finish setting up your <span className = {isHost ? 'text-orange-500' : 'text-blue-500'}>{isHost ? 'Host' : 'Student'}</span> profile.
+                        Let's finish setting up your <span className = {isHost ? 'text-orange-500' : 'text-blue-500'}>{isHost ? 'Host' : 'Student'}</span> profile. 
 
                         <span className = "text-xs opacity-60">
                             (All fields are optional)
