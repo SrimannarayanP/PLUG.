@@ -322,6 +322,8 @@ class Registration(UUIDModel, TimeStampedModel):
         PENDING = 'pending', _('Pending')
         VERIFIED = 'verified', _('Verified')
         REJECTED = 'rejected', _('Rejected')
+        REFUND_PENDING = 'refund_pending', _("Refund Pending")
+        REFUND_PROCESSED = 'refund_processed', _("Refund Processed")
 
     student = models.ForeignKey(StudentProfile, on_delete = models.CASCADE, related_name = 'registrations')
     event = models.ForeignKey(Event, on_delete = models.CASCADE, related_name = 'registrations')
