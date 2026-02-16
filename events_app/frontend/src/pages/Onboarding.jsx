@@ -3,7 +3,7 @@
 
 import {useState, useEffect} from 'react'
 import {useNavigate} from 'react-router-dom'
-import {ArrowRight, Building2, Phone, GraduationCap, Loader2, Calendar, Search, MapPin, X, ChevronDown, ChevronRight} from 'lucide-react'
+import {ArrowRight, Building2, Phone, GraduationCap, Loader2, Calendar, MapPin, ChevronRight, AlertCircle} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
 import api from '../api/api'
@@ -15,11 +15,11 @@ import SearchableSelect from '../components/common/SearchableSelect'
 export default function Onboarding() {
 
     const navigate = useNavigate()
-    // const dropdownRef = useRef(null)
 
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
+    const [errors, setErrors] = useState(false)
 
     const [formData, setFormData] = useState({
         phone_number : '',
@@ -60,7 +60,22 @@ export default function Onboarding() {
         fetchUser()
     }, [navigate])
 
+    const handleChange = (field, value) => {
+        setFormData(prev => ({...prev, [field] : value}))
+
+        if (errors[field]) {
+            setErrors(prev => ({...prev, [field] : null}))
+        }
+    }
+
     const handleCollegeChange = (selection) => {
+        setErrors(prev => ({
+            ...prev,
+            school_college_name : null,
+            school_college_city : null,
+            school_college_state : null,
+        }))
+
         if (!selection) {
             setFormData(prev => ({
                 ...prev,
@@ -90,17 +105,70 @@ export default function Onboarding() {
         }
     }
 
-    const handleSkip = () => {
-        if (user.role === 'host') {
-            navigate('/host/dashboard')
+    const validateForm = () => {
+        const newErrors = {}
+        const isHost = user.role === 'host'
+        const rawPhone = formData.phone_number ? formData.phone_number.replace(/\D/g, '') : ''
+
+        const isValidPhone = rawPhone.length === 10 ||
+                            (rawPhone.length === 11 && rawPhone.startsWith('0')) ||
+                            (rawPhone.length === 12 && rawPhone.startsWith('91'))
+
+        if (isHost) {
+            if (!formData.phone_number) {
+                newErrors.phone_number = "Phone number is required for hosts."
+            } else if (!isValidPhone) {
+                newErrors.phone_number = "Please enter a valid phone number."
+            }
         } else {
-            navigate('/')
+            if (formData.phone_number && !isValidPhone) {
+                newErrors.phone_number = "Please enter a valid phone number."
+            }
         }
+
+        if (isHost) {
+            if (!formData.organisation_name.trim()) {
+                newErrors.organisation_name = "Organisation name is required."
+            }
+        } else {
+            if (formData.date_of_birth) {
+                const selectedDate = new Date(formData.date_of_birth)
+                const today = new Date()
+
+                if (selectedDate > today) {
+                    newErrors.date_of_birth = "Date of birth cannot be in the future."
+                }
+            }
+
+            if (formData.school_college_name && !formData.school_college_id) {
+                if (!formData.school_college_city.trim()) {
+                    newErrors.school_college_city = "City is required for a new college."
+                }
+
+                if (!formData.school_college_state.trim()) {
+                    newErrors.school_college_state = "State is required for a new college."
+                }
+            }
+        }
+
+        setErrors(newErrors)
+
+        return Object.keys(newErrors).length === 0
+    }
+
+    const handleSkip = () => {
+        navigate('/')
     }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
         
+        if (!validateForm()) {
+            toast.error("Please fix the errors before proceeding.")
+
+            return
+        }
+
         setSubmitting(true)
 
         try {
@@ -115,16 +183,6 @@ export default function Onboarding() {
                 delete payload.school_college_state
             } else {
                 delete payload.organisation_name
-
-                if (!payload.school_college_id && payload.school_college_name) {
-                    if (!payload.school_college_city || !payload.school_college_state) {
-                        toast.error("Since you are adding a new college, City & State are required.")
-
-                        setSubmitting(false)
-
-                        return
-                    }
-                }
 
                 if (!payload.school_college_name) {
                     delete payload.school_college_id
@@ -165,7 +223,14 @@ export default function Onboarding() {
 
     const isHost = user?.role === 'host' || user?.role === 'organisation'
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
-    const inputStyle = "h-12 w-full bg-[#18181b] border border-zinc-800 rounded-xl px-4 py-3 text-sm font-medium text-white placeholder:text-zinc-700 focus:outline-none focus:border-orange-500 transition-colors"
+    const getInputStyle = (fieldName) => `
+        h-12 w-full bg-[#18181b] border border-zinc-800 rounded-xl px-4 py-3 text-sm font-medium text-white placeholder:text-zinc-700 focus:outline-none 
+        transition-colors
+        ${errors[fieldName]
+            ? "border-red-500 focus:border-red-500 bg-red-500/5"
+            : "border-zinc-800 focus:border-orange-500"
+        }
+    `
 
     return (
 
@@ -182,12 +247,14 @@ export default function Onboarding() {
             {/* Ambient glow */}
             <div className = {`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-64 sm:h-96 w-64 sm:w-96 ${festiveGradient} blur-[100px] sm:blur-[120px] opacity-20 pointer-events-none rounded-full z-0`} />
             
-            <button
-                onClick = {handleSkip}
-                className = "absolute top-6 right-6 z-20 text-zinc-500 hover:text-white text-sm font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
-            >
-                Skip for now <ChevronRight className = "h-4 w-4" />
-            </button>
+            {!isHost && (
+                <button
+                    onClick = {handleSkip}
+                    className = "absolute top-6 right-6 z-20 text-zinc-500 hover:text-white text-sm font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                >
+                    Skip for now <ChevronRight className = "h-4 w-4" />
+                </button>
+            )}
 
             <div className = "w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-500">
                 {/* Header */}
@@ -203,56 +270,75 @@ export default function Onboarding() {
                         Welcome, <span className = "text-transparent bg-clip-text bg-gradient-to-r from-white to-zinc-400">{user?.first_name}!</span>
                     </h1>
 
-                    <p className = "text-zinc-500 text-sm sm:text-base font-medium max-w-[280px] sm:max-w-none mx-auto">
-                        Let's finish setting up your <span className = {isHost ? 'text-orange-500' : 'text-blue-500'}>{isHost ? 'Host' : 'Student'}</span> profile. 
-
-                        <span className = "text-xs opacity-60">
-                            (All fields are optional)
-                        </span>
+                    <p className = "text-zinc-500 text-sm sm:text-base font-medium">
+                        {isHost
+                            ? "Please complete your host profile to continue."
+                            : "Setup your profile to get the best experience."
+                        }
                     </p>
                 </div>
 
                 <form
                     onSubmit = {handleSubmit}
-                    className = "space-y-6 sm:space-y-8 bg-[#18181b]/50 backdrop-blur-sm p-4 sm:p-8 rounded-3xl border border-zinc-800/50 shadow-2xl"
+                    className = "space-y-6 bg-[#18181b]/50 backdrop-blur-sm p-6 sm:p-8 rounded-3xl border border-zinc-800/50 shadow-2xl"
                 >
                     <div className = 'space-y-2'>
                         {/* Phone Number */}
-                        <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">
-                            Phone Number
+                        <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 flex justify-between">
+                            Phone Number {isHost && <span className = 'text-orange-500'>*</span>}
+
+                            {errors.phone_number && (
+                                <span className = "text-red-500 flex items-center gap-1 normal-case">
+                                    <AlertCircle className = "h-3 w-3" />
+
+                                    Invalid
+                                </span>
+                            )}
                         </label>
 
-                        <div className = "relative group focus-within:ring-2 focus-within:ring-orange-500/20 rounded-xl transition-all">
+                        <div className = "relative group">
                             <Phone className = "absolute left-4 top-3.5 h-4 w-4 text-zinc-600 group-focus-within:text-white transition-colors" />
 
                             <input
                                 type = 'tel'
                                 value = {formData.phone_number}
-                                onChange = {(e) => setFormData({...formData, phone_number : e.target.value})}
+                                onChange = {(e) => handleChange('phone_number', e.target.value)}
                                 placeholder = "+91 98765 43210"
-                                className = "h-12 w-full bg-[#18181b] border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-medium text-white placeholder:text-zinc-700 focus:outline-none focus:border-orange-500 transition-colors"
+                                className = {getInputStyle('phone_number') + " pl-10"}
                             />
                         </div>
+
+                        {errors.phone_number && (
+                            <p className = "text-[10px] text-red-500 ml-1">
+                                {errors.phone_number}
+                            </p>
+                        )}
                     </div>
                     
                     {/* Host Specific */}
                     {isHost && (
                         <div className = "space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                            <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">
-                                Organisation Name
+                            <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 flex justify-between">
+                                Organisation Name <span className = 'text-orange-500'>*</span>
                             </label>
 
-                            <div className = "relative group focus-within:ring-2 focus-within:ring-orange-500/20 rounded-xl transition-all">
+                            <div className = "relative group">
                                 <Building2 className = "absolute left-4 top-3.5 h-4 w-4 text-zinc-600 group-focus-within:text-white transition-colors" />
 
                                 <input 
                                     type = 'text'
                                     value = {formData.organisation_name}
-                                    onChange = {(e) => setFormData({...formData, organisation_name : e.target.value})}
+                                    onChange = {(e) => handleChange('organisation_name', e.target.value)}
                                     placeholder = "e.g. Debate Society"
-                                    className = "h-12 w-full bg-[#09090b] border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-medium text-white placeholder:text-zinc-700 focus:outline-none focus:border-orange-500 transition-colors"
+                                    className = {getInputStyle('organisation_name') + " pl-10"}
                                 />
                             </div>
+
+                            {errors.organisation_name && (
+                                <p className = "text-[10px] text-red-500 ml-1">
+                                    {errors.organisation_name}
+                                </p>
+                            )}
                         </div>
                     )}
 
@@ -270,7 +356,7 @@ export default function Onboarding() {
                                         name : formData.school_college_name
                                     }}
                                     onChange = {handleCollegeChange}
-                                    placeholder = "Search your college..."
+                                    placeholder = "Search or add college..."
                                     endpoint = '/api/data/colleges/'
                                 />
 
@@ -278,22 +364,34 @@ export default function Onboarding() {
                                     <div className = "grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 pt-2">
                                         <div>
                                             <input 
-                                                placeholder = "City (Required)"
+                                                placeholder = "City*"
                                                 value = {formData.school_college_city}
-                                                onChange = {(e) => setFormData({...formData, school_college_city : e.target.value})}
-                                                className = {inputStyle}
-                                                required
+                                                onChange = {(e) => handleChange('school_college_city', e.target.value)}
+                                                className = {getInputStyle('school_college_city')}
                                             />
+
+                                            {errors.school_college_city && (
+                                                <p className = "text-[10px] text-red-500 mt-1 ml-1">
+                                                    {errors.school_college_city}
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div>
                                             <input
-                                                placeholder = "State (Required)"
+                                                placeholder = "State*"
                                                 value = {formData.school_college_state}
-                                                onChange = {(e) => setFormData({...formData, school_college_state : e.target.value})}
-                                                className = {inputStyle}
-                                                required
+                                                onChange = {(e) => handleChange('school_college_state', e.target.value)}
+                                                className = {getInputStyle('school_college_state')}
                                             />
+
+                                            {errors.school_college_state && (
+                                                <p className = "text-[10px] text-orange-400 flex items-center gap-1">
+                                                    <MapPin className = "h-3 w-3" />
+
+                                                    Location required for new colleges.
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className = 'col-span-2'>
@@ -313,20 +411,34 @@ export default function Onboarding() {
 
                             {/* Date Of Birth */}
                             <div className = "space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">
+                                <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 flex justify-between">
                                     Date of Birth
+
+                                    {errors.date_of_birth && (
+                                        <span className = "text-red-500 flex items-center gap-1 normal-case">
+                                            <AlertCircle className = "h-3 w-3" />
+
+                                            Invalid
+                                        </span>
+                                    )}
                                 </label>
 
-                                <div className = "relative group focus-within:ring-2 focus-within:ring-orange-500/20 rounded-xl transition-all">
+                                <div className = "relative group">
                                     <Calendar className = "absolute left-4 top-3.5 h-4 w-4 text-zinc-600 group-focus-within:text-white transition-colors" />
 
                                     <input 
                                         type = 'date'
                                         value = {formData.date_of_birth}
-                                        onChange = {(e) => setFormData({...formData, date_of_birth : e.target.value})}
-                                        className = "h-12 w-full bg-[#09090b] border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-medium text-white placeholder:text-zinc-700 focus:outline-none focus:border-orange-500 transition-colors [color-scheme:dark]"
+                                        onChange = {(e) => handleChange('date_of_birth', e.target.value)}
+                                        className = {getInputStyle('date_of_birth') + " pl-10 [color-scheme:dark]"}
                                     />
                                 </div>
+
+                                {errors.date_of_birth && (
+                                    <p className = "text-[10px] text-red-500 ml-1">
+                                        {errors.date_of_birth}
+                                    </p>
+                                )}
 
                                 <p className = "text-[10px] text-zinc-600 ml-1">
                                     Used for age verification on restricted events.
@@ -342,7 +454,7 @@ export default function Onboarding() {
                             className = {`w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 transition-all duration-300 ${
                                 submitting
                                     ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                                    : "bg-white text-black hover:bg-zinc-200 active:scale-95 shadow-lg shadow-white/10"
+                                    : "bg-white text-black hover:bg-zinc-200 shadow-lg"
                             }`}
                         >
                             {submitting ? (
@@ -353,7 +465,7 @@ export default function Onboarding() {
                                 </>
                             ) : (
                                 <>
-                                    Complete Setup 
+                                    Save & Continue
                                     
                                     <ArrowRight className = "h-4 w-4" /> 
                                 </>
