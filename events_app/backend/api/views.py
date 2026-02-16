@@ -751,7 +751,7 @@ class CancelTicketView(APIView):
 
             return Response({'error' : "Cannot cancel a ticket for an ongoing/past event."}, status = 400)
         
-        if ticket.is_paid_event:
+        if ticket.event.is_paid_event:
             if ticket.payment_status == Registration.PaymentStatus.VERIFIED:
                 ticket.payment_status = Registration.PaymentStatus.REFUND_PENDING
                 ticket.is_cancelled = True
