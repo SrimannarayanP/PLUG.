@@ -25,7 +25,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from api.views import (
-    CategoryListView, CreateEventView, CreateUserView, CustomTokenObtainPairView, EventDetailsView, EventListView, FeaturedEventListView,
+    CancelTicketView, CategoryListView, CreateEventView, CreateUserView, CustomTokenObtainPairView, EventDetailsView, EventListView, FeaturedEventListView,
     HostEventDetailView, HostEventListView, HostEventUpdateView, ProcessPaymentView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView,
     ResendTicketView, SchoolCollegeListView, SetNewPasswordView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, ResendOTPView
 )
@@ -58,6 +58,7 @@ urlpatterns = [
     path('api/events/register/', RegisterForEventView.as_view(), name = 'event-register'),
     path('api/events/my-tickets/', RegisteredEventsView.as_view(), name = 'my-tickets'),
     path('api/ticket/resend<uuid:ticket_id>', ResendTicketView.as_view(), name = 'resend-ticket'),
+    path('api/ticket/cancel/<uuid:ticket_id>', CancelTicketView.as_view(), name = 'cancel-ticket'),
     # --- Host Dashboard ---
     path('api/host/events/', HostEventListView.as_view(), name = 'host-event-list'),    
     path('api/host/create-event/', CreateEventView.as_view(), name = 'create-event'),
@@ -68,7 +69,7 @@ urlpatterns = [
     # --- Document Deletion ---
     path('api/host/document/<int:doc_id>/delete/', delete_event_document, name = 'delete-doc'),
     # --- Scanner App ---
-    path('api/scanner/verify/', VerifyTicketView.as_view(), name = 'verify-ticket'),  
+    path('api/scanner/verify/', VerifyTicketView.as_view(), name = 'verify-ticket'),
     path('api-auth/', include('rest_framework.urls')),
 ]
 
