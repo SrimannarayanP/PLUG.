@@ -5,7 +5,7 @@ import {useEffect, useState} from 'react'
 import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, AlertCircle, Ban} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
-import api from '../api/api'
+import api from '../../api/api'
 
 
 export default function TicketModal({tickets : initialTickets, closeModal}) {
