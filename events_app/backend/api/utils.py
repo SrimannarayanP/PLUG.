@@ -15,8 +15,8 @@ import base64, io, jwt, qrcode, random, string
 # Generates a secure, signed JWT containing the registration details. This token is the ticket.
 def generate_ticket_token(registration_id, event_id):
     payload = {
-        'rid' : registration_id, # Registration ID
-        'eid' : event_id, # Event ID
+        'rid' : str(registration_id), # Registration ID
+        'eid' : str(event_id), # Event ID
         'iat' : timezone.now() # Issued At
     }
 
@@ -32,7 +32,7 @@ def _generate_qr_core(data):
         box_size = 10,
         border = 4,
     )
-    qr.add_data(data)
+    qr.add_data(str(data))
     qr.make(fit = True)
 
     return qr.make_image(fill_color = 'black', back_color = 'white')
