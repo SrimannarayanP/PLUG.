@@ -734,6 +734,41 @@ class VerifyTicketView(APIView):
             return Response({'error' : "Ticket was not found in system."}, status = 404)
         
         return Response({'error' : "Unable to verify ticket."}, status = 400)
+    
+
+class CancelTicketView(APIView):
+
+    permission_classes = [IsAuthenticated, IsEmailVerified]
+
+    def post(self, request, ticket_id):
+        ticket = get_object_or_404(Registration, id = ticket_id, student__user = request.user)
+
+        if ticket.is_cancelled:
+
+            return Response({'error' : "This ticket is already cancelled."}, status = 400)
+        
+        if ticket.event.start_date <= timezone.now():
+
+            return Response({'error' : "Cannot cancel a ticket for an ongoing/past event."}, status = 400)
+        
+        if ticket.is_paid_event:
+            if ticket.payment_status == Registration.PaymentStatus.VERIFIED:
+                ticket.payment_status = Registration.PaymentStatus.REFUND_PENDING
+                ticket.is_cancelled = True
+                ticket.save()
+
+                return Response({'message' : "Cancellation successful. Refund request sent to host."}, status = 200)
+        elif ticket.payment_status == Registration.PaymentStatus.PENDING:
+            ticket.payment_status = Registration.PaymentStatus.REJECTED
+            ticket.is_cancelled = True
+            ticket.save()
+
+            return Response({'message' : "Ticket cancelled."}, status = 200)
+
+        ticket.is_cancelled = True
+        ticket.save()
+
+        return Response({'message' : "Ticket cancelled successfully."}, status = 200)
         
 
 # --- Dropdown Data Views ---
