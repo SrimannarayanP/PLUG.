@@ -205,6 +205,10 @@ export default function Onboarding() {
 
                     <p className = "text-zinc-500 text-sm sm:text-base font-medium max-w-[280px] sm:max-w-none mx-auto">
                         Let's finish setting up your <span className = {isHost ? 'text-orange-500' : 'text-blue-500'}>{isHost ? 'Host' : 'Student'}</span> profile.
+
+                        <span className = "text-xs opacity-60">
+                            (All fields are optional)
+                        </span>
                     </p>
                 </div>
 
@@ -223,7 +227,6 @@ export default function Onboarding() {
 
                             <input
                                 type = 'tel'
-                                required
                                 value = {formData.phone_number}
                                 onChange = {(e) => setFormData({...formData, phone_number : e.target.value})}
                                 placeholder = "+91 98765 43210"
@@ -244,7 +247,6 @@ export default function Onboarding() {
 
                                 <input 
                                     type = 'text'
-                                    required
                                     value = {formData.organisation_name}
                                     onChange = {(e) => setFormData({...formData, organisation_name : e.target.value})}
                                     placeholder = "e.g. Debate Society"
@@ -298,7 +300,7 @@ export default function Onboarding() {
                                             <p className = "text-[10px] text-orange-400 flex items-center gap-1">
                                                 <MapPin className = "h-3 w-3" />
 
-                                                New college detected. Please add location details.
+                                                Location required for new colleges.
                                             </p>
                                         </div>
                                     </div>
@@ -320,7 +322,6 @@ export default function Onboarding() {
 
                                     <input 
                                         type = 'date'
-                                        required
                                         value = {formData.date_of_birth}
                                         onChange = {(e) => setFormData({...formData, date_of_birth : e.target.value})}
                                         className = "h-12 w-full bg-[#09090b] border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-medium text-white placeholder:text-zinc-700 focus:outline-none focus:border-orange-500 transition-colors [color-scheme:dark]"
