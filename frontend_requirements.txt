@@ -1,4 +1,5 @@
 axios
+browser-image-compression
 react-router-dom
 jwt-decode
 @yudiel/react-qr-scanner  
