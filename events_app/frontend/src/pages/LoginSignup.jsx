@@ -4,6 +4,7 @@
 import {useState} from 'react'
 import {useNavigate, Link} from 'react-router-dom'
 import {ArrowRight, Check, Loader2} from 'lucide-react'
+import {toast} from 'react-hot-toast'
 
 import FormInput from '../components/common/FormInput'
 import BackgroundPaths from '../components/ui/BackgroundPaths'
@@ -44,7 +45,7 @@ export default function LoginSignup() {
     }
 
     const handleToggle = () => {
-        setIsLogin(!isLogin)
+        setIsLogin()
         // Reset form but keep role preference if selected
         setFormData(prev => ({
             first_name : '',
@@ -55,6 +56,42 @@ export default function LoginSignup() {
             role : prev.role,
         }))
         setError('')
+    }
+
+    
+    const handleError = (error, action) => {
+        console.group(`${action} failed`)
+
+        if (error.response) {
+            console.error("Status:", error.response.status)
+            console.error("Headers:", error.response.headers)
+            console.error("Data:", error.response.data)
+
+            const data = error.response.data
+
+            let message = "Something went wrong."
+            
+            if (data.detail) {
+                message = data.detail
+            } else if (typeof data === 'object') {
+                const firstKey = Object.keys(resData)[0]
+                const firstError = resData[firstKey]
+
+                message = Array.isArray(firstError) ? `${firstKey} : ${firstError[0]}` : firstError
+            }
+
+            toast.error(message)
+        } else if (error.request) {
+            console.error("No response received: ", error.request)
+            
+            toast.error("Network error. Cannot connect to server.")
+        } else {
+            console.error("Request setup error : ", error.message)
+
+            toast.error("Client error : " + error.message)
+        }
+
+        console.groupEnd()
     }
 
     const handleSubmit = async (e) => {
@@ -145,26 +182,7 @@ export default function LoginSignup() {
                 }
             }
         } catch (error) {
-            console.log("Auth error : ", error)
-
-            const resData = error.response?.data
-
-            if (resData?.detail) {
-                setError(resData.detail)
-            } else if (resData) {
-                const firstKey = Object.keys(resData)[0]
-                const firstError = resData[firstKey]
-                
-                if (Array.isArray(firstError)) {
-                    setError(`${firstKey.replace(/_/g, ' ')} : ${firstError[0]}`)
-                } else if (typeof firstError === 'string') {
-                    setError(`${firstKey} : ${firstError}`)
-                } else {
-                    setError("Invalid data provided.")
-                }
-            } else {
-                setError("Authentication failed. Please check details.")
-            }
+            handleError(error, isLogin ? 'Login' : 'Signup')
         } finally {
             setIsLoading(false)
         }
