@@ -5,7 +5,7 @@ import React, {useState, useEffect, useCallback, useMemo, Suspense, use} from 'r
 import {useNavigate, useLocation} from 'react-router-dom'
 import {Upload, FileText, Layers, IndianRupee, Check, Calendar, MapPin, Clock, Tag, Trash2, Paperclip, X, AlertCircle, Users, Plus, Minus, Shield, Loader2} from 'lucide-react'
 import {toast} from 'react-hot-toast'
-import {imageCompression} from 'browser-image-compression'
+import imageCompression from 'browser-image-compression'
 
 import api from '../api/api'
 
