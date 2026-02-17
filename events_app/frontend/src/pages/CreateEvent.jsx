@@ -1,10 +1,11 @@
 // CreateEvent.jsx
 
 
-import {useState, useEffect} from 'react'
-import {useNavigate, useLocation, Form} from 'react-router-dom'
-import {Upload, FileText, Layers, IndianRupee, Check, Calendar, MapPin, Clock, Tag, Trash2, Paperclip, X, AlertCircle, Users, Plus, Minus, Shield} from 'lucide-react'
+import React, {useState, useEffect, useCallback, useMemo, Suspense, use} from 'react'
+import {useNavigate, useLocation} from 'react-router-dom'
+import {Upload, FileText, Layers, IndianRupee, Check, Calendar, MapPin, Clock, Tag, Trash2, Paperclip, X, AlertCircle, Users, Plus, Minus, Shield, Loader2} from 'lucide-react'
 import {toast} from 'react-hot-toast'
+import {imageCompression} from 'browser-image-compression'
 
 import api from '../api/api'
 
@@ -13,11 +14,20 @@ import {getImageUrl} from '../utils/imageHelper'
 import FormInput from '../components/common/FormInput'
 import BackButton from '../components/common/BackButton'
 import Logo from '../components/common/Logo'
-import RichTextEditor from '../components/ui/RichTextEditor'
 import SolidAnimatedButton from '../components/ui/SolidAnimatedButton'
 
+const RichTextEditor = React.lazy(() => import('../components/ui/RichTextEditor'))
 
-const ToggleSwitch = ({label, description, checked, onChange, icon : Icon, activeColor = 'bg-green-500'}) => (
+
+const logError = (context, error) => {
+    console.error(`[${context}]`, error)
+
+    if (error?.response?.data) return error.response.data
+
+    return {generic : error.message || "An unexpected error occurred."}
+}
+
+const ToggleSwitch = React.memo(({label, description, checked, onChange, icon : Icon, activeColor = 'bg-green-500'}) => (
 
     <div 
         className = {`
@@ -62,7 +72,7 @@ const ToggleSwitch = ({label, description, checked, onChange, icon : Icon, activ
             type = 'button'
             onClick = {() => onChange(!checked)}
             className = {`
-                relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-white/75
+                relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none
                 ${checked
                     ? activeColor
                     : 'bg-zinc-700'
@@ -86,7 +96,7 @@ const ToggleSwitch = ({label, description, checked, onChange, icon : Icon, activ
         </button>
     </div>
 
-)
+))
 
 export default function CreateEvent() {
     
@@ -97,10 +107,13 @@ export default function CreateEvent() {
     const isEditMode = !!eventToEdit
 
     const [loading, setLoading] = useState(false)
+    const [isCompressing, setIsCompressing] = useState(false)
+    const [pageErrors, setPageErrors] = useState({})
     const [error, setError] = useState(null)
 
     const [hasAgeLimit, setHasAgeLimit] = useState(false)
     const [hasCustomDeadline, setHasCustomDeadline] = useState(false)
+    const [posterPreview, setPosterPreview] = useState(null)
 
     // Categories state
     const [availableCategories, setAvailableCategories] = useState([])
@@ -109,16 +122,7 @@ export default function CreateEvent() {
     // Documents state
     const [newDocuments, setNewDocuments] = useState([])
     const [existingDocuments, setExistingDocuments] = useState([])
-
-    // Helper to format Django ISO dates to HTML Input format
-    const formatDateForInput = (isoString) => {
-        if (!isoString) return ''
-
-        const date = new Date(isoString)
-        const localIso = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
-
-        return localIso
-    }
+    const [posterFile, setPosterFile] = useState(null)
 
     const [formData, setFormData] = useState({
         name : '',
@@ -145,25 +149,29 @@ export default function CreateEvent() {
         ticket_price : '',
     })
 
-    const [posterFile, setPosterFile] = useState(null)
-    const [posterPreview, setPosterPreview] = useState(null)
+    useEffect(() => {
+
+        return () => {
+
+            if (posterPreview && !posterPreview.startsWith('http')) {
+                URL.revokeObjectURL(posterPreview)
+            }
+
+        }
+
+    }, [posterPreview])
 
     // Load categories
     useEffect(() => {
         const fetchCategories = async () => {
             try {
                 const res = await api.get('/api/data/categories/')
-                const categoriesData = res.data.results || res.data
-
-                if (Array.isArray(categoriesData)) {
-                    setAvailableCategories(categoriesData)
-                } else {
-                    setAvailableCategories([])
-                }
-            } catch (err) {
-                console.error("Failed to load categories", err)
                 
-                setAvailableCategories([])
+                setAvailableCategories(Array.isArray(res.data.results) ? res.data.results : res.data || [])
+            } catch (err) {
+                logError('CategoryFetch', err)
+                
+                toast.error("Could not load categories. Please refresh.")
             }
         }
 
@@ -225,7 +233,7 @@ export default function CreateEvent() {
     }, [isEditMode, eventToEdit])
 
     // Document handlers
-    const handleDocumentChange = (e) => {
+    const handleDocumentChange = useCallback((e) => {
         const files = Array.from(e.target.files)
 
         if (files.length === 0) return
@@ -233,27 +241,25 @@ export default function CreateEvent() {
         const totalCount = newDocuments.length + existingDocuments.length + files.length
 
         if (totalCount > 5) {
-            toast.error("Maximum of 5 documents are allowed")
+            toast.error("Maximum of 5 documents allowed")
 
             return
         }
 
-        const validFiles = []
-        
-        files.forEach(file => {
+        const validFiles = files.filter(file => {
             if (file.size > 10 * 1024 * 1024) {
-                toast.error(`"${file.name} is too large (Max. 10 MB)`)
+                toast.error(`Skipped ${file.name}: Too large (Max 10MB)`)
 
-                return
+                return false
             }
 
-            validFiles.push(file)
+            return true
         })
 
         setNewDocuments(prev => [...prev, ...validFiles])
 
         e.target.value = ''
-    }
+    }, [newDocuments.length, existingDocuments.length])
 
     const removeNewDocument = (index) => {
         setNewDocuments(prev => prev.filter((_, i) => i !== index))
@@ -276,18 +282,30 @@ export default function CreateEvent() {
     }
 
     // Form handlers
-    const handleChange = (e) => {
+    const handleChange = useCallback((e) => {
         const {name, value, type, checked} = e.target
+
+        setPageErrors(prev => {
+            if (prev[name]) {
+                const newErrors = {...prev}
+
+                delete newErrors[name]
+
+                return newErrors
+            }
+
+            return prev
+        })
 
         setFormData(prev => ({
             ...prev,
             [name] : type === 'checkbox' ? checked : value
         }))
-    }
+    }, [])
 
     const handleCategoryToggle = (catId) => {
         setSelectedCategories(prev => {
-            if (prev.includes(catId)) {
+            if (isSelected) {
                 
                 return prev.filter(id => id !== catId) // Remove if already exists in categories
 
@@ -351,111 +369,107 @@ export default function CreateEvent() {
         }
     }
 
-    const handleTicketsChange = (delta) => {
+    const handleTicketsChange = useCallback((delta) => {
         setFormData(prev => {
             const current = parseInt(prev.max_tickets_per_user || 1)
             const newVal = Math.max(1, Math.min(10, current + delta))
 
             return {...prev, max_tickets_per_user : newVal}
         })
-    }
+    })
 
-    const toggleRegistrationDeadline = (checked) => {
-        setHasCustomDeadline(checked)
+    const handlePosterChange = async (e) => {
+        const file = e.target.files[0]
 
-        if (!checked) setFormData(prev => ({...prev, registration_deadline : ''}))
-    }
+        if (!file) return
 
-    const toggleAgeLimit = (checked) => {
-        setHasAgeLimit(checked)
+        const validTypes = ['image/jpeg', 'image/png', 'image/webp']
 
-        if (!checked) setFormData(prev => ({...prev, age_restriction_cutoff : ''}))
+        if (!validTypes.includes(file.type)) {
+            toast.error("Invalid format. Use JPG, PNG or WEBP.")
+        
+            return
+        }
+
+        setIsCompressing(true)
+
+        try {
+            const options = {
+                maxSizeMB : 5,
+                maxWidthOrHeight : 1920,
+                useWebWorker : true,
+                fileType : file.type
+            }
+
+            const compressedFile = await imageCompression(file, options)
+
+            setPosterFile(compressedFile)
+            setPosterPreview(URL.createObjectURL(compressedFile))
+
+            console.log(`Original : ${(file.size/1024/1024).toFixed(2)}MB, Compressed : ${(compressedFile.size/1024/1024).toFixed(2)}MB`)
+        } catch (error) {
+            console.error("Compression failed : ", error)
+
+            toast.error("Image compression failed. Using original.")
+
+            setPosterFile(file)
+            setPosterPreview(URL.createObjectURL(file))
+        } finally {
+            setIsCompressing(false)
+        }
     }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-
-        setLoading(true)
-        setError(null)
-
-        const start = new Date(formData.start_date)
-        const end = new Date(formData.end_date)
-
-        if (start >= end) {
-            toast.error("Event must end after it starts.")
-
-            setError("End date must be later than start date.")
-            setLoading(false)
+        
+        if (isCompressing) {
+            toast.error("Please wait for image processing to finish.")
 
             return
         }
 
-        if (formData.registration_deadline) {
-            const deadline = new Date(formData.registration_deadline)
+        setLoading(true)
+        setPageErrors({})
 
-            if (deadline > start) {
-                toast.error("Registration must close before event starts.")
+        const validationErrors = validateForm()
 
-                setError("Registration deadline cannot be after the start date.")
-                setLoading(false)
-                
-                return
-            }
+        if (Object.keys(validationErrors).length > 0) {
+            setPageErrors(validationErrors)
+
+            toast.error("Please fix the errors highlighted in red.")
+
+            setLoading(false)
+
+            const firstErrorField = document.querySelector('[name="' + Object.keys(validationErrors)[0] + '"]')
+
+            if (firstErrorField) firstErrorField.scrollIntoView({behavior : 'smooth', block : 'center'})
+
+            return
         }
 
         const data = new FormData()
 
-        data.append('name', formData.name)
-        data.append('description', formData.description)
+        Object.entries(formData).forEach(([key, value]) => {
+            if (key === 'description' && !value) return
 
-        data.append('start_date', formData.start_date)
-        data.append('end_date', formData.end_date)
+            if (key === 'registration_deadline' && !hasCustomDeadline) return
 
-        if (hasCustomDeadline && formData.registration_deadline) {
-            data.append('registration_deadline', formData.registration_deadline)
-        }
+            if (key === 'age_restriction_cutoff' && !hasAgeLimit) return
 
-        data.append('location_type', formData.location_type)
+            if (key === 'ticket_price' && !formData.is_paid_event) return
 
-        if (formData.location_type === 'offline') {
-            data.append('physical_location', formData.physical_location)
-            data.append('google_maps_link', formData.google_maps_link)
-        } else {
-            data.append('virtual_location', formData.virtual_location)
-        }
+            if (key === 'physical_location' && formData.location_type !== 'offline') return
 
-        data.append('is_native', formData.is_native)
-        
-        // Append toggles
-        data.append('collect_phone', formData.collect_phone)
-        data.append('collect_college_school', formData.collect_college_school)
-        data.append('collect_student_id', formData.collect_student_id)
+            if (key === 'virtual_location' && formData.location_type !== 'online') return
 
-        if (hasAgeLimit && formData.age_restriction_cutoff) {
-            data.append('age_restriction_cutoff', formData.age_restriction_cutoff)
-        }
-
-        data.append('max_tickets_per_user', formData.max_tickets_per_user)
-        data.append('is_paid_event', formData.is_paid_event)
-
-        if (formData.is_paid_event) {
-            data.append('ticket_price', formData.ticket_price)
-        }
-
-        // Append categories
-        selectedCategories.forEach(id => {
-            data.append('category_ids', id) // Sending list of IDs
+            data.append(key, value)
         })
 
-        // Append poster
-        if (posterFile) {
-            data.append('poster', posterFile)
-        }
+        selectedCategories.forEach(id => data.append('category_ids', id))
 
-        // Append event files
-        newDocuments.forEach((file) => {
-            data.append('uploaded_documents', file)
-        })
+        if (posterFile) data.append('poster', posterFile)
+
+        newDocuments.forEach(file => data.append('uploaded_documents', file))
 
         try {
             if (isEditMode) {
@@ -470,21 +484,27 @@ export default function CreateEvent() {
 
             navigate('/host/dashboard')
         } catch (err) {
-            console.error(err)
+            const serverErrors = logError('CreateEventSubmit', err)
+            const newFieldErrors = {}
 
-            if (err.response && err.response.data) {
-                const firstErrorKey = Object.values(err.response.data)[0]
-                const firstErrorMsg = err.response.data[firstErrorKey]
+            let genericMsg = "Failed to save event."
 
-                if (Array.isArray(firstErrorMsg)) {
-                    setError(`${firstErrorKey} : ${firstErrorMsg[0]}`)
-                } else if (typeof firstErrorMsg === 'string') {
-                    setError(firstErrorMsg)
+            Object.keys(serverErrors).forEach(key => {
+                const msg = Array.isArray(serverErrors[key]) ? serverErrors[key][0] : serverErrors[key]
+
+                if (key in formData) {
+                    newFieldErrors[key] = msg
                 } else {
-                    setError("Failed to create event. Check details.")
+                    genericMsg = msg
                 }
+            })
+
+            setPageErrors(newFieldErrors)
+
+            if (Object.keys(newFieldErrors).length === 0) {
+                toast.error(genericMsg)
             } else {
-                setError("Failed to create event. Check details.")
+                toast.error("Please check the form for errors.")
             }
         } finally {
             setLoading(false)
@@ -496,6 +516,63 @@ export default function CreateEvent() {
             ...prev,
             description : htmlContent,
         }))
+    }
+
+    const validateForm = () => {
+        const errors = {}
+
+        const start = new Date(formData.start_date)
+        const end = new Date(formData.end_date)
+        const now = new Date()
+
+        if (!formData.name.trim()) errors.name = "Event name is required"
+
+        if (!formData.start_date) errors.start_date = "Start date is required"
+
+        if (!formData.end_date) errors.end_date = "End date is required"
+
+        if (formData.start_date && start < now) errors.start_date = "Start date cannot be in the past"
+
+        if (formData.start_date && formData.end_date && start >= end) errors.end_date = "End date must be after the start date"
+
+        if (hasCustomDeadline && formData.registration_deadline) {
+            const deadline = new Date(formData.registration_deadline)
+
+            if (deadline > start) errors.registration_deadline = "Deadline must be before event start"
+        }
+
+        if (formData.location_type === 'offline') {
+            if (!formData.physical_location) errors.physical_location = "Venue required"
+        } else {
+            if (!formData.virtual_location) errors.virtual_location = "Meeting link required"
+        }
+
+        if (formData.is_paid_event && (!formData.ticket_price || formData.ticket_price <= 0)) errors.ticket_price = "Valid ticket price required"
+
+        if (hasAgeLimit && !formData.age_restriction_cutoff) errors.age_restriction_cutoff = "Cutoff data required"
+    
+        return errors
+    }
+
+    const toggleRegistrationDeadline = (checked) => {
+        setHasCustomDeadline(checked)
+
+        if (!checked) setFormData(prev => ({...prev, registration_deadline : ''}))
+    }
+
+    const toggleAgeLimit = (checked) => {
+        setHasAgeLimit(checked)
+
+        if (!checked) setFormData(prev => ({...prev, age_restriction_cutoff : ''}))
+    }
+
+    // Helper to format Django ISO dates to HTML Input format
+    const formatDateForInput = (isoString) => {
+        if (!isoString) return ''
+
+        const date = new Date(isoString)
+
+        return new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
     }
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
@@ -543,13 +620,23 @@ export default function CreateEvent() {
                     />
                 </div>
 
-                {error && (
+                {Object.keys(pageErrors).length > 0 && (
                     <div className = "bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl mb-8 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
                         <AlertCircle className = "h-5 w-5 shrink-0" />
 
-                        <span className = "text-sm font-semibold leading-relaxed"> {/* leading-relaxed basically sets spacing b/w lines */}
-                            {error}
-                        </span> 
+                        <div>
+                            <h4 className = "font-bold text-sm">
+                                Please fix the following issues:
+                            </h4>
+
+                            <ul className = "list-disc list-inside text-xs mt-1 space-y-1 opacity-90">
+                                {Object.values(pageErrors).map((err, i) => (
+                                    <li key = {i}>
+                                        {err}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     </div>
                 )}
 
@@ -582,6 +669,16 @@ export default function CreateEvent() {
                                     }
                                 `}
                             >
+                                {isCompressing && (
+                                    <div className = "absolute inset-0 z-20 bg-black/80 flex flex-col items-center justify-center animate-in fade-in">
+                                        <Loader2 className = "h-10 w-10 text-orange-500 animate-spin mb-2" />
+
+                                        <p className = "text-xs font-bold text-white uppercase tracking-wider">
+                                            Compressing Image...
+                                        </p>
+                                    </div>
+                                )}
+
                                 {posterPreview ? (
                                     <>
                                         <img 
@@ -616,8 +713,9 @@ export default function CreateEvent() {
                                     type = 'file'
                                     name = 'poster'
                                     className = 'hidden'
-                                    onChange = {handleFileChange}
-                                    accept = 'image/*'
+                                    onChange = {handlePosterChange}
+                                    accept = "image/png, image/jpeg, image/webp"
+                                    disabled = {isCompressing}
                                 />
                             </label>
                         </div>
@@ -694,59 +792,57 @@ export default function CreateEvent() {
                                     className = 'hidden'
                                 />
                             </label>
+                            
+                            <div className = "grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                                {existingDocuments.map((doc) => (
+                                    <div
+                                        key = {doc.id}
+                                        className = "flex items-center justify-between p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg"
+                                    >
+                                        <div className = "flex items-center gap-3 overflow-hidden min-w-0">
+                                            <FileText className = "h-4 w-4 text-indigo-500 shrink-0" />
 
-                            {(existingDocuments.length > 0 || newDocuments.length > 0) && (
-                                <div className = "grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-                                    {existingDocuments.map((doc) => (
-                                        <div
-                                            key = {doc.id}
-                                            className = "flex items-center justify-between p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg"
-                                        >
-                                            <div className = "flex items-center gap-3 overflow-hidden min-w-0">
-                                                <FileText className = "h-4 w-4 text-indigo-500 shrink-0" />
-
-                                                <span className = "text-xs text-zinc-300 truncate font-mono">
-                                                    {doc.file
-                                                        ? doc.file.split('/').pop()
-                                                        : 'Document'
-                                                    }
-                                                </span>
-                                            </div>
-
-                                            <button
-                                                type = 'button'
-                                                onClick = {() => deleteExistingDocument(doc.id)}
-                                                className = "p-2 text-zinc-600 hover:text-red-500"
-                                            >
-                                                <Trash2 className = "h-4 w-4" />
-                                            </button>
+                                            <span className = "text-xs text-zinc-300 truncate font-mono">
+                                                {doc.file
+                                                    ? doc.file.split('/').pop()
+                                                    : 'Document'
+                                                }
+                                            </span>
                                         </div>
-                                    ))}
 
-                                    {newDocuments.map((file, index) => (
-                                        <div
-                                            key = {index}
-                                            className = "flex items-center justify-between p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-lg"
+                                        <button
+                                            type = 'button'
+                                            onClick = {() => deleteExistingDocument(doc.id)}
+                                            className = "p-2 text-zinc-600 hover:text-red-500"
                                         >
-                                            <div className = "flex items-center gap-3 overflow-hidden min-w-0">
-                                                <Paperclip className = "h-4 w-4 text-green-500 shrink-0" />
+                                            <Trash2 className = "h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ))}
 
-                                                <span className = "text-xs text-white truncate font-mono">
-                                                    {file.name}
-                                                </span>
-                                            </div>
+                                {newDocuments.map((file, index) => (
+                                    <div
+                                        key = {index}
+                                        className = "flex items-center justify-between p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-lg"
+                                    >
+                                        <div className = "flex items-center gap-3 overflow-hidden min-w-0">
+                                            <Paperclip className = "h-4 w-4 text-green-500 shrink-0" />
 
-                                            <button
-                                                type = 'button'
-                                                onClick = {() => removeNewDocument(index)}
-                                                className = "p-2 text-zinc-500 hover:text-red-400"
-                                            >
-                                                <X className = "h-4 w-4" />
-                                            </button>
+                                            <span className = "text-xs text-white truncate font-mono">
+                                                {file.name}
+                                            </span>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+
+                                        <button
+                                            type = 'button'
+                                            onClick = {() => removeNewDocument(index)}
+                                            className = "p-2 text-zinc-500 hover:text-red-400"
+                                        >
+                                            <X className = "h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
@@ -768,6 +864,7 @@ export default function CreateEvent() {
                             placeholder = "Event Name"
                             value = {formData.name}
                             onChange = {handleChange}
+                            error = {pageErrors.name}
                             className = "py-3 md:py-2"
                         />
 
@@ -817,6 +914,7 @@ export default function CreateEvent() {
                                 value = {formData.start_date}
                                 onChange = {handleChange}
                                 icon = {Calendar}
+                                error = {pageErrors.start_date}
                             />
 
                             <FormInput 
@@ -826,6 +924,7 @@ export default function CreateEvent() {
                                 value = {formData.end_date}
                                 onChange = {handleChange}
                                 icon = {Clock}
+                                error = {pageErrors.end_date}
                             />
                         </div>
 
@@ -846,15 +945,10 @@ export default function CreateEvent() {
                                         name = 'registration_deadline'
                                         value = {formData.registration_deadline}
                                         onChange = {handleChange}
+                                        error = {pageErrors.registration_deadline}
                                         required = {hasCustomDeadline}
                                         className = "bg-black/50 border-zinc-700 focus:border-pink-500"
                                     />
-
-                                    <p className = "mt-3 text-[10px] text-pink-400/80 flex items-center gap-1.5 font-medium">
-                                        <AlertCircle className = "h-3 w-3" />
-                                    
-                                        <span>Must be <strong>before</strong> the event start date.</span>
-                                    </p>
                                 </div>
                             )}
                         </div>
@@ -866,37 +960,30 @@ export default function CreateEvent() {
                             </label>
 
                             <div className = "grid grid-cols-2 gap-1 flex bg-black/40 p-1 rounded-xl border border-zinc-800">
-                                <button
-                                    type = 'button'
-                                    onClick = {() => setFormData(prev => ({...prev, location_type : 'offline'}))}
-                                    className = {`
-                                        flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all duration-300
-                                        ${formData.location_type === 'offline'
-                                            ? "bg-zinc-800 text-white shadow-lg ring-1 ring-white/10"
-                                            : "bg-transparent text-zinc-400 hover:bg-zinc-800/50"
-                                        }    
-                                    `}
-                                >
-                                    <MapPin className = "h-4 w-4" />
-
-                                    In-Person
-                                </button>
-
-                                <button
-                                    type = 'button'
-                                    onClick = {() => setFormData(prev => ({...prev, location_type : 'online'}))}
-                                    className = {`
-                                        flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all duration-300
-                                        ${formData.location_type === 'online'
-                                            ? "bg-zinc-800 text-white shadow-lg ring-1 ring-white/10"
-                                            : "bg-transparent text-zinc-400 hover:bg-zinc-800/50"
+                                {['offline', 'online'].map(type => (
+                                    <button
+                                        key = {type}
+                                        type = 'button'
+                                        onClick = {() => setFormData(prev => ({...prev, location_type : type}))}
+                                        className = {`
+                                            flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all duration-300
+                                            ${formData.location_type === type
+                                                ? "bg-zinc-800 text-white shadow-lg ring-1 ring-white/10"
+                                                : "bg-transparent text-zinc-400 hover:bg-zinc-800/50"
+                                            }    
+                                        `}
+                                    >
+                                        {type === 'offline'
+                                            ? <MapPin className = "h-4 w-4" />
+                                            : <Layers className = "h-4 w-4" />
                                         }
-                                    `}
-                                >
-                                    <Layers className = "h-4 w-4" />
 
-                                    Online
-                                </button>
+                                        {type === 'offline'
+                                            ? 'In-Person'
+                                            : 'Online'
+                                        }
+                                    </button>
+                                ))}
                             </div>
 
                             <div className = "relative animate-in fade-in slide-in-from-top-1 duration-300">
@@ -908,6 +995,7 @@ export default function CreateEvent() {
                                             placeholder = "e.g., Auditorium 1"
                                             value = {formData.physical_location}
                                             onChange = {handleChange}
+                                            error = {pageErrors.physical_location}
                                             className = "border-zinc-800 pl-10 py-3"
                                             icon = {MapPin}
                                         />
@@ -937,6 +1025,7 @@ export default function CreateEvent() {
                                         onChange = {handleChange}
                                         className = "border-zinc-800 pl-10 py-3"
                                         icon = {Layers}
+                                        error = {pageErrors.virtual_location}
                                     />
                                 )}
                             </div>
@@ -947,11 +1036,21 @@ export default function CreateEvent() {
                                 Description
                             </label>
 
-                            <div className = "rounded-xl border border-zinc-800 overflow-hidden focus-within:border-orange-500 transition-colors">
-                                <RichTextEditor 
-                                    value = {formData.description}
-                                    onChange = {handleDescriptionChange}
-                                />
+                            <div className = "rounded-xl border border-zinc-800 overflow-hidden focus-within:border-orange-500 transition-colors min-h-[150px] relative">
+                                <Suspense 
+                                    fallback = {
+                                        <div className = "flex items-center justify-center h-40 bg-zinc-900/50 text-zinc-500">
+                                            <Loader2 className = "animate-spin h-5 w-5 mr-2" />
+
+                                            Loading Editor...
+                                        </div>
+                                    }
+                                >
+                                    <RichTextEditor 
+                                        value = {formData.description}
+                                        onChange = {handleDescriptionChange}
+                                    />
+                                </Suspense>
                             </div>
                         </div>
                     </div>
@@ -959,7 +1058,7 @@ export default function CreateEvent() {
                     <div className = "h-px bg-zinc-800 w-full" />
 
                     {/* Settings Section */}
-                    <div className = "space-y-8">
+                    <div className = 'space-y-8'>
                         <h3 className = "text-lg md:text-xl font-bold text-white flex items-center gap-3">
                             <span className = "h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-orange-500 text-sm shadow-sm">
                                 03
@@ -989,6 +1088,7 @@ export default function CreateEvent() {
                                             onChange = {handleChange}
                                             className = "text-2xl font-bold text-white bg-black/50 border-zinc-700 focus:border-orange-500"
                                             icon = {IndianRupee}
+                                            error = {pageErrors.ticket_price}
                                         />
                                     </div>
                                 )}
@@ -1008,7 +1108,7 @@ export default function CreateEvent() {
                                         <Users className = "h-5 w-5" />
                                     </div>
 
-                                    <div>
+                                    <div className = 'flex-1'>
                                         <h3 className = "text-sm font-bold uppercase tracking-wide text-zinc-300">
                                             Group Booking
                                         </h3>
@@ -1022,32 +1122,27 @@ export default function CreateEvent() {
                                         <button
                                             type = 'button'
                                             onClick = {() => handleTicketsChange(-1)}
-                                            className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors active:scale-95"
+                                            className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
                                         >
                                             <Minus className = "h-4 w-4" />
                                         </button>
-                                    </div>
 
-                                    <div className = "flex-1 text-center">
-                                        <span className = "text-xl font-mono font-bold text-white block">
-                                            {formData.max_tickets_per_user}
-                                        </span>
-
-                                        <span className = "text-[10px] text-zinc-600 uppercase tracking-wider font-bold">
+                                        <span className = "text-xl font-mono font-bold text-white w-6 text-center">
                                             {formData.max_tickets_per_user === 1 ? 'Ticket' : 'Tickets'}
                                         </span>
+                                    
+                                        <button
+                                            type = 'button'
+                                            onClick = {() => handleTicketsChange(1)}
+                                            className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
+                                        >
+                                            <Plus className = "h-4 w-4" />
+                                        </button>
                                     </div>
-
-                                    <button
-                                        type = 'button'
-                                        onClick = {() => handleTicketsChange(1)}
-                                        className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors active:scale-95"
-                                    >
-                                        <Plus className = "h-4 w-4" />
-                                    </button>
                                 </div>
                             </div>
-
+                            
+                            {/* Age Restriction */}
                             <div className = "lg:col-span-2 space-y-4">
                                 <ToggleSwitch 
                                     label = "Age Restriction"
@@ -1068,6 +1163,7 @@ export default function CreateEvent() {
                                                     name = 'age_restriction_cutoff'
                                                     value = {formData.age_restriction_cutoff}
                                                     onChange = {handleChange}
+                                                    error = {pageErrors.age_restriction_cutoff}
                                                     required = {hasAgeLimit}
                                                     className = "bg-black/50 border-zinc-700 focus:border-red-500 w-full"
                                                 />
@@ -1086,10 +1182,7 @@ export default function CreateEvent() {
                                                 
                                                 <br />
 
-                                                For example, if you want an <strong>18+ event</strong>, select a date from 18 years ago
-                                                (<span className = "text-zinc-300 font-mono">
-                                                    {new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toLocaleDateString()}
-                                                </span>).
+                                                For example, if you want an <strong>18+ event</strong>, select a date from 18 years ago.
                                             </div>
                                         </div>
                                     </div>
@@ -1097,14 +1190,14 @@ export default function CreateEvent() {
                             </div>
 
                             {/* Data Collection */}
-                            <div className = "bg-[#18181b] border border-zinc-800 rounded-2xl p-5 md:p-6">
+                            <div className = "bg-[#18181b] border border-zinc-800 rounded-2xl p-5 md:p-6 lg:col-span-2">
                                 <h3 className = "font-bold text-sm text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                                     <Layers className = "h-4 w-4" />
 
                                     Data Collection
                                 </h3>
 
-                                <div className = 'grid grid-cols-1 gap-3'>
+                                <div className = 'grid grid-cols-1 md:grid-cols-3 gap-3'>
                                     {[
                                         {name : 'collect_phone', label : "Phone Number"},
                                         {name : 'collect_college_school', label : "College/School"},
@@ -1112,19 +1205,35 @@ export default function CreateEvent() {
                                     ].map((field) => (
                                         <label
                                             key = {field.name}
-                                            className = {`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all active:scale-[0.98] ${formData[field.name] ? "bg-zinc-900 border-pink-500/50" : "bg-black/20 border-zinc-800"}`}
+                                            className = {`
+                                                flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all active:scale-[0.98] 
+                                                ${formData[field.name] 
+                                                    ? "bg-zinc-900 border-pink-500/50" 
+                                                    : "bg-black/20 border-zinc-800"
+                                                }
+                                            `}
                                         >
-                                            <span className = {`text-sm font-bold ${formData[field.name] ? 'text-white' : 'text-zinc-500'}`}>
+                                            <span 
+                                                className = {`
+                                                    text-sm font-bold 
+                                                    ${formData[field.name] 
+                                                        ? 'text-white' 
+                                                        : 'text-zinc-500'
+                                                    }
+                                                `}
+                                            >
                                                 {field.label}
                                             </span>
 
-                                            <div className = {`
-                                                h-5 w-5 rounded border flex items-center justify-center transition-colors 
-                                                ${formData[field.name] 
-                                                    ? "bg-pink-500 border-pink-500" 
-                                                    : "border-zinc-700 bg-zinc-900"
-                                                }
-                                            `}>
+                                            <div 
+                                                className = {`
+                                                    h-5 w-5 rounded border flex items-center justify-center transition-colors 
+                                                    ${formData[field.name] 
+                                                        ? "bg-pink-500 border-pink-500"
+                                                        : "border-zinc-700 bg-zinc-900"
+                                                    }
+                                                `}
+                                            >
                                                 {formData[field.name] && <Check className = "h-3 w-3 text-white" />}
                                             </div>
 
@@ -1144,10 +1253,22 @@ export default function CreateEvent() {
                         <div className = 'pt-6'>
                             <SolidAnimatedButton
                                 type = 'submit'
-                                disabled = {loading}
+                                disabled = {loading || isCompressing}
                                 className = "w-full py-4 text-lg"
                             >
-                                {loading ? (isEditMode ? "Saving..." : "Creating Event...") : (isEditMode ? "Save Changes" : "Publish Event")}
+                                {loading ? (
+                                    <span className = "flex items-center gap-2">
+                                        <Loader2 className = "animate-spin h-5 w-5" />
+
+                                        {isEditMode ? 'Saving...' : 'Creating...'}
+                                    </span>
+                                ) : isCompressing ? (
+                                    <span className = "flex items-center gap-2">
+                                        <Loader2 className = "animate-spin h-5 w-5" />
+
+                                        Processing Image...
+                                    </span>
+                                ) : (isEditMode ? "Save Changes" : "Publish Event")}
                             </SolidAnimatedButton>
                         </div>
                     </div>
