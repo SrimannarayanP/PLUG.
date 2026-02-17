@@ -1,6 +1,8 @@
 # models.py
 
 
+from cloudinary_storage.storage import RawMediaCloudinaryStorage
+
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
@@ -307,7 +309,7 @@ class EventCategory(models.Model):
 class EventDocument(TimeStampedModel):
 
     event = models.ForeignKey(Event, on_delete = models.CASCADE, related_name = 'documents')
-    file = models.FileField(upload_to = 'event_docs/', validators = [validate_brochure_size])
+    file = models.FileField(upload_to = 'event_docs/', validators = [validate_brochure_size], storage = RawMediaCloudinaryStorage())
     name = models.CharField(max_length = 255, blank = True)
 
     def __str__(self):
