@@ -1,7 +1,7 @@
 // CreateEvent.jsx
 
 
-import React, {useState, useEffect, useCallback, useMemo, Suspense, use} from 'react'
+import React, {useState, useEffect, useCallback, useMemo, Suspense} from 'react'
 import {useNavigate, useLocation} from 'react-router-dom'
 import {Upload, FileText, Layers, IndianRupee, Check, Calendar, MapPin, Clock, Tag, Trash2, Paperclip, X, AlertCircle, Users, Plus, Minus, Shield, Loader2} from 'lucide-react'
 import {toast} from 'react-hot-toast'
@@ -401,7 +401,12 @@ export default function CreateEvent() {
                 fileType : file.type
             }
 
-            const compressedFile = await imageCompression(file, options)
+            const compressedBlob = await imageCompression(file, options)
+
+            const compressedFile = new File([compressedBlob], file.name, {
+                type : compressedBlob.type,
+                lastModified : new Date().getTime()
+            })
 
             setPosterFile(compressedFile)
             setPosterPreview(URL.createObjectURL(compressedFile))
