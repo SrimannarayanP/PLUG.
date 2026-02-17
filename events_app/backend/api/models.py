@@ -13,7 +13,7 @@ import secrets, string, uuid
 
 # CONSTANTS
 MAX_BROCHURE_SIZE_MB = 10
-MAX_IMAGE_SIZE_MB = 2
+MAX_IMAGE_SIZE_MB = 5
 
 
 # Validators
