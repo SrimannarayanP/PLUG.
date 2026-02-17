@@ -45,7 +45,7 @@ export default function LoginSignup() {
     }
 
     const handleToggle = () => {
-        setIsLogin()
+        setIsLogin(prev => !prev)
         // Reset form but keep role preference if selected
         setFormData(prev => ({
             first_name : '',
@@ -59,6 +59,44 @@ export default function LoginSignup() {
     }
 
     
+    const getApiErrorMessage = (error) => {
+        const data = error?.response?.data
+
+        if (!data) {
+            return error?.request
+                ? 'Network error. Cannot connect to server.'
+                : `Client error : ${error.message}`
+        }
+
+        if (typeof data.detail === 'string') {
+            return data.detail
+        }
+
+        if (typeof data === 'string') {
+            return data
+        }
+
+        if (typeof data === 'object') {
+            const firstKey = Object.keys(data)[0]
+
+            if (!firstKey) {
+                return 'Something went wrong.'
+            }
+
+            const firstError = data[firstKey]
+
+            if (Array.isArray(firstError)) {
+                return `${firstKey.replace(/_/g, ' ')} : ${firstError[0]}`
+            }
+
+            if (typeof firstError === 'string') {
+                return `${firstKey.replace(/_/g, ' ')} : ${firstError}`
+            }
+        }
+
+        return 'Something went wrong.'
+    }
+
     const handleError = (error, action) => {
         console.group(`${action} failed`)
 
@@ -67,28 +105,21 @@ export default function LoginSignup() {
             console.error("Headers:", error.response.headers)
             console.error("Data:", error.response.data)
 
-            const data = error.response.data
-
-            let message = "Something went wrong."
-            
-            if (data.detail) {
-                message = data.detail
-            } else if (typeof data === 'object') {
-                const firstKey = Object.keys(resData)[0]
-                const firstError = resData[firstKey]
-
-                message = Array.isArray(firstError) ? `${firstKey} : ${firstError[0]}` : firstError
-            }
-
+            const message = getApiErrorMessage(error)
+            setError(message)
             toast.error(message)
         } else if (error.request) {
             console.error("No response received: ", error.request)
             
-            toast.error("Network error. Cannot connect to server.")
+            const message = getApiErrorMessage(error)
+            setError(message)
+            toast.error(message)
         } else {
             console.error("Request setup error : ", error.message)
 
-            toast.error("Client error : " + error.message)
+            const message = getApiErrorMessage(error)
+            setError(message)
+            toast.error(message)
         }
 
         console.groupEnd()
@@ -472,4 +503,3 @@ export default function LoginSignup() {
     );
 
 }
-
