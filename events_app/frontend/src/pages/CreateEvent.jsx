@@ -1133,7 +1133,7 @@ export default function CreateEvent() {
                                         </button>
 
                                         <span className = "text-xl font-mono font-bold text-white w-6 text-center">
-                                            {formData.max_tickets_per_user === 1 ? 'Ticket' : 'Tickets'}
+                                            {formData.max_tickets_per_user}
                                         </span>
                                     
                                         <button
