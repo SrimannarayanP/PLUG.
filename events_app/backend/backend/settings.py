@@ -1,193 +1,416 @@
-# settings.py
+# models.py
 
 
-from pathlib import Path
-from datetime import timedelta
-from dotenv import load_dotenv
+from cloudinary_storage.storage import RawMediaCloudinaryStorage
 
-import os, dj_database_url
+from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator, URLValidator
+from django.db import models, transaction
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
+import secrets, string, uuid
 
-load_dotenv() # Loads an enviroment file
- 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-load_dotenv(BASE_DIR / '.env') # This looks for a .env file at the root directory & loads it into os.environ
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG') == 'True'
-
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') # Allows any different host to host our Django app
-
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES' : (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES' : (
-        # 'rest_framework.permissions.IsAuthenticated',
-    ),
-    'DEFAULT_PAGINATION_CLASS' : 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE' : 10,
-}
-
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME' : timedelta(minutes = 45),
-    'REFRESH_TOKEN_LIFETIME' : timedelta(days = 1),
-}
-
-# Application definition
-
-INSTALLED_APPS = [
-    'cloudinary_storage',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'cloudinary',
-    'api',
-    'rest_framework',
-    'corsheaders',
-]
-
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME' : os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY' : os.environ.get('CLOUDINARY_API_KEY'),
-    'API_SECRET' : os.environ.get('CLOUDINARY_API_SECRET')
-}
-
-STORAGES = {
-    'default' : {
-        'BACKEND' : 'cloudinary_storage.storage.MediaCloudinaryStorage',
-    },
-    'staticfiles' : {
-        'BACKEND' : 'whitenoise.storage.CompressedManifestStaticFilesStorage',
-    },
-}
-
-MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-]
-
-ROOT_URLCONF = 'backend.urls'
-
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
-
-WSGI_APPLICATION = 'backend.wsgi.application'
+# CONSTANTS
+MAX_BROCHURE_SIZE_MB = 10
+MAX_IMAGE_SIZE_MB = 5
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+# Validators
+# General validator for file size 
+def validate_file_size(value, max_mb):
+    if value.size > max_mb * 1024 * 1024: # Convert MB to bytes
+        
+        raise ValidationError(f"File size cannot exceed {max_mb}MB.")
+    
+def validate_brochure_size(value):
+    
+    return validate_file_size(value, MAX_BROCHURE_SIZE_MB)
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default = os.getenv('DATABASE_URL'),
-        conn_max_age = 600
+def validate_image_size(value):
+
+    return validate_file_size(value, MAX_IMAGE_SIZE_MB)
+
+
+# --- Abstract Classes ---
+class TimeStampedModel(models.Model):
+    """Provides self-updating created_at & updated_at fields"""
+
+    created_at = models.DateTimeField(auto_now_add = True)
+    updated_at = models.DateTimeField(auto_now = True)
+
+    class Meta:
+
+        abstract = True
+
+
+# Provides a UUID primary key field
+class UUIDModel(models.Model):
+
+    id = models.UUIDField(primary_key = True, default = uuid.uuid4, editable = False)
+
+    class Meta:
+
+        abstract = True
+
+
+# --- User Management ---
+# To create & save a user with given email ID & password
+class CustomUserManager(BaseUserManager):
+
+    def create_user(self, email, password = None, **extra_fields):
+        if not email: 
+
+            raise ValueError(_("The email must be set"))
+        
+        email = self.normalize_email(email)
+        user = self.model(email = email, **extra_fields)
+        user.set_password(password)
+        user.save(using = self.db)
+
+        return user
+
+    def create_superuser(self, email, password, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('role', CustomUser.Role.ADMIN)
+
+        if extra_fields.get('is_staff') is not True:
+
+            raise ValueError(_("Superuser must have is_staff = True."))
+        
+        if extra_fields.get('is_superuser') is not True:
+
+            raise ValueError(_("Superuser must have is_superuser = True"))
+        
+        return self.create_user(email, password, **extra_fields)
+
+
+# Defined a custom user model that uses email for login instead of username
+class CustomUser(AbstractUser):
+    
+    class Role(models.TextChoices):
+
+        STUDENT = 'student', _('Student')
+        ADMIN = 'admin', _('Admin')
+        HOST = 'host', _('Host')
+
+    username = None
+    email = models.EmailField(_('email address'), unique = True)
+    role = models.CharField(max_length = 10, choices = Role.choices, default = Role.STUDENT)
+
+    is_email_verified = models.BooleanField(default = False)
+    otp = models.CharField(max_length = 6, null = True, blank = True) # CharField because if OTP starts with 0, IntegerField would cutoff the 0.
+    otp_created_at = models.DateTimeField(null = True, blank = True)
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []  
+
+    objects = CustomUserManager()
+
+    def __str__(self):
+
+        return self.email 
+
+
+# --- Lookup Models ---
+class Category(models.Model):
+
+    name = models.CharField(max_length = 255, unique = True)
+
+    class Meta:
+
+        verbose_name_plural = 'Categories'
+        ordering = ['name']
+
+    def __str__(self):
+
+        return self.name
+    
+
+# Standardized names for colleges to prevent dirty data
+class SchoolCollege(TimeStampedModel):
+
+    name = models.CharField(max_length = 255)
+    city = models.CharField(max_length = 255, blank = True, null = True)
+    state = models.CharField(max_length = 255, blank = True, null = True)
+
+    class Meta:
+
+        verbose_name_plural = 'School/College'
+        ordering = ['name'] # Arrange the records in alphabetical order by default
+        constraints = [
+            models.UniqueConstraint(
+                fields = ['name', 'city'],
+                name = 'unique_school_per_city'
+            )
+        ]
+
+    def __str__(self):
+
+        return f"{self.name} ({self.city})"
+
+
+# --- Profiles ---
+class OrganisationProfile(TimeStampedModel):
+
+    user = models.OneToOneField(CustomUser, on_delete = models.CASCADE, primary_key = True, related_name = 'organisation_profile')
+    name = models.CharField(max_length = 255, null = True, blank = True)
+    phone_number = models.CharField(max_length = 20, unique = True, blank = True, null = True)
+
+    def __str__(self):
+
+        return self.name or f"Incomplete Host Profile ({self.user.email})"
+
+
+class StudentProfile(TimeStampedModel):
+
+    user = models.OneToOneField(CustomUser, on_delete = models.CASCADE, primary_key = True, related_name = 'student_profile')
+
+    date_of_birth = models.DateField(null = True, blank = True)
+    phone_number = models.CharField(max_length = 20, blank = True, null = True)
+
+    school_college = models.ForeignKey(SchoolCollege, on_delete = models.SET_NULL, null = True, blank = True, related_name = 'students')
+    
+    student_id_number = models.CharField(max_length = 100, blank = True, null = True)
+
+    def __str__(self):
+
+        return self.user.email
+    
+
+# --- Core App Models ---
+class Event(UUIDModel, TimeStampedModel):
+
+    class LocationType(models.TextChoices):
+
+        ONLINE = 'online', _('Online')
+        OFFLINE = 'offline', _('Offline')
+
+    name = models.CharField(max_length = 255)
+    description = models.TextField()
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
+
+    max_tickets_per_user = models.PositiveIntegerField(default = 1, help_text = "Max tickets a single user can book")
+
+    # Location
+    location_type = models.CharField(max_length = 10, choices = LocationType.choices)
+    physical_location = models.CharField(max_length = 255, blank = True, null = True)
+    google_maps_link = models.TextField(max_length = 255, blank = True, null = True, validators = [URLValidator()])
+    virtual_location = models.TextField(blank = True, null = True, help_text = "Meeting link for online events")
+
+    # Registration
+    register_link = models.TextField(blank = True, null = True)
+    registration_deadline = models.DateTimeField(null = True, blank = True)
+    
+    # Checks & Assets
+    is_native = models.BooleanField(default = False)
+    is_featured = models.BooleanField(default = False)
+    poster = models.ImageField(
+        upload_to = 'event_posters/', 
+        null = True, 
+        blank = True,
+        # Check for file size & format
+        validators = [
+            FileExtensionValidator(allowed_extensions = ['jpg', 'jpeg', 'png', 'webp']),
+            validate_image_size
+        ]
     )
-}
+
+    # Payment
+    is_paid_event = models.BooleanField(default = False)
+    payment_qr_image = models.ImageField(upload_to = 'payment_qr_img/', null = True, blank = True)
+    ticket_price = models.DecimalField(max_digits = 10, decimal_places = 2, default = 0.00)
+
+    # Optional Data Collection (Smart Fields)
+    age_restriction_cutoff = models.DateField(null = True, blank = True)
+    collect_phone = models.BooleanField(default = False)
+    collect_college_school = models.BooleanField(default = False)
+    collect_student_id = models.BooleanField(default = False)
+    
+    # Foreign Keys
+    organisation = models.ForeignKey(OrganisationProfile, on_delete = models.CASCADE, related_name = 'events')
+    categories = models.ManyToManyField(Category, through = 'EventCategory', related_name = 'events')
+
+    class Meta:
+
+        ordering = ['-start_date']
+
+    def save(self, *args, **kwargs):
+        # If the host didn't provide a deadline, take the default to be the event start date
+        if not self.registration_deadline:
+            self.registration_deadline = self.start_date
+
+        # Can't have a deadline after the event starts
+        if self.registration_deadline > self.start_date:
+            
+            raise ValueError("Registration deadline cannot be after the start date.")
+
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+
+        # Location validation
+        if self.location_type == self.LocationType.OFFLINE:
+            if not self.physical_location:
+                
+                raise ValidationError({'physical_location' : _("Venue name is required for offline events.")})
+            
+            if not self.google_maps_link:
+                
+                raise ValidationError({'google_maps_link' : _("Google Maps link is required for offline events.")})
+            
+        elif self.location_type == self.LocationType.ONLINE:
+            if not self.virtual_location:
+            
+                raise ValidationError({'virtual_location' : _("Meeting link is required for online events.")})
+        
+        # Payment validation
+        if self.is_paid_event and self.ticket_price <= 0:
+
+            raise ValidationError({'ticket_price' : _("Paid events must have a ticket price greater than 0.")})
+
+    @property
+    def is_registration_open(self):
+        if not self.registration_deadline:
+
+            return False
+
+        return timezone.now() < self.registration_deadline
+
+    def __str__(self):
+
+        return self.name
+    
+
+# Separate table for Event-Category many-to-many relationship
+class EventCategory(models.Model):
+
+    event = models.ForeignKey(Event, on_delete = models.CASCADE)
+    category = models.ForeignKey(Category, on_delete = models.CASCADE)
+
+    class Meta:
+
+        constraints = [
+            models.UniqueConstraint(
+                fields = ['event', 'category'],
+                name = 'unique_event_category',
+            )
+        ]
+
+        verbose_name_plural = "Event Categories"
 
 
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
+class EventDocument(TimeStampedModel):
 
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
+    event = models.ForeignKey(Event, on_delete = models.CASCADE, related_name = 'documents')
+    file = models.FileField(upload_to = 'event_docs/', validators = [validate_brochure_size], storage = RawMediaCloudinaryStorage())
+    name = models.CharField(max_length = 255, blank = True)
+
+    def __str__(self):
+
+        return f"{self.name or 'Document'} - {self.event.name}"
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
+class Registration(UUIDModel, TimeStampedModel):
 
-LANGUAGE_CODE = 'en-us'
+    class PaymentStatus(models.TextChoices):
 
-TIME_ZONE = 'UTC'
+        PENDING = 'pending', _('Pending')
+        VERIFIED = 'verified', _('Verified')
+        REJECTED = 'rejected', _('Rejected')
+        REFUND_PENDING = 'refund_pending', _("Refund Pending")
+        REFUND_PROCESSED = 'refund_processed', _("Refund Processed")
 
-USE_I18N = True
+    student = models.ForeignKey(StudentProfile, on_delete = models.CASCADE, related_name = 'registrations')
+    event = models.ForeignKey(Event, on_delete = models.CASCADE, related_name = 'registrations')
 
-USE_TZ = True
+    first_name = models.CharField(max_length = 255)
+    last_name = models.CharField(max_length = 255, blank = True)
+    email = models.EmailField(db_index = True)
 
+    # Guest details
+    guest_data = models.JSONField(default = dict, blank = True, null = True)
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
+    # Manual Entry Ticket Code
+    ticket_code = models.CharField(max_length = 6, unique = True, db_index = True, blank = True)
 
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+    # Status flags
+    is_cancelled = models.BooleanField(default = False)
+    is_checked_in = models.BooleanField(default = False)
+    checked_in_at = models.DateTimeField(null = True, blank = True)
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
+    # Payment Tracking
+    payment_status = models.CharField(max_length = 20, choices = PaymentStatus.choices, default = PaymentStatus.PENDING)
+    transaction_id = models.CharField(max_length = 100, blank = True, null = True, db_index = True)
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+    class Meta:
 
-CORS_ALLOW_ALL_ORIGINS = os.getenv('DEBUG') == 'True'
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
-CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+        verbose_name_plural = 'Registrations'
 
-AUTH_USER_MODEL = 'api.CustomUser'
+        indexes = [
+            # Get all verified attendees for some event X
+            models.Index(fields = ['event', 'payment_status']),
+            models.Index(fields = ['event', 'is_checked_in']),
+        ]
 
-MEDIA_URL = '/media/' # URL path for browser
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media') # Absolute path on server's filesystem
+    # Manually enforce that a student cannot have more than 1 active registrations but can have many cancelled registrations for the same event.
+    def clean(self):
+        # If this is a new registration or we are updating an existing 1
+        # Check if there's another active registration for a student + event combo
+        existing_active = Registration.objects.filter(
+            student = self.student,
+            event = self.event,
+            is_cancelled = False # Exclude self if we are editing.
+        )
 
-TICKET_SIGNING_KEY = os.getenv('TICKET_SIGNING_KEY')
+        if self.id:
+            existing_active = existing_active.exclude(id = self.id)
 
-if not TICKET_SIGNING_KEY:
+        existing_count = existing_active.count()
 
-    raise ValueError("Missing TICKET_SIGNING_KEY in .env file")
+        if existing_count >= self.event.max_tickets_per_user and not self.is_cancelled:
 
-# CELERY SETTINGS
-CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-CELERY_TIMEZONE = 'UTC'
+            raise ValidationError(f"You cannot book more than {self.event.max_tickets_per_user} tickets for this event.")
 
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' # For development, emails will be printed to console
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 465
-# EMAIL_USE_TLS = False # TLS (Transport Layer Security): Ensures encryption when sent over the internet
-# EMAIL_USE_SSL = True
-# EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-# EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-# DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
+    def save(self, *args, **kwargs):
+        if not self.email:
+            self.email = self.student.user.email
 
-BREVO_API_KEY = os.getenv('BREVO_API_KEY')
-BREVO_FROM_EMAIL = os.getenv('BREVO_FROM_EMAIL')
-BREVO_FROM_NAME = os.getenv('BREVO_FROM_NAME')
+        if not self.first_name:
+            self.first_name = self.student.user.first_name
+
+        if not self.last_name:
+            self.last_name = self.student.user.last_name or ''
+
+        if not self.ticket_code:
+            self.ticket_code = self._generate_unique_code()
+
+        self.clean()
+        
+        super().save(*args, **kwargs)
+
+    def _generate_unique_code(self):
+        """Generates a unique 6-character alphanumeric code (uppercase)"""
+        characters = string.ascii_uppercase + string.digits
+
+        while True:
+            code = ''.join(secrets.choice(characters) for _ in range(6))
+
+            if not Registration.objects.filter(ticket_code = code).exists():
+
+                return code
+            
+    @property
+    def attendee_name(self):
+        
+        return f"{self.first_name} {self.last_name}".strip()
+
+    def __str__(self):
+        
+        return f"{self.student} - {self.event.name}"
