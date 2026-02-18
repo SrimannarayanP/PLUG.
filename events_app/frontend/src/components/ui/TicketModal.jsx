@@ -2,10 +2,12 @@
 
 
 import {useEffect, useState} from 'react'
-import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, AlertCircle, Ban} from 'lucide-react'
+import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, AlertCircle, Ban, Archive} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
 import api from '../../api/api'
+
+import {checkEventExpiry} from '../../utils/ticketHelper'
 
 
 export default function TicketModal({tickets : initialTickets, closeModal}) {
@@ -21,6 +23,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
     const isRefundPending = currentTicket.payment_status === 'refund_pending'
     const isVerified = currentTicket.payment_status === 'verified' || currentTicket.checked_in
     const isCancelled = currentTicket.is_cancelled
+    const isExpired = checkEventExpiry(event.end_date)
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
     const textGradient = "bg-clip-text text-transparent bg-gradient-to-r from-orange-400 via-pink-500 to-purple-600"
@@ -104,7 +107,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                         </button>
 
                         {/* Subtle background blurs */}
-                        <div className = {`absolute top-0 right-0 h-24 w-24 ${festiveGradient} opacity-20 blur-2xl -translate-y-1/2 -translate-x-1/2 pointer-events-none`} />
+                        <div className = {`absolute top-0 right-0 h-24 w-24 ${festiveGradient} opacity-20 blur-2xl -translate-x-1/2 -translate-y-1/2 pointer-events-none`} />
 
                         {tickets.length > 1 && (
                             <div className = "flex justify-center mb-4">
@@ -180,6 +183,12 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                                 <span className = "text-zinc-500 text-xs font-bold flex items-center gap-2">
                                     Ticket Used
                                 </span>
+                            ) : isExpired ? (
+                                <span className = "text-zinc-600 text-xs font-bold flex items-center gap-2 border border-zinc-800 px-3 py-1 rounded-full">
+                                    <CalendarDays size = {12} />
+
+                                    Event Ended
+                                </span>
                             ) : (
                                 <span className = "text-emerald-500 text-xs font-bold flex items-center gap-2 animate-pulse">
                                     Live Ticket
@@ -188,7 +197,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                         </div>
 
                         <div className = "relative group mb-6 shrink-0 transition-all duration-300">
-                            {!isCancelled && !isRefundPending && (
+                            {!isCancelled && !isRefundPending && !isExpired && (
                                 // Gradient frame around QR
                                 <div className = {`absolute -inset-1 ${festiveGradient} rounded-2xl opacity-75 blur-sm group-hover:opacity-100 transition duration-500`} />
                             )}
@@ -196,13 +205,13 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                             <div 
                                 className = {`
                                     relative bg-white p-3 rounded-xl
-                                    ${isCancelled || isRefundPending
+                                    ${isCancelled || isRefundPending || isExpired
                                         ? "opacity-50 grayscale"
                                         : ''
                                     }
                                 `}
                             >
-                                {(isVerified && !isCancelled && !isRefundPending) ? (
+                                {(isVerified && !isCancelled && !isRefundPending && !isExpired) ? (
                                     <img
                                         key = {currentTicket.id} 
                                         src = {currentTicket.qr_code}
@@ -223,6 +232,12 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                                                 <Loader2 className = "h-8 w-8 mb-2 animate-spin opacity-50" />
 
                                                 <span>REFUND<br />IN PROGRESS</span>
+                                            </>
+                                        ) : isExpired ? (
+                                            <>
+                                                <Archive className = "h-8 w-8 mb-2 opacity-50" />
+
+                                                <span>EVENT<br />ENDED</span>
                                             </>
                                         ) : isPending ? 'Verifying...' : 'Void'}
                                     </div>
@@ -303,7 +318,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                             
                             {/* Action Button */}
                             <div className = "space-y-2 pt-2">
-                                {!isCancelled && !currentTicket.checked_in && !isRefundPending && (
+                                {!isCancelled && !currentTicket.checked_in && !isRefundPending && !isExpired && (
                                     <button
                                         onClick = {handleCancelTicket}
                                         disabled = {cancelling}
