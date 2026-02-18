@@ -2,11 +2,12 @@
 
 
 import {useState} from 'react'
-import {Calendar, MapPin, Clock, CheckCircle, XCircle, Ticket, User, QrCode, ImageOff, Laptop, Layers} from 'lucide-react'
+import {Calendar, MapPin, Clock, CheckCircle, XCircle, Ticket, User, QrCode, ImageOff, Laptop, Layers, Archive} from 'lucide-react'
 
 import TicketModal from './TicketModal'
 
 import {getImageUrl} from '../../utils/imageHelper'
+import {checkEventExpiry} from '../../utils/ticketHelper'
 
 
 export default function TicketCard({tickets}) {
@@ -21,6 +22,8 @@ export default function TicketCard({tickets}) {
     const hasUsableTicket = tickets.some(t => !t.is_cancelled && t.payment_status !== 'rejected')
     
     const posterUrl = getImageUrl(event.poster)
+
+    const isExpired = checkEventExpiry(event.end_date)
 
     // const isVoid = ticket.cancelled || payment_status === 'rejected'
     // const isPending = payment_status === 'pending'
@@ -128,6 +131,23 @@ export default function TicketCard({tickets}) {
 
         }
 
+        if (isExpired) {
+
+            return (
+
+                <div className = {`${badgeBase} bg-zinc-800/80 text-zinc-500 border-zinc-700/50`}>
+                    <Archive
+                        size = {12}
+                        strokeWidth = {3}
+                    />
+
+                    Ended
+                </div>
+
+            )
+
+        }
+
         // Default valid/confirmed
         return (
 
@@ -189,7 +209,7 @@ export default function TicketCard({tickets}) {
                                 {ticketCount} Tickets
                             </div>
                         ) : (
-                            <getStatusBadge ticket = {primaryTicket} />
+                            getStatusBadge({ticket : primaryTicket})
                         )}
                     </div>
                 </div>
@@ -213,8 +233,6 @@ export default function TicketCard({tickets}) {
                             Hosted by <span className = "text-zinc-300 font-medium">{event.organisation?.name || 'Unknown'}</span>
                         </p>
                     </div>
-
-                    <div className = "flex items-center mb-4 gap-2 text-xx"></div>
 
                     {/* Date & Location */}
                     <div className = "grid gap-2.5 mb-6">
