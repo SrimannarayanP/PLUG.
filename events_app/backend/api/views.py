@@ -589,9 +589,6 @@ class RegisterForEventView(APIView):
                 'message' : "Payment submitted. Waiting for host's approval.",
                 'count' : len(created_registrations)
             }, status = 201)
-        
-        ticket_token = generate_ticket_token(str(registration.id), str(event.id))
-        qr_code_image = generate_qr_code_base64(ticket_token)
 
         # Trigger async task to send ticket email only after the transaction is committed. This is to ensure that Celery & Django go hand-in-hand. Pehle kya hota tha,
         # Django user ko register krta, phir send_ticket_email_task.delay() ko call krta, lekin ye abhi tak DB me reflect hi nhi hua ki naya user bna hai. Isliye Celery
@@ -643,9 +640,10 @@ class VerifyTicketView(APIView):
     def post(self, request):
         token = request.data.get('token')
         ticket_code = request.data.get('ticket_code')
-        event_id = request.data.get('event_id')
+        input_event_id = request.data.get('event_id')
 
-        registration_id = None  
+        registration_id = None
+        token_event_id = None
 
         if token:
             try:
@@ -655,7 +653,7 @@ class VerifyTicketView(APIView):
                 registration_id = payload.get('rid')
                 token_event_id = payload.get('eid')
 
-                if event_id and str(token_event_id) != str(event_id):
+                if input_event_id and str(token_event_id) != str(input_event_id):
 
                     return Response({'error' : "This ticket belongs to a different event."}, status = 400)
             except jwt.ExpiredSignatureError:
@@ -666,23 +664,40 @@ class VerifyTicketView(APIView):
 
                 return Response({'error' : "INVALID TICKET. Please check again."}, status = 400)
         elif ticket_code:
-            if not event_id:
+            if not input_event_id:
 
                 return Response({'error' : "Event ID is required for manual entry."}, status = 400)
             
+            token_event_id = input_event_id
+            
             try:
-                registration_id = Registration.objects.values_list('id', flat = True).get(ticket_code__iexact = ticket_code, event_id = event_id)
+                registration_id = Registration.objects.values_list('id', flat = True).get(ticket_code__iexact = ticket_code, event_id = token_event_id)
             except Registration.DoesNotExist:
 
-                return Response({'error' : "Invalid ticket code for this event."}, status = 404)
+                return Response({'error' : "Registration does not exist for this event."}, status = 404)
         else:
 
             return Response({'error' : "No ticket token or code provided."}, status = 400)
+        
+        try:
+            event = Event.objects.get(id = token_event_id)
+
+            grace_period = timedelta(hours = 12)
+
+            if timezone.now() > (event.end_date + grace_period):
+
+                return Response({
+                    'error' : "Event has ended. Ticket has expired.",
+                    'event_ended_at' : event.end_date
+                }, status = 400)
+        except Event.DoesNotExist:
+
+            return Response({'error' : "Event associated with this ticket not found."}, status = 404)
 
         # Try to check in ONLY if currently checked out. This returns the number of rows modified.
         rows_updated = Registration.objects.filter(
             id = registration_id,
-            event_id = event_id,
+            event_id = token_event_id,
             is_checked_in = False,
             is_cancelled = False,
         ).update(
@@ -714,7 +729,7 @@ class VerifyTicketView(APIView):
         
         try:
             # Failure case : The update failed. Why? Now we check the DB for a specific error message.
-            registration = Registration.objects.get(id = registration_id, event_id = event_id)
+            registration = Registration.objects.get(id = registration_id, event_id = token_event_id)
 
             if registration.checked_in:
 
