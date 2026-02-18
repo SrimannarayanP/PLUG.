@@ -2,7 +2,7 @@
 
 
 import {useEffect, useState} from 'react'
-import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, AlertCircle, Ban, Archive} from 'lucide-react'
+import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, Ban, Archive} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
 import api from '../../api/api'
