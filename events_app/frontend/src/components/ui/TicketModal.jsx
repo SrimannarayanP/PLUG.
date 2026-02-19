@@ -2,7 +2,7 @@
 
 
 import {useEffect, useState} from 'react'
-import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, Ban, Archive} from 'lucide-react'
+import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, Ban, Archive, Send} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
 import api from '../../api/api'
@@ -15,6 +15,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
     const [tickets, setTickets] = useState(initialTickets)
     const [activeIndex, setActiveIndex] = useState(0)
     const [cancelling, setCancelling] = useState(false)
+    const [resending, setResending] = useState(false)
 
     const currentTicket = tickets[activeIndex]
     const event = currentTicket.event
@@ -79,6 +80,24 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
             toast.error(err.response?.data?.error || "Failed to cancel ticket")
         } finally {
             setCancelling(false)
+        }
+    }
+
+    const handleResendTicket = async () => {
+        if (resending) return
+
+        setResending(true)
+
+        try {
+            const response = await api.post(`/api/ticket/resend/${currentTicket.id}`)
+            
+            toast.success(`Ticket sent to ${currentTicket.email}`)
+        } catch (err) {
+            console.error(err)
+
+            toast.error(err.response?.data?.error || "Failed to resend ticket")
+        } finally {
+            setResending(false)
         }
     }
 
@@ -333,12 +352,27 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                                     </button>
                                 )}
 
-                                <button
-                                    onClick = {closeModal}
-                                    className = "w-full py-3 rounded-xl font-bold text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 text-xs uppercase tracking-widest transition-colors"
-                                >
-                                    Close
-                                </button>
+                                {!isCancelled && !isRefundPending && !isExpired && (
+                                    <button
+                                        onClick = {handleResendTicket}
+                                        disabled = {resending}
+                                        className = "w-full py-3 rounded-xl font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-xs upppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        {resending ? (
+                                            <>
+                                                <Loader2 className = "h-3 w-3 animate-spin" />
+
+                                                Sending...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send size = {14} />
+
+                                                Resend Ticket
+                                            </>
+                                        )}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
