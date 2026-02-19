@@ -10,7 +10,7 @@ from .models import Registration
 from .utils import generate_ticket_token, generate_qr_bytes
 from .email_service import send_email
 
-import base64
+import cloudinary.uploader, io
 
 
 User = get_user_model()
@@ -25,7 +25,23 @@ def send_ticket_email(self, registration_id):
 
         token = generate_ticket_token(registration.id, event.id) # Generate token
         qr_bytes = generate_qr_bytes(token) # Get raw bytes
-        qr_base64 = base64.b64encode(qr_bytes).decode('UTF-8')
+
+        qr_file = io.BytesIO(qr_bytes)
+
+        upload_result = cloudinary.uploader.upload(
+            qr_file,
+            folder = 'plug_ticket_qrs',
+            public_id = str(registration.id),
+            format = 'png',
+            overwrite = True,
+        )
+
+        qr_url = upload_result.get('secure_url')
+
+        if event.location_type == 'online':
+            location_display = "Online Event"
+        else:
+            location_display = event.physical_location or 'TBA'
 
         html_content = render_to_string(
             'emails/ticket_email.html',
@@ -33,15 +49,15 @@ def send_ticket_email(self, registration_id):
                 'student_name' : user.first_name,
                 'event_name' : event.name,
                 'event_date' : event.start_date,
-                'event_location' : event.location if hasattr(event, 'location') else None,
-                'qr_image' : f"data:image/png;base64,{qr_base64}"
+                'event_location' : location_display,
+                'qr_image' : qr_url
             },
         )
 
         send_email(
             to_email = user.email,
             to_name = user.first_name,
-            subject = f"Your ticket: {event.name}", 
+            subject = f"Your ticket: {event.name}",
             html_content = html_content
         )
 
