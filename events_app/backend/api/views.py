@@ -622,7 +622,7 @@ class RegisteredEventsView(generics.ListAPIView):
 # Manually trigger a ticket email.
 class ResendTicketView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request, ticket_id):
         registration = get_object_or_404(Registration, id = ticket_id, student__user = request.user, is_cancelled = False)
