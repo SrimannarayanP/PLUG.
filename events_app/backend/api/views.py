@@ -715,14 +715,17 @@ class VerifyTicketView(APIView):
             elif registration.student.school_college:
                 school_college_display = f"{registration.student.school_college.name} ({registration.student.school_college.city})"
 
+            dob = registration.guest_data.get('date_of_birth') or registration.student.date_of_birth
+
             return Response({
                 'status' : 'success',
                 'message' : "VALID TICKET",
                 'attendee' : {
                     'name' : registration.attendee_name,
                     'email' : registration.email,
-                    'college' : school_college_display,
-                    'student_id' : registration.guest_data.get('student_id_number', registration.student.student_id_number or 'N/A') ,
+                    'school_college' : school_college_display,
+                    'student_id_number' : registration.guest_data.get('student_id_number', registration.student.student_id_number or 'N/A') ,
+                    'date_of_birth' : str(dob) if dob else None
                 },
                 'event' : registration.event.name,
             }, status = 200)
@@ -731,7 +734,7 @@ class VerifyTicketView(APIView):
             # Failure case : The update failed. Why? Now we check the DB for a specific error message.
             registration = Registration.objects.get(id = registration_id, event_id = token_event_id)
 
-            if registration.checked_in:
+            if registration.is_checked_in:
 
                 return Response({
                     'status' : 'warning',
