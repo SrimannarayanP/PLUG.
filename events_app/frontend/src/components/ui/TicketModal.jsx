@@ -126,7 +126,16 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                         }
                     `}
                 >
-                    <div className = "absolute inset-0 backface-hidden bg-zinc-950 rounded-3xl p-[1px] shadow-2xl flex flex-col overflow-hidden">
+                    {/* Front Face */}
+                    <div 
+                        className = {`
+                            absolute inset-0 backface-hidden bg-zinc-950 rounded-3xl p-[1px] shadow-2xl flex flex-col overflow-hidden
+                            ${isFlipped
+                                ? 'pointer-events-none'
+                                : ''
+                            }
+                        `}
+                    >
                         <div className = {`absolute inset-0 ${festiveGradient} z-0 opacity-100 pointer-events-none`} />
 
                         <div className = "relative z-10 flex flex-col h-full w-full bg-zinc-950 rounded-[23px] overflow-hidden">
@@ -307,8 +316,17 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                             </div>
                         </div>
                     </div>
-
-                    <div className = "absolute inset-0 backface-hidden rotate-y-180 bg-zinc-950 rounded-3xl p-[1px] shadow-2xl flex flex-col overflow-hidden">
+                    
+                    {/* Back Face */}
+                    <div 
+                        className = {`
+                            absolute inset-0 backface-hidden rotate-y-180 bg-zinc-950 rounded-3xl p-[1px] shadow-2xl flex flex-col overflow-hidden
+                            ${!isFlipped
+                                ? 'pointer-events-none'
+                                : ''
+                            }
+                        `}
+                    >
                         <div className = {`absolute inset-0 ${festiveGradient} z-0 opacity-100 pointer-events-none`} />
                         {/* Details & status */}
                         <div className = "relative z-10 flex flex-col h-full w-full bg-black rounded-[23px] overflow-hidden">
@@ -325,74 +343,77 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                                     Details & Settings
                                 </h3>
                             </div>
-
-                            {/* Date */}
+                            
+                            {/* Info Container */}
                             <div className = "flex flex-col flex-1 p-6 space-y-6 overflow-y-auto">
-                                <span className = "text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
-                                    Date & Time
-                                </span>
-
-                                <div className = "flex items-center gap-3 text-zinc-300 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
-                                    <CalendarDays 
-                                        size = {18}
-                                        className = "text-orange-500 shrink-0"
-                                    />
-
-                                    <span className = "font-mono font-bold text-sm">
-                                        {event.start_date
-                                            ? new Date(event.start_date).toLocaleDateString('en-GB', {
-                                                weekday : 'long',
-                                                day : 'numeric',
-                                                month : 'short',
-                                                year : 'numeric',
-                                                hour : '2-digit',
-                                                minute : '2-digit'
-                                            })
-                                            : 'TBA'
-                                        }
+                                {/* Date */}
+                                <div className = "flex flex-col gap-2">
+                                    <span className = "text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
+                                        Date & Time
                                     </span>
-                                </div>
-                            </div>
 
-                            {/* Location */}
-                            <div className = "flex flex-col gap-2">
-                                <span className = "text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
-                                    Location
-                                </span>
-                                
-                                <div className = "flex items-center gap-3 text-zinc-300 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
-                                    {event.location_type === 'online' ? (
-                                        <Laptop
+                                    <div className = "flex items-center gap-3 text-zinc-300 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
+                                        <CalendarDays 
                                             size = {18}
-                                            className = "text-purple-500 shrink-0"
+                                            className = "text-orange-500 shrink-0"
                                         />
-                                    ) : (
-                                        <MapPin
-                                            size = {18}
-                                            className = "text-purple-500 shrink-0"
-                                        />
-                                    )}
 
-                                    <div className = "flex flex-col">
-                                        <span className = "font-medium text-sm">
-                                            {event.physical_location || (event.location_type === 'online' ? 'Online' : 'TBA')}
+                                        <span className = "font-mono font-bold text-sm">
+                                            {event.start_date
+                                                ? new Date(event.start_date).toLocaleDateString('en-GB', {
+                                                    weekday : 'long',
+                                                    day : 'numeric',
+                                                    month : 'short',
+                                                    year : 'numeric',
+                                                    hour : '2-digit',
+                                                    minute : '2-digit'
+                                                })
+                                                : 'TBA'
+                                            }
                                         </span>
+                                    </div>
+                                </div>
 
-                                        {event.google_maps_link && event.location_type !== 'online' && (
-                                            <a
-                                                href = {event.google_maps_link}
-                                                target = '_blank'
-                                                rel = 'noreferrer'
-                                                className = "text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-1 underline decoration-dashed underline-offset-2"
-                                            >
-                                                Open in Maps <ExternalLink size = {10}/>
-                                            </a>
+                                {/* Location */}
+                                <div className = "flex flex-col gap-2">
+                                    <span className = "text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
+                                        Location
+                                    </span>
+                                    
+                                    <div className = "flex items-center gap-3 text-zinc-300 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
+                                        {event.location_type === 'online' ? (
+                                            <Laptop
+                                                size = {18}
+                                                className = "text-purple-500 shrink-0"
+                                            />
+                                        ) : (
+                                            <MapPin
+                                                size = {18}
+                                                className = "text-purple-500 shrink-0"
+                                            />
                                         )}
+
+                                        <div className = "flex flex-col">
+                                            <span className = "font-medium text-sm">
+                                                {event.physical_location || (event.location_type === 'online' ? 'Online' : 'TBA')}
+                                            </span>
+
+                                            {event.google_maps_link && event.location_type !== 'online' && (
+                                                <a
+                                                    href = {event.google_maps_link}
+                                                    target = '_blank'
+                                                    rel = 'noreferrer'
+                                                    className = "text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-1 underline decoration-dashed underline-offset-2"
+                                                >
+                                                    Open in Maps <ExternalLink size = {10}/>
+                                                </a>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                             
-                            {/* Action Button */}
+                            {/* Action Button Container */}
                             <div className = "p-6 bg-zinc-950 border-t border-zinc-900 space-y-3 mt-auto shrink-0">
                                 {!isCancelled && !currentTicket.is_checked_in && !isRefundPending && !isExpired && (
                                     <button
