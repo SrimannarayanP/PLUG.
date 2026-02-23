@@ -191,3 +191,9 @@ CELERY_TIMEZONE = 'UTC'
 BREVO_API_KEY = os.getenv('BREVO_API_KEY')
 BREVO_FROM_EMAIL = os.getenv('BREVO_FROM_EMAIL')
 BREVO_FROM_NAME = os.getenv('BREVO_FROM_NAME')
+
+FRONTEND_URL = os.getenv('FRONTEND_URL')
+
+if not FRONTEND_URL:
+
+ raise ValueError("Missing FRONTEND_URL in environment variables. Cannot construct email links.")
