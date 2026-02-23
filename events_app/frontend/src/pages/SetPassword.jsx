@@ -190,6 +190,7 @@ export default function SetPassword() {
                                         placeholder = "Confirm Password"
                                         value = {formData.confirm_password}
                                         onChange = {handleChange}
+                                        className = 'pr-12'
                                     />
 
                                     <button
