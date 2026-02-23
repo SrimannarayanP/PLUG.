@@ -182,14 +182,25 @@ export default function SetPassword() {
                                     </button>
                                 </div>
 
-                                <FormInput 
-                                    id = 'confirm_password'
-                                    name = 'confirm_password'
-                                    type = 'password'
-                                    placeholder = "Confirm Password"
-                                    value = {formData.confirm_password}
-                                    onChange = {handleChange}
-                                />
+                                <div className = "relative group">
+                                    <FormInput 
+                                        id = 'confirm_password'
+                                        name = 'confirm_password'
+                                        type = 'password'
+                                        placeholder = "Confirm Password"
+                                        value = {formData.confirm_password}
+                                        onChange = {handleChange}
+                                    />
+
+                                    <button
+                                        type = 'button'
+                                        onClick = {() => setShowPassword(!showPassword)}
+                                        className = "absolute right-0 top-0 bottom-0 px-4 text-zinc-500 hover:text-white transition-colors flex items-center justify-center"
+                                        tabIndex = {-1}
+                                    >
+                                        {showPassword ? <EyeOff size = {18} /> : <Eye size = {18} />}
+                                    </button>
+                                </div>
 
                                 <div className = 'pt-4'>
                                     <SolidAnimatedButton 
