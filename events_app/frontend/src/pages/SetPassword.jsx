@@ -186,7 +186,7 @@ export default function SetPassword() {
                                     <FormInput 
                                         id = 'confirm_password'
                                         name = 'confirm_password'
-                                        type = 'password'
+                                        type = {showPassword ? 'text' : 'password'}
                                         placeholder = "Confirm Password"
                                         value = {formData.confirm_password}
                                         onChange = {handleChange}
