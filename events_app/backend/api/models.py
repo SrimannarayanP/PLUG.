@@ -8,6 +8,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator, URLValidator
 from django.db import models, transaction
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -54,6 +55,30 @@ class UUIDModel(models.Model):
     class Meta:
 
         abstract = True
+
+
+# --- Custom Querysets ---
+class EventQuerySet(QuerySet):
+    
+    def visible_to(self, user):
+        if user.is_authenticated and hasattr(user, 'organisation_profile'):
+
+            return self.filter(
+                Q(restricted_to_schools_colleges__isnull = True) |
+                Q(organisation = user.organisation_profile)
+            )
+
+        if user.is_authenticated and hasattr(user, 'student_profile'):
+            student_college = user.student_profile.school_college
+
+            if student_college:
+
+                return self.filter(
+                    Q(restricted_to_schools_colleges__isnull = True) |
+                    Q(restricted_to_schools_colleges = student_college)
+                )
+            
+        return self.filter(restricted_to_schools_colleges__isnull = True)
 
 
 # --- User Management ---
@@ -135,23 +160,51 @@ class Category(models.Model):
 class SchoolCollege(TimeStampedModel):
 
     name = models.CharField(max_length = 255)
+    campus = models.CharField(max_length = 255, blank = True, null = True)
     city = models.CharField(max_length = 255, blank = True, null = True)
     state = models.CharField(max_length = 255, blank = True, null = True)
 
     class Meta:
 
         verbose_name_plural = 'School/College'
-        ordering = ['name'] # Arrange the records in alphabetical order by default
+        ordering = ['name', 'campus'] # Arrange the records in alphabetical order by default, first by name, then by campus.
         constraints = [
             models.UniqueConstraint(
-                fields = ['name', 'city'],
-                name = 'unique_school_per_city'
+                fields = ['name', 'campus', 'city'],
+                name = 'unique_school_college_campus_per_city'
             )
         ]
 
     def __str__(self):
+        if self.campus:
 
+            return f"{self.name} - {self.campus} ({self.city})"
+        
         return f"{self.name} ({self.city})"
+    
+
+class UnlistedSchoolCollege(TimeStampedModel):
+
+    name = models.CharField(max_length = 255)
+    campus = models.CharField(max_length = 255, blank = True, null = True)
+    city = models.CharField(max_length = 255)
+    state = models.CharField(max_length = 255)
+    request_count = models.PositiveIntegerField(default = 1)
+
+    class Meta:
+
+        verbose_name_plural = "Unlisted School/College Requests"
+        ordering = ['-request_count']
+        constraints = [
+            models.UniqueConstraint(
+                fields = ['name', 'campus', 'city'],
+                name = 'unique_unlisted_school_college_request'
+            )
+        ]
+    
+    def __str__(self):
+
+        return f"{self.name} - Requests: {self.request_count}"
 
 
 # --- Profiles ---
@@ -160,6 +213,15 @@ class OrganisationProfile(TimeStampedModel):
     user = models.OneToOneField(CustomUser, on_delete = models.CASCADE, primary_key = True, related_name = 'organisation_profile')
     name = models.CharField(max_length = 255, null = True, blank = True)
     phone_number = models.CharField(max_length = 20, unique = True, blank = True, null = True)
+
+    school_college = models.ForeignKey(
+        SchoolCollege,
+        on_delete = models.SET_NULL,
+        null = True,
+        blank = True,
+        related_name = 'affiliated_clubs',
+        help_text = "Leave blank if this is an external promoter. Select a college if this is a student club."
+    )
 
     def __str__(self):
 
@@ -174,6 +236,12 @@ class StudentProfile(TimeStampedModel):
     phone_number = models.CharField(max_length = 20, blank = True, null = True)
 
     school_college = models.ForeignKey(SchoolCollege, on_delete = models.SET_NULL, null = True, blank = True, related_name = 'students')
+    unlisted_school_college_data = models.JSONField(
+        default = dict,
+        blank = True,
+        null = True,
+        help_text = "Stores user input if they selected Other/Unlisted"
+    )
     
     student_id_number = models.CharField(max_length = 100, blank = True, null = True)
 
@@ -235,10 +303,28 @@ class Event(UUIDModel, TimeStampedModel):
     # Foreign Keys
     organisation = models.ForeignKey(OrganisationProfile, on_delete = models.CASCADE, related_name = 'events')
     categories = models.ManyToManyField(Category, through = 'EventCategory', related_name = 'events')
+    restricted_to_schools_colleges = models.ManyToManyField(
+        SchoolCollege,
+        blank = True,
+        related_name = 'internal_events',
+        help_text = "If set, only students from this college can view & register." 
+    )
+
+    objects = EventQuerySet.as_manager()
 
     class Meta:
 
         ordering = ['-start_date']
+        indexes = [
+            models.Index(
+                fields = ['is_featured', 'start_date'],
+                name = 'event_feed_idx'
+            ),
+            models.Index(
+                fields = ['organisation', '-start_date'],
+                name = 'host_dashboard_idx'
+            )
+        ]
 
     def save(self, *args, **kwargs):
         # If the host didn't provide a deadline, take the default to be the event start date
