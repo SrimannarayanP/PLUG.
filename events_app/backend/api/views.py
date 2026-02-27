@@ -15,23 +15,39 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
 from rest_framework import generics, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import Category, CustomUser, Event, OrganisationProfile, Registration, SchoolCollege, StudentProfile
-from .permissions import IsEmailVerified, IsEventOwner, IsHostUser 
+from .models import Category, Event, Registration, SchoolCollege, EventDocument
+from .permissions import IsEmailVerified, IsEventOwner, IsHostUser
 from .serializers import (AttendeeListSerializer, BulkRegistrationSerializer, CategorySerializer, CustomTokenObtainPairSerializer, EventSerializer, RegistrationSerializer,
                           SchoolCollegeSerializer, SetNewPasswordSerializer, UserSerializer)
 from .tasks import send_password_reset_email, send_ticket_email, send_verification_email
-from .utils import generate_qr_code_base64, generate_ticket_token, generate_otp
+from .utils import generate_otp, track_unlisted_school_college_request
 
 import jwt, os
 
 User = get_user_model()
 
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_event_document(request, doc_id):
+
+    doc = get_object_or_404(EventDocument, id = doc_id)
+
+    if doc.event.organisation.user != request.user:
+
+        return Response({'error' : "Permission denied"}, status = 403)
+    
+    doc.delete()
+
+    return Response(status = 204)
 
 # --- Auth Views ---
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -57,36 +73,27 @@ class UserProfileView(APIView):
         return Response(serializer.data)
 
     def patch(self, request):
-        serializer = UserSerializer(request.user, data = request.data, partial = True) # Allows us to store only some fields instead of all
+        data = request.data.copy()
 
-        if hasattr(request.user, 'student_profile'):
-            profile = request.user.student_profile
+        school_college_id = data.get('school_college_id')
+        school_college_name = data.get('school_college_name', '').strip()
 
-            school_college_id = request.data.get('school_college_id')
-            school_college_name = request.data.get('school_college_name', '').strip()
-            school_college_city = request.data.get('school_college_city', '').strip()
-            school_college_state = request.data.get('school_college_state', '').strip()
+        if not school_college_id and school_college_name:
+            school_college_city = data.get('school_college_city', '').strip()
+            school_college_state = data.get('school_college_state', '').strip()
 
-            if school_college_id:
-                profile.school_college_id = school_college_id
+            if not school_college_city or not school_college_state:
 
-                profile.save()
-            elif school_college_name:
-                school_college = SchoolCollege.objects.filter(
-                    name__iexact = school_college_name.strip(),
-                    city__iexact = school_college_city.strip()
-                ).first()
+                return Response({'school_college' : ["City & State are required for unlisted college."]}, status = 400)
 
-                if not school_college:
-                    school_college = SchoolCollege.objects.create(
-                        name = school_college_name.strip(),
-                        city = school_college_city.strip(),
-                        state = school_college_state.strip()
-                    )
+            data['unlisted_school_college_data'] = {
+                'name' : school_college_name,
+                'campus' : data.get('school_college_campus', '').strip(),
+                'city' : school_college_city,
+                'state' : school_college_state
+            }
 
-                profile.school_college = school_college
-
-                profile.save()
+        serializer = UserSerializer(request.user, data = data, partial = True) # Allows us to store only some fields instead of all
 
         if serializer.is_valid():
             serializer.save()
@@ -210,9 +217,14 @@ class ResendOTPView(APIView):
 # --- Public Event Views ---
 class EventListView(generics.ListAPIView):
 
-    queryset = Event.objects.all().select_related('organisation').order_by('start_date')
     serializer_class = EventSerializer
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+
+        return Event.objects.visible_to(self.request.user).select_related(
+            'organisation', 'organisation__school_college'
+        ).prefetch_related('restricted_to_schools_colleges').order_by('start_date')
 
 
 # Basically, ye upcoming events dikhata hai. Abhi ka time aur 30 din baad ka time leke, unn dates ke beech me jo bhi events hai, unko return karegi ye view
@@ -222,8 +234,11 @@ class UpcomingEventListView(generics.ListAPIView):
     serializer_class = EventSerializer
 
     def get_queryset(self):
-
-        queryset = Event.objects.filter(is_featured = False, start_date__gte = timezone.now()).select_related('organisation').order_by('start_date')
+        queryset = Event.objects.visible_to(self.request.user).filter(
+            is_featured = False, start_date__gte = timezone.now()
+        ).select_related(
+            'organisation', 'organisation__school_college'
+        ).prefetch_related('restricted_to_schools_colleges').order_by('start_date')
 
         category_id = self.request.query_params.get('category_id')
 
@@ -241,16 +256,25 @@ class FeaturedEventListView(generics.ListAPIView):
 
     def get_queryset(self):
         
-        return Event.objects.filter(is_featured = True, start_date__gte = timezone.now()).select_related('organisation').order_by('start_date')
+        return Event.objects.visible_to(self.request.user).filter(
+            is_featured = True, start_date__gte = timezone.now()
+        ).select_related(
+            'organisation', 'organisation__school_college'
+        ).prefetch_related('restricted_to_schools_colleges').order_by('start_date')
 
 
 class EventDetailsView(generics.RetrieveUpdateDestroyAPIView):
 
-    queryset = Event.objects.all()
     serializer_class = EventSerializer
     permission_classes = [AllowAny] # This is to allow any un-logged in users to atleast see the event before registering.
     lookup_field = 'id'
-    parser_classes = [MultiPartParser, FormParser] # Required for file uploads (poster/brochure)
+    parser_classes = [FormParser, MultiPartParser] # Required for file uploads (poster/brochure)
+
+    def get_queryset(self):
+
+        return Event.objects.visible_to(self.request.user).select_related(
+            'organisation', 'organisation__school_college'
+        ).prefetch_related('restricted_to_schools_colleges')
 
     def get_permissions(self):
         if self.request.method in permissions.SAFE_METHODS:
@@ -281,9 +305,10 @@ class CreateEventView(APIView):
             # sab sahi rha, phir uss data me "Organisation ID" ko 'inject'/add karega. Phir usko backend me save karega.    
             save_kwargs = {'organisation' : user.organisation_profile}
 
-            is_paid = request.data.get('is_paid_event') == 'true'
-
-            if is_paid:
+            is_internal_event = str(request.data.get('is_internal_event', '')).lower() == 'true'
+            is_paid_event = str(request.data.get('is_paid_event')).lower() == 'true'
+            
+            if is_paid_event:
                 qr_path = os.path.join(settings.MEDIA_ROOT, 'platform_qr.jpg')
 
                 if os.path.exists(qr_path):
@@ -294,12 +319,29 @@ class CreateEventView(APIView):
                         save_kwargs['payment_qr_image'] = django_file
 
                         # Single save call
-                        serializer.save(**save_kwargs)
+                        event = serializer.save(**save_kwargs)
                 else:
-                    serializer.save(**save_kwargs)
+                    event = serializer.save(**save_kwargs)
             else:
                 # For free event
-                serializer.save(**save_kwargs)
+                event = serializer.save(**save_kwargs)
+
+            if is_internal_event:
+                host_school_college = user.organisation_profile.school_college
+
+                if host_school_college:
+                    event.restricted_to_schools_colleges.set([host_school_college])
+                else:
+                    requested_school_college_ids = request.data.getlist('restricted_to_school_college_ids')
+                    
+                    if requested_school_college_ids:
+                        school_college = SchoolCollege.objects.filter(id__in = requested_school_college_ids)
+
+                        event.restricted_to_schools_colleges.set(school_college)
+                    else:
+                        event.delete()
+
+                        return Response({'restricted_to_school_college_ids' : ["External promoters must select a target college for internal events."]}, status = 400)
 
             return Response(serializer.data, status = 201)
         
@@ -317,7 +359,9 @@ class HostEventListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
 
-        return Event.objects.filter(organisation = user.organisation_profile).order_by('-start_date')
+        return Event.objects.filter(organisation = user.organisation_profile).select_related(
+            'organisation', 'organisation__school_college'
+        ).prefetch_related('restricted_to_schools_colleges').order_by('-start_date')
 
 
 class HostEventDetailView(APIView):
@@ -327,16 +371,16 @@ class HostEventDetailView(APIView):
 
     def get(self, request, event_id):
         user = request.user
-
         profile = user.organisation_profile
 
         event = get_object_or_404(Event, id = event_id, organisation = profile)
         
         # Attendee List (.select_related avoids the problem of running 100 SQL queries for 100 students)
         registrations = Registration.objects.filter(
-            event = event, 
-            is_cancelled = False
-        ).select_related('student__user', 'student__school_college').order_by('-created_at')
+            event = event, is_cancelled = False
+        ).select_related(
+            'student__user', 'student__school_college'
+        ).order_by('-created_at')
 
         search_query = request.query_params.get('search', None)
 
@@ -374,9 +418,37 @@ class HostEventUpdateView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         if hasattr(self.request.user, 'organisation_profile'):
 
-            return Event.objects.filter(organisation = self.request.user.organisation_profile)
+            return Event.objects.filter(organisation = self.request.user.organisation_profile).select_related(
+                'organisation', 'organisation__school_college'
+            ).prefetch_related('restricted_to_schools_colleges')
 
         return Event.objects.none()
+    
+    def perform_update(self, serializer):
+        user = self.request.user
+
+        is_internal_event = str(self.request.data.get('is_internal_event', '')).lower() == 'true'
+
+        event = serializer.save()
+
+        if is_internal_event:
+            host_school_college = user.organisation_profile.school_college
+
+            if host_school_college:
+                event.restricted_to_schools_colleges.set([host_school_college])
+            else:
+                requested_school_college_ids = self.request.data.getlist('restricted_to_school_college_ids', [])
+
+                if requested_school_college_ids:
+                    school_college = SchoolCollege.objects.filter(id__in = requested_school_college_ids)
+
+                    event.restricted_to_schools_colleges.set(school_college)
+                else:
+
+                    raise ValidationError({'restricted_to_school_college_ids' : "External promoters must select a target college for internal events."})
+        else:
+            if 'is_internal_event' in self.request.data:
+                event.restricted_to_schools_colleges.clear()
 
 
 class ProcessPaymentView(APIView):
@@ -430,27 +502,6 @@ class RegisterForEventView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def _validate_event_requirements(self, event, data, user):
-        """Helper to validate smart fields & user data"""
-        errors = {}
-
-        if event.collect_phone and not data.get('phone_number'):
-            errors['phone_number'] = "Phone number is required."
-
-        if event.collect_college_school and not data.get('school_college_id'):
-            errors['school_college'] = "College selection is required."
-
-        if event.collect_student_id and not data.get('student_id_number'):
-            errors['student_id_number'] = "Student ID is required."
-
-        if event.is_paid_event and not data.get('transaction_id'):
-            errors['transaction_id'] = "Transaction ID is required."
-
-        if not user.is_authenticated and (not data.get('email') or not data.get('first_name')):
-            errors['guest_info'] = "Guest details required."
-
-        return errors
-
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         serializer = BulkRegistrationSerializer(data = request.data, context = {'request' : request})
@@ -462,6 +513,7 @@ class RegisterForEventView(APIView):
         data = serializer.validated_data
         event = data['event']
         attendees = data['attendees']
+        
         user = request.user
         student_profile = user.student_profile
 
@@ -481,33 +533,35 @@ class RegisterForEventView(APIView):
 
         # College check
         if event.collect_college_school and not student_profile.school_college:
-            school_college_id = data.get('school_college_id')
-            school_college_name = data.get('school_college_name')
+            school_college_id = buyer_data.get('school_college_id')
+            school_college_name = buyer_data.get('school_college_name')
 
             if school_college_id:
                 student_profile.school_college_id = school_college_id
-
+                student_profile.unlisted_school_college_data = {} # Clear any unlisted data if they selected a valid college from the dropdown
+                
                 profile_updated = True
             elif school_college_name:
-                school_college_city = data.get('school_college_city').strip()
-                school_college_state = data.get('school_college_state').strip()
+                unlisted_city = buyer_data.get('school_college_city', '').strip()
+                unlisted_state = buyer_data.get('school_college_state', '').strip()
 
-                school_college = SchoolCollege.objects.filter(
-                    name__iexact = school_college_name.strip(),
-                    city__iexact = school_college_city.strip(),
-                    state__iexact = school_college_state.strip()
-                ).first()
+                if not unlisted_city or not unlisted_state:
 
-                if not school_college:
-                    school_college = SchoolCollege.objects.create(
-                        name = school_college_name.strip(),
-                        city = school_college_city.strip(),
-                        state = school_college_state.strip()
-                    )
+                    return Response({'error' : "City & State are required for unlisted colleges."}, status = 400)
 
-                student_profile.school_college = school_college
+                unlisted_name = buyer_data.get('school_college_name').strip()
+                unlisted_campus = buyer_data.get('school_college_campus', '').strip()
+
+                student_profile.unlisted_school_college_data = {
+                    'name' : unlisted_name,
+                    'campus' : unlisted_campus,
+                    'city' : unlisted_city,
+                    'state' : unlisted_state
+                }
 
                 profile_updated = True
+
+                track_unlisted_school_college_request(unlisted_name, unlisted_campus, unlisted_city, unlisted_state)
 
         # Student ID check
         if event.collect_student_id and not student_profile.student_id_number:
@@ -548,14 +602,24 @@ class RegisterForEventView(APIView):
             if school_college_id:
                 try:
                     sc = SchoolCollege.objects.get(id = attendee['school_college_id'])
-                    school_college_name_str = f"{sc.name} ({sc.city})"
+                    school_college_name_str = f"{sc.name} - {sc.campus} ({sc.city})" if sc.campus else f"{sc.name} ({sc.city})"
                 except SchoolCollege.DoesNotExist:
                     pass
             elif attendee.get('school_college_name'):
-                school_college_name_str = attendee.get('school_college_name')
+                raw_name = attendee.get('school_college_name').strip()
+                raw_campus = attendee.get('school_college_campus', '').strip()
+                raw_city = attendee.get('school_college_city', '').strip()
+                raw_state = attendee.get('school_college_state', '').strip()
+
+                if raw_campus:
+                    school_college_name_str = f"{raw_name} - {raw_campus} ({raw_city})"
+                else:
+                    school_college_name_str = f"{raw_name} ({raw_city})"
+
+                track_unlisted_school_college_request(raw_name, raw_campus, raw_city, raw_state)
             elif is_buyer and student_profile.school_college:
                 sc = student_profile.school_college
-                school_college_name_str = f"{sc.name} ({sc.city})"
+                school_college_name_str = f"{sc.name} ({sc.city})" if sc.campus else f"{sc.name} ({sc.city})"
 
             guest_extra_info = {}
 
@@ -610,8 +674,7 @@ class RegisteredEventsView(generics.ListAPIView):
     def get_queryset(self):
 
         return Registration.objects.filter(
-            student__user = self.request.user,
-            is_cancelled = False
+            student__user = self.request.user, is_cancelled = False
         ).select_related(
             'event', # Fetches event details
             'event__organisation', # Fetches host details 
@@ -696,13 +759,9 @@ class VerifyTicketView(APIView):
 
         # Try to check in ONLY if currently checked out. This returns the number of rows modified.
         rows_updated = Registration.objects.filter(
-            id = registration_id,
-            event_id = token_event_id,
-            is_checked_in = False,
-            is_cancelled = False,
+            id = registration_id, event_id = token_event_id, is_checked_in = False, is_cancelled = False, payment_status = Registration.PaymentStatus.VERIFIED
         ).update(
-            is_checked_in = True,
-            checked_in_at = timezone.now()
+            is_checked_in = True, checked_in_at = timezone.now()
         )
 
         if rows_updated == 1:
@@ -710,10 +769,12 @@ class VerifyTicketView(APIView):
 
             school_college_display = 'N/A'
 
-            if registration.guest_data and 'school_college_name'in registration.guest_data:
+            if registration.guest_data and 'school_college_name' in registration.guest_data:
                 school_college_display = registration.guest_data['school_college_name']
             elif registration.student.school_college:
-                school_college_display = f"{registration.student.school_college.name} ({registration.student.school_college.city})"
+                sc = registration.student.school_college
+
+                school_college_display = f"{sc.name} - {sc.campus} ({sc.city})" if sc.campus else f"{sc.name} ({sc.city})"
 
             dob = registration.guest_data.get('date_of_birth') or registration.student.date_of_birth
 
@@ -733,6 +794,10 @@ class VerifyTicketView(APIView):
         try:
             # Failure case : The update failed. Why? Now we check the DB for a specific error message.
             registration = Registration.objects.get(id = registration_id, event_id = token_event_id)
+
+            if registration.payment_status != Registration.PaymentStatus.VERIFIED:
+
+                return Response({'error' : f"Ticket payment is {registration.get_}"})
 
             if registration.is_checked_in:
 
@@ -801,21 +866,49 @@ class CategoryListView(generics.ListAPIView):
 
 # Public endpoint to fetch all supported colleges for the signup dropdown.
 class SchoolCollegeListView(generics.ListAPIView):
-
-    serializer_class = SchoolCollegeSerializer
+    
     permission_classes = [AllowAny]
     pagination_class = None # Since it's a dropdown, the frontend should get the full list at once. Or else, it'll send some at once & won't show the others.
 
-    def get_queryset(self):
-        queryset = SchoolCollege.objects.all()
-        search_query = self.request.query_params.get('search', None) # Grabs search parameter from URL
-        
+    def list(self, request, *args, **kwargs):
+        search_query = request.query_params.get('search', '').strip()
+
+        official_queryset = SchoolCollege.objects.all()
+
         if search_query:
-            # Search by name or city (case-insensitive)
-            return queryset.filter(
+            official_queryset = official_queryset.filter(
                 Q(name__icontains = search_query) |
+                Q(campus__icontains = search_query) |
                 Q(city__icontains = search_query)
-            )[:20] # Limits to 20 results for speed
-        
-        # Returns top 20 by default so dropdown isn't empty
-        return queryset[:20] 
+            )
+
+        official_results = list(official_queryset[:15].values('id', 'name', 'campus', 'city', 'state'))
+
+        for item in official_results:
+            item['status'] = 'verified'
+
+        requested_results = []
+
+        remaining_slots = 20 - len(official_results)
+
+        if remaining_slots > 0:
+            from .models import UnlistedSchoolCollege
+
+            unlisted_queryset = UnlistedSchoolCollege.objects.all()
+
+            if search_query:
+                unlisted_queryset = unlisted_queryset.filter(
+                    Q(name__icontains = search_query) |
+                    Q(campus__icontains = search_query) |
+                    Q(city__icontains = search_query)
+                )
+
+            unlisted_data = list(unlisted_queryset[:remaining_slots].values('name', 'campus', 'city', 'state', 'request_count'))
+
+            for item in unlisted_data:
+                item['id'] = None
+                item['status'] = 'requested'
+
+                requested_results.append(item)
+
+        return Response(official_results + requested_results)
