@@ -21,12 +21,16 @@ export default function Onboarding() {
     const [submitting, setSubmitting] = useState(false)
     const [errors, setErrors] = useState(false)
 
+    const [isExternalPromoter, setIsExternalPromoter] = useState(false)
+
     const [formData, setFormData] = useState({
         phone_number : '',
         date_of_birth : '',
+        student_id_number : '',
         organisation_name : '',
         school_college_id : '',
         school_college_name : '',
+        school_college_campus : '',
         school_college_city : '',
         school_college_state : '',
     })
@@ -39,11 +43,18 @@ export default function Onboarding() {
 
                 setUser(response.data)
 
+                const isHostUser = response.data.role === 'host' || response.data.role === 'organisation'
+
+                if (isHostUser && !response.data.school_college?.id) {
+                    setIsExternalPromoter(true)
+                }
+
                 // Pre-fill existing data, if any
                 setFormData(prev => ({
                     ...prev,
                     phone_number : response.data.phone_number || '',
                     date_of_birth : response.data.date_of_birth || '',
+                    student_id_number : response.data.student_id_number || '',
                     organisation_name : response.data.role === 'host' ? response.data.name : '',
                     school_college_id : response.data.school_college?.id || '',
                     school_college_name : response.data.school_college?.name || ''
@@ -56,7 +67,7 @@ export default function Onboarding() {
                 setLoading(false)
             }
         }
-
+        
         fetchUser()
     }, [navigate])
 
@@ -79,8 +90,9 @@ export default function Onboarding() {
         if (!selection) {
             setFormData(prev => ({
                 ...prev,
-                school_college_id : '',
+                school_college_id : null,
                 school_college_name : '',
+                school_college_campus : '',
                 school_college_city : '',
                 school_college_state : '',
             }))
@@ -93,21 +105,26 @@ export default function Onboarding() {
                 ...prev,
                 school_college_id : '',
                 school_college_name : selection.name,
+                school_college_campus : '',
+                school_college_city : '',
+                school_college_state : ''
             }))
         } else {
             setFormData(prev => ({
                 ...prev,
                 school_college_id : selection.id,
                 school_college_name : selection.name,
+                school_college_campus : '',
                 school_college_city : '',
                 school_college_state : ''
             }))
         }
     }
 
+    const isHost = user?.role === 'host' || user?.role === 'organisation'
+
     const validateForm = () => {
         const newErrors = {}
-        const isHost = user.role === 'host'
         const rawPhone = formData.phone_number ? formData.phone_number.replace(/\D/g, '') : ''
 
         const isValidPhone = rawPhone.length === 10 ||
@@ -127,10 +144,24 @@ export default function Onboarding() {
         }
 
         if (isHost) {
+            if (!formData.phone_number) {
+                newErrors.phone_number = "Phone number is required for hosts."
+            } else if (!isValidPhone) {
+                newErrors.phone_number = "Please enter a valid phone number."
+            }
+
             if (!formData.organisation_name.trim()) {
                 newErrors.organisation_name = "Organisation name is required."
             }
+
+            if (!isExternalPromoter && !formData.school_college_id && !formData.school_college_name) {
+                newErrors.school_college_name = "College affiliation is required for official student clubs."
+            }
         } else {
+            if (formData.phone_number && !isValidPhone) {
+                newErrors.phone_number = "Please enter a valid phone number."
+            }
+
             if (formData.date_of_birth) {
                 const selectedDate = new Date(formData.date_of_birth)
                 const today = new Date()
@@ -139,15 +170,15 @@ export default function Onboarding() {
                     newErrors.date_of_birth = "Date of birth cannot be in the future."
                 }
             }
+        }
 
-            if (formData.school_college_name && !formData.school_college_id) {
-                if (!formData.school_college_city.trim()) {
-                    newErrors.school_college_city = "City is required for a new college."
-                }
+        if (formData.school_college_name && !formData.school_college_id) {
+            if (!formData.school_college_city.trim()) {
+                newErrors.school_college_city = "City is required for a new college."
+            }
 
-                if (!formData.school_college_state.trim()) {
-                    newErrors.school_college_state = "State is required for a new college."
-                }
+            if (!formData.school_college_state.trim()) {
+                newErrors.school_college_state = "State is required for a new college."
             }
         }
 
@@ -175,35 +206,37 @@ export default function Onboarding() {
             // Clean data before sending
             const payload = {...formData}
 
-            if (user.role === 'host') {
+            if (isHost) {
                 delete payload.date_of_birth
-                delete payload.school_college_id
-                delete payload.school_college_name
-                delete payload.school_college_city
-                delete payload.school_college_state
+                delete payload.student_id_number
+
+                if (isExternalPromoter) {
+                    payload.school_college_id = null
+
+                    delete payload.school_college_name
+                    delete payload.school_college_campus
+                    delete payload.school_college_city
+                    delete payload.school_college_state
+                }
             } else {
                 delete payload.organisation_name
 
                 if (!payload.school_college_name) {
-                    delete payload.school_college_id
+                    payload.school_college_id = null
+
                     delete payload.school_college_name
+                    delete payload.school_college_campus
                     delete payload.school_college_city
                     delete payload.school_college_state
                 }
             }
-
-            Object.keys(payload).forEach(key => {
-                if (payload[key] === '' || payload[key] === null) {
-                    delete payload[key]
-                }
-            })
 
             await api.patch('/api/user/profile/', payload)
 
             toast.success("Profile setup complete!")
 
             // Redirect based on role
-            if (user.role === 'host') {
+            if (isHost) {
                 navigate('/host/dashboard')
             } else {
                 navigate('/')
@@ -221,7 +254,6 @@ export default function Onboarding() {
 
     if (loading) return <LoadingSpinner />
 
-    const isHost = user?.role === 'host' || user?.role === 'organisation'
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
     const getInputStyle = (fieldName) => `
         h-12 w-full bg-[#18181b] border border-zinc-800 rounded-xl px-4 py-3 text-sm font-medium text-white placeholder:text-zinc-700 focus:outline-none 
@@ -231,6 +263,93 @@ export default function Onboarding() {
             : "border-zinc-800 focus:border-orange-500"
         }
     `
+
+    const renderCollegeSelection = () => {
+
+        return (
+
+            <div className = "relative space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">
+                    Your School/College {isHost && !isExternalPromoter && <span className = 'text-orange-500'>*</span>}
+                </label>
+
+                <SearchableSelect 
+                    value = {{
+                        id : formData.school_college_id,
+                        name : formData.school_college_name
+                    }}
+                    onChange = {handleCollegeChange}
+                    placeholder = "Search or add school/college..."
+                    endpoint = '/api/data/colleges/'
+                    hasError = {!!errors.school_college_name}
+                />
+
+                {errors.school_college_name && (
+                    <p className = "text-[10px] text-red-500 mt-1 ml-1">
+                        {errors.school_college_name}
+                    </p>
+                )}
+
+                {!formData.school_college_id && formData.school_college_name && (
+                    <div className = "grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 pt-2">
+                        <p className = "col-span-2 text-xs text-orange-400 font-medium mb-1 flex items-center gap-1">
+                            <AlertCircle className = "h-4 w-4" />
+
+                            Unlisted college. Please provide details:
+                        </p>
+
+                        <div className = 'col-span-2'>
+                            <input 
+                                placeholder = "Campus (optional) e.g. Ring Road"
+                                value = {formData.school_college_campus}
+                                onChange = {(e) => handleChange('school_college_campus', e.target.value)}
+                                className = {getInputStyle('school_college_campus')}
+                            />
+                        </div>
+
+                        <div>
+                            <input 
+                                placeholder = 'City*'
+                                value = {formData.school_college_city}
+                                onChange = {(e) => handleChange('school_college_city', e.target.value)}
+                                className = {getInputStyle('school_college_city')}
+                            />
+
+                            {errors.school_college_city && (
+                                <p className = "text-[10px] text-red-500 mt-1 ml-1">
+                                    {errors.school_college_city}
+                                </p>
+                            )}
+                        </div>
+
+                        <div>
+                            <input 
+                                placeholder = 'State*'
+                                value = {formData.school_college_state}
+                                onChange = {(e) => handleChange('school_college_state', e.target.value)}
+                                className = {getInputStyle('school_college_state')}
+                            />
+
+                            {errors.school_college_state && (
+                                <p className = "text-[10px] text-red-500 mt-1 ml-1">
+                                    {errors.school_college_state}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <p className = "text-[10px] text-zinc-600 ml-1 mt-2">
+                    {isHost
+                        ? "Allows you to host exclusive internal events for your campus."
+                        : "Links you to exclusive campus events."
+                    }
+                </p>
+            </div>
+        
+        )
+
+    }
 
     return (
 
@@ -317,97 +436,71 @@ export default function Onboarding() {
                     
                     {/* Host Specific */}
                     {isHost && (
-                        <div className = "space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                            <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 flex justify-between">
-                                Organisation Name <span className = 'text-orange-500'>*</span>
-                            </label>
+                        <>
+                            <div className = "space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 flex justify-between">
+                                    Organisation Name <span className = 'text-orange-500'>*</span>
+                                </label>
 
-                            <div className = "relative group">
-                                <Building2 className = "absolute left-4 top-3.5 h-4 w-4 text-zinc-600 group-focus-within:text-white transition-colors" />
+                                <div className = "relative group">
+                                    <Building2 className = "absolute left-4 top-3.5 h-4 w-4 text-zinc-600 group-focus-within:text-white transition-colors" />
 
-                                <input 
-                                    type = 'text'
-                                    value = {formData.organisation_name}
-                                    onChange = {(e) => handleChange('organisation_name', e.target.value)}
-                                    placeholder = "e.g. Debate Society"
-                                    className = {getInputStyle('organisation_name') + " pl-10"}
+                                    <input 
+                                        type = 'text'
+                                        value = {formData.organisation_name}
+                                        onChange = {(e) => handleChange('organisation_name', e.target.value)}
+                                        placeholder = "e.g. Debate Society"
+                                        className = {getInputStyle('organisation_name') + " pl-10"}
+                                    />
+                                </div>
+
+                                {errors.organisation_name && (
+                                    <p className = "text-[10px] text-red-500 ml-1">
+                                        {errors.organisation_name}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className = "flex items-center justify-between p-4 bg-[#18181b] border border-zinc-800 rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-500 delay-75">
+                                <div>
+                                    <h3 className = "text-sm font-bold text-white">
+                                        External Promoter
+                                    </h3>
+
+                                    <p className = "text-[10px] text-zinc-500">
+                                        I am not affiliated with a specific school/college.
+                                    </p>
+                                </div>
+
+                                <input
+                                    type = 'checkbox'
+                                    checked = {isExternalPromoter}
+                                    onChange = {(e) => {
+                                        setIsExternalPromoter(e.target.checked)
+
+                                        if (e.target.checked) {
+                                            setFormData(prev => ({
+                                                ...prev, school_college_id : '', school_college_name : '', school_college_campus : '', school_college_city : '',
+                                                school_college_state : ''
+                                            }))
+
+                                            setErrors(prev => ({
+                                                ...prev, school_college_name : null, school_college_city : null, school_college_state : null
+                                            }))
+                                        }
+                                    }}
+                                    className = "h-5 w-5 rounded border border-zinc-700 bg-zinc-900 text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
                                 />
                             </div>
 
-                            {errors.organisation_name && (
-                                <p className = "text-[10px] text-red-500 ml-1">
-                                    {errors.organisation_name}
-                                </p>
-                            )}
-                        </div>
+                            {!isExternalPromoter && renderCollegeSelection()}
+                        </>
                     )}
 
                     {/* Student Specific */}
                     {!isHost && (
                         <>
-                            <div className = "relative space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">
-                                    Your School/College
-                                </label>
-
-                                <SearchableSelect 
-                                    value = {{
-                                        id : formData.school_college_id,
-                                        name : formData.school_college_name
-                                    }}
-                                    onChange = {handleCollegeChange}
-                                    placeholder = "Search or add college..."
-                                    endpoint = '/api/data/colleges/'
-                                />
-
-                                {!formData.school_college_id && formData.school_college_name && (
-                                    <div className = "grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 pt-2">
-                                        <div>
-                                            <input 
-                                                placeholder = "City*"
-                                                value = {formData.school_college_city}
-                                                onChange = {(e) => handleChange('school_college_city', e.target.value)}
-                                                className = {getInputStyle('school_college_city')}
-                                            />
-
-                                            {errors.school_college_city && (
-                                                <p className = "text-[10px] text-red-500 mt-1 ml-1">
-                                                    {errors.school_college_city}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        <div>
-                                            <input
-                                                placeholder = "State*"
-                                                value = {formData.school_college_state}
-                                                onChange = {(e) => handleChange('school_college_state', e.target.value)}
-                                                className = {getInputStyle('school_college_state')}
-                                            />
-
-                                            {errors.school_college_state && (
-                                                <p className = "text-[10px] text-orange-400 flex items-center gap-1">
-                                                    <MapPin className = "h-3 w-3" />
-
-                                                    Location required for new colleges.
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        <div className = 'col-span-2'>
-                                            <p className = "text-[10px] text-orange-400 flex items-center gap-1">
-                                                <MapPin className = "h-3 w-3" />
-
-                                                Location required for new colleges.
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                <p className = "text-[10px] text-zinc-600 ml-1">
-                                    Links you to exclusive campus events.
-                                </p>
-                            </div>
+                            {renderCollegeSelection()}
 
                             {/* Date Of Birth */}
                             <div className = "space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -444,6 +537,28 @@ export default function Onboarding() {
                                     Used for age verification on restricted events.
                                 </p>
                             </div>
+
+                            <div className = "space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">
+                                    Student ID / USN (Optional)
+                                </label>
+
+                                <div className = "relative group">
+                                    <GraduationCap className = "absolute left-4 top-3.5 h-4 w-4 text-zinc-600 group-focus-within:text-white transition-colors" />
+
+                                    <input 
+                                        type = 'text'
+                                        value = {formData.student_id_number}
+                                        onChange ={(e) => handleChange('student_id_number', e.target.value)}
+                                        placeholder = "e.g. 1RV21CS001"
+                                        className = {getInputStyle('student_id_number') + " pl-10"}
+                                    />
+                                </div>
+
+                                <p className = "text-[10px] text-zinc-600 ml-1">
+                                    Required by some hosts for campus-specific events.
+                                </p>
+                            </div>
                         </>
                     )}
 
@@ -451,11 +566,13 @@ export default function Onboarding() {
                         <button
                             type = 'submit'
                             disabled = {submitting}
-                            className = {`w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 transition-all duration-300 ${
-                                submitting
+                            className = {`
+                                w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 transition-all duration-300
+                                ${submitting
                                     ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
                                     : "bg-white text-black hover:bg-zinc-200 shadow-lg"
-                            }`}
+                                }
+                            `}
                         >
                             {submitting ? (
                                 <>
@@ -477,5 +594,4 @@ export default function Onboarding() {
         </div>
 
     )
-
 }
