@@ -2,7 +2,7 @@
 
 
 import {useEffect, useState} from 'react'
-import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, Ban, Archive, Send, RefreshCw} from 'lucide-react'
+import {X, Loader2, CalendarDays, MapPin, ExternalLink, ChevronLeft, ChevronRight, User, Ban, Archive, Send, RefreshCw, CheckCircle, Check} from 'lucide-react'
 import {toast} from 'react-hot-toast'
 
 import api from '../../api/api'
@@ -23,7 +23,9 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
 
     const isPending = currentTicket.payment_status === 'pending'
     const isRefundPending = currentTicket.payment_status === 'refund_pending'
-    const isVerified = currentTicket.payment_status === 'verified' || currentTicket.checked_in
+    const isRefundProcessed = currentTicket.payment_status === 'refund_processed'
+
+    const isVerified = currentTicket.payment_status === 'verified' || currentTicket.is_checked_in
     const isCancelled = currentTicket.is_cancelled
     const isExpired = checkEventExpiry(event.end_date)
 
@@ -55,7 +57,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
         setCancelling(true)
 
         try {
-            const res = await api.post(`/api/ticket/cancel/${currentTicket.id}`)
+            const res = await api.post(`/api/ticket/cancel/${currentTicket.id}/`)
 
             toast.success(res.data.message || "Ticket Cancelled")
 
@@ -92,7 +94,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
         setResending(true)
 
         try {
-            await api.post(`/api/ticket/resend/${currentTicket.id}`)
+            await api.post(`/api/ticket/resend/${currentTicket.id}/`)
             
             toast.success(`Ticket sent to ${currentTicket.email}`)
         } catch (err) {
@@ -102,6 +104,60 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
         } finally {
             setResending(false)
         }
+    }
+
+    const renderQRState = () => {
+        if (isVerified && !isCancelled && !isRefundPending && !isRefundProcessed && !isExpired) {
+
+            return (
+
+                <img 
+                    key = {currentTicket.id}
+                    src = {currentTicket.qr_code}
+                    alt = "Ticket QR"
+                    className = "h-40 sm:h-48 w-40 sm:w-48 object-contain mix-blend-multiply"
+                    style = {{colorAdjust : 'exact'}}
+                />
+
+            )
+
+        }
+
+        return (
+
+            <div className = "h-40 sm:h-48 w-40 sm:w-48 flex flex-col items-center justify-center text-xs text-gray-500 text-center font-mono p-4 border-2 border-dashed border-gray-300 rounded-lg">
+                {isRefundProcessed ? (
+                    <>
+                        <CheckCircle className = "h-8 w-8 mb-2 opacity-50" />
+
+                        <span>REFUND</span>
+                    </>
+                ) : isCancelled && !isRefundPending ? (
+                    <>
+                        <Ban className = "h-8 w-8 mb-2 opacity-50" />
+
+                        <span>INVALID</span>
+                    </>
+                ) : isRefundPending ? (
+                    <>
+                        <Loader2 className = "h-8 w-8 mb-2 animate-spin opacity-50" />
+
+                        <span>REFUND<br />IN PROGRESS</span>
+                    </>
+                ) : isExpired ? (
+                    <>
+                        <Archive className = "h-8 w-8 mb-2 opacity-50" />
+
+                        <span>EVENT<br />ENDED</span>
+                    </>
+                ) : isPending ? (
+                    'Verifying...'
+                ) : (
+                    'Void'
+                )}
+            </div>
+
+        )
     }
 
     return (
@@ -119,7 +175,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
             >
                 <div 
                     className = {`
-                        relative w-full h-full transition-transform duration-700 transform-style-3d
+                        relative h-full w-full transition-transform duration-700 transform-style-3d
                         ${isFlipped
                             ? 'rotate-y-180'
                             : ''
@@ -188,26 +244,28 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
 
                                     {currentTicket.attendee_name || 'Guest'}
                                 </div>
-
-                                {/* Corner cutouts */}
-                                {/* <div className = "absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10 border-t border-r border-white/10" />
-                                <div className = "absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10 border-t border-l border-white/10" /> */}
                             </div>
 
                             {/* Bottom half - QR code */}
                             <div className = "flex flex-col flex-1 overflow-y-auto p-6 items-center bg-black relative">
                                 {/* Status Badges */}
                                 <div className = 'mb-6'>
-                                    {isCancelled ? (
+                                    {isRefundProcessed ? (
+                                        <span className = "text-zinc-400 text-xs font-bold flex items-center gap-2 bg-zinc-800/50 px-3 py-1 rounded-full border border-zinc-700/50">
+                                            <CheckCircle size = {10}/>
+
+                                            Refund Processed
+                                        </span>
+                                    ) : isCancelled && !isRefundPending ? (
                                         <span className = "text-red-500 text-xs font-bold flex items-center gap-2 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
-                                            <Ban size = {10}/>
+                                            <Ban size = {10} />
 
                                             Ticket Cancelled
                                         </span>
                                     ) : isRefundPending ? (
-                                        <span className = "text-yellow-500 text-xs font-bold flex items-center gap-2 bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">
+                                        <span className = "text-orange-500 text-xs font-bold flex items-center gap-2 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20">
                                             <Loader2 
-                                                className = 'animate-spin' 
+                                                className = 'animate-spin'
                                                 size = {12}
                                             />
 
@@ -240,7 +298,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                                 </div>
 
                                 <div className = "relative group mb-6 shrink-0 transition-all duration-300">
-                                    {!isCancelled && !isRefundPending && !isExpired && (
+                                    {!isCancelled && !isRefundPending && !isRefundProcessed && !isExpired && (
                                         // Gradient frame around QR
                                         <div className = {`absolute -inset-1 ${festiveGradient} rounded-2xl opacity-75 blur-sm transition duration-500`} />
                                     )}
@@ -248,48 +306,18 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                                     <div 
                                         className = {`
                                             relative bg-white p-3 rounded-xl
-                                            ${isCancelled || isRefundPending || isExpired
+                                            ${isCancelled || isRefundPending || isRefundProcessed || isExpired
                                                 ? "opacity-50 grayscale"
                                                 : ''
                                             }
                                         `}
                                     >
-                                        {(isVerified && !isCancelled && !isRefundPending && !isExpired) ? (
-                                            <img
-                                                key = {currentTicket.id} 
-                                                src = {currentTicket.qr_code}
-                                                alt = "Ticket QR"
-                                                className = "h-40 sm:h-48 w-40 sm:w-48 object-contain mix-blend-multiply"
-                                                style = {{colorAdjust : 'exact'}}
-                                            />
-                                        ) : (
-                                            <div className = "h-40 sm:h-48 w-40 sm:w-48 flex flex-col items-center justify-center text-xs text-gray-500 text-center font-mono p-4 border-2 border-dashed border-gray-300 rounded-lg">
-                                                {isCancelled ? (
-                                                    <>
-                                                        <Ban className = "h-8 w-8 mb-2 opacity-50" />
-
-                                                        <span>INVALID</span>
-                                                    </>
-                                                ) : isRefundPending ? (
-                                                    <>
-                                                        <Loader2 className = "h-8 w-8 mb-2 animate-spin opacity-50" />
-
-                                                        <span>REFUND<br />IN PROGRESS</span>
-                                                    </>
-                                                ) : isExpired ? (
-                                                    <>
-                                                        <Archive className = "h-8 w-8 mb-2 opacity-50" />
-
-                                                        <span>EVENT<br />ENDED</span>
-                                                    </>
-                                                ) : isPending ? 'Verifying...' : 'Void'}
-                                            </div>
-                                        )}
+                                        {renderQRState()}
                                     </div>
                                 </div>
 
                                 {/* Manual code fallback */}
-                                {(isVerified && !isCancelled && !isRefundPending && !isExpired) && (
+                                {(isVerified && !isCancelled && !isRefundPending && !isRefundProcessed && !isExpired) && (
                                     <div className = "flex flex-col items-center gap-1.5 animate-in fade-in duration-500">
                                         <span className = "text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
                                             Manual Entry Code
@@ -415,7 +443,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                             
                             {/* Action Button Container */}
                             <div className = "p-6 bg-zinc-950 border-t border-zinc-900 space-y-3 mt-auto shrink-0">
-                                {!isCancelled && !currentTicket.is_checked_in && !isRefundPending && !isExpired && (
+                                {!isCancelled && !currentTicket.is_checked_in && !isRefundPending && !isRefundProcessed && !isExpired && (
                                     <button
                                         onClick = {handleCancelTicket}
                                         disabled = {cancelling}
@@ -430,7 +458,7 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
                                     </button>
                                 )}
 
-                                {!isCancelled && !isRefundPending && !isExpired && (
+                                {!isCancelled && !isRefundPending && !isRefundProcessed && !isExpired && (
                                     <button
                                         onClick = {handleResendTicket}
                                         disabled = {resending}
@@ -468,4 +496,5 @@ export default function TicketModal({tickets : initialTickets, closeModal}) {
         </div>
 
     )
+    
 }
