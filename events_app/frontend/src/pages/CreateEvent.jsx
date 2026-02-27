@@ -1,7 +1,7 @@
 // CreateEvent.jsx
 
 
-import React, {useState, useEffect, useCallback, useMemo, Suspense} from 'react'
+import React, {useState, useEffect, useCallback, Suspense} from 'react'
 import {useNavigate, useLocation} from 'react-router-dom'
 import {Upload, FileText, Layers, IndianRupee, Check, Calendar, MapPin, Clock, Tag, Trash2, Paperclip, X, AlertCircle, Users, Plus, Minus, Shield, Loader2} from 'lucide-react'
 import {toast} from 'react-hot-toast'
@@ -28,7 +28,6 @@ const logError = (context, error) => {
 }
 
 const ToggleSwitch = React.memo(({label, description, checked, onChange, icon : Icon, activeColor = 'bg-green-500'}) => (
-
     <div 
         className = {`
             group flex items-center justify-between p-4 rounded-xl border transition-all duration-300
@@ -72,7 +71,8 @@ const ToggleSwitch = React.memo(({label, description, checked, onChange, icon : 
             type = 'button'
             onClick = {() => onChange(!checked)}
             className = {`
-                relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none
+                relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out
+                focus:outline-none
                 ${checked
                     ? activeColor
                     : 'bg-zinc-700'
@@ -95,7 +95,6 @@ const ToggleSwitch = React.memo(({label, description, checked, onChange, icon : 
             />
         </button>
     </div>
-
 ))
 
 export default function CreateEvent() {
@@ -109,7 +108,6 @@ export default function CreateEvent() {
     const [loading, setLoading] = useState(false)
     const [isCompressing, setIsCompressing] = useState(false)
     const [pageErrors, setPageErrors] = useState({})
-    const [error, setError] = useState(null)
 
     const [hasAgeLimit, setHasAgeLimit] = useState(false)
     const [hasCustomDeadline, setHasCustomDeadline] = useState(false)
@@ -123,6 +121,9 @@ export default function CreateEvent() {
     const [newDocuments, setNewDocuments] = useState([])
     const [existingDocuments, setExistingDocuments] = useState([])
     const [posterFile, setPosterFile] = useState(null)
+
+    const [availableSchoolsColleges, setAvailableSchoolsColleges] = useState([])
+    const [hostProfile, setHostProfile] = useState(null)
 
     const [formData, setFormData] = useState({
         name : '',
@@ -147,6 +148,9 @@ export default function CreateEvent() {
         // Payment state
         is_paid_event : false,
         ticket_price : '',
+
+        is_internal_event : false,
+        restricted_to_school_college_ids : [],
     })
 
     useEffect(() => {
@@ -163,19 +167,25 @@ export default function CreateEvent() {
 
     // Load categories
     useEffect(() => {
-        const fetchCategories = async () => {
+        const fetchData = async () => {
             try {
-                const res = await api.get('/api/data/categories/')
+                const [catRes, colRes, profileRes] = await Promise.all([
+                    api.get('/api/data/categories/'),
+                    api.get('/api/data/colleges/'),
+                    api.get('/api/user/profile/')
+                ])
                 
-                setAvailableCategories(Array.isArray(res.data.results) ? res.data.results : res.data || [])
+                setAvailableCategories(Array.isArray(catRes.data.results) ? catRes.data.results : catRes.data || [])
+                setAvailableSchoolsColleges(Array.isArray(colRes.data.results) ? colRes.data.results : colRes.data || [])
+                setHostProfile(profileRes.data.profile)
             } catch (err) {
-                logError('CategoryFetch', err)
+                logError('DataFetch', err)
                 
-                toast.error("Could not load categories. Please refresh.")
+                toast.error("Could not load data. Please refresh.")
             }
         }
 
-        fetchCategories()
+        fetchData()
     }, [])
 
     // Load form with existing data if edit mode
@@ -205,6 +215,9 @@ export default function CreateEvent() {
 
                 is_paid_event : eventToEdit.is_paid_event,
                 ticket_price : eventToEdit.ticket_price || '',
+
+                is_internal_event : eventToEdit.is_internal_event || false,
+                restricted_to_school_college_ids : eventToEdit.restricted_to_school_college_ids || [],
             })
 
             // Pre-fill categories - What this means is that the API calls gives full objs to display but selectedCategories only accepts list of IDs. So we use map
@@ -269,7 +282,7 @@ export default function CreateEvent() {
         if (!window.confirm("Delete this document?")) return
 
         try {
-            await api.delete(`api/host/document/${docId}/delete/`)
+            await api.delete(`/api/host/document/${docId}/delete/`)
 
             setExistingDocuments(prev => prev.filter(doc => doc.id !== docId))
 
@@ -305,7 +318,7 @@ export default function CreateEvent() {
 
     const handleCategoryToggle = (catId) => {
         setSelectedCategories(prev => {
-            if (isSelected) {
+            if (prev.includes(catId)) {
                 
                 return prev.filter(id => id !== catId) // Remove if already exists in categories
 
@@ -317,56 +330,32 @@ export default function CreateEvent() {
         })
     }
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0]
-        const name = e.target.name
+    const handleCollegeToggle = (collegeId) => {
+        setPageErrors(prev => {
+            if (prev.restricted_to_school_college_ids) {
+                const newErrors = {...prev}
 
-        if (!file) return
+                delete newErrors.restricted_to_school_college_ids
 
-        if (name === 'poster') {
-            const allowedExtensions = /(\.jpg|\.jpeg|\.png|\.webp)$/i
-
-            if (!allowedExtensions.exec(file.name)) {
-                alert("Invalid file type. Please upload a JPG, PNG or WEBP image.")
-
-                e.target.value = ''
-
-                return   
+                return newErrors
             }
 
-            if (file.size > 2 * 1024 * 1024) {
-                alert("Poster is too heavy! Max. size is 2MB")
+            return prev
+        })
 
-                e.target.value = ''
+        setFormData(prev => {
+            const currentIds = prev.restricted_to_school_college_ids || []
 
-                return
+            if (currentIds.includes(collegeId)) {
+
+                return {...prev, restricted_to_school_college_ids : currentIds.filter(id => id !== collegeId)} // Remove if already exists in categories
+
+            } else {
+
+                return {...prev, restricted_to_school_college_ids : [...currentIds, collegeId]} // Add if doesn't exist in existing list of categories
+
             }
-                
-            setPosterFile(file)
-            setPosterPreview(URL.createObjectURL(file))
-        }
-
-        else if (name === 'brochure') {
-            const allowedExtensions = /(\.pdf|\.doc|\.docx)$/i
-
-            if (!allowedExtensions.exec(file.name)) {
-                alert("Invalid file type. Only PDF & DOC files are allowed.")
-
-                e.target.value = ''
-
-                return
-            }
-
-            if (file.size > 5 * 1024 * 1024) {
-                alert("Brochure is too big! Max. size is 5MB")
-
-                e.target.value = ''
-
-                return
-            }
-
-            setBrochureFile(file)
-        }
+        })
     }
 
     const handleTicketsChange = useCallback((delta) => {
@@ -467,10 +456,16 @@ export default function CreateEvent() {
 
             if (key === 'virtual_location' && formData.location_type !== 'online') return
 
+            if (key === 'restricted_to_school_college_ids') return
+
             data.append(key, value)
         })
 
         selectedCategories.forEach(id => data.append('category_ids', id))
+
+        if (formData.is_internal_event && !hostProfile?.school_college) {
+            formData.restricted_to_school_college_ids.forEach(id => data.append('restricted_to_school_college_ids', id))
+        }
 
         if (posterFile) data.append('poster', posterFile)
 
@@ -517,10 +512,7 @@ export default function CreateEvent() {
     }
 
     const handleDescriptionChange = (htmlContent) => {
-        setFormData(prev => ({
-            ...prev,
-            description : htmlContent,
-        }))
+        setFormData(prev => ({...prev, description : htmlContent}))
     }
 
     const validateForm = () => {
@@ -533,11 +525,9 @@ export default function CreateEvent() {
         if (!formData.name.trim()) errors.name = "Event name is required"
 
         if (!formData.start_date) errors.start_date = "Start date is required"
-
         if (!formData.end_date) errors.end_date = "End date is required"
 
         if (formData.start_date && start < now) errors.start_date = "Start date cannot be in the past"
-
         if (formData.start_date && formData.end_date && start >= end) errors.end_date = "End date must be after the start date"
 
         if (hasCustomDeadline && formData.registration_deadline) {
@@ -555,7 +545,10 @@ export default function CreateEvent() {
         if (formData.is_paid_event && (!formData.ticket_price || formData.ticket_price <= 0)) errors.ticket_price = "Valid ticket price required"
 
         if (hasAgeLimit && !formData.age_restriction_cutoff) errors.age_restriction_cutoff = "Cutoff data required"
-    
+
+        if (formData.is_internal_event && (!hostProfile?.school_college && !formData.restricted_to_school_college_ids.length === 0)) {
+            errors.restricted_to_school_college_ids = "External promoters must select target schools/colleges."
+        }
         return errors
     }
 
@@ -1075,6 +1068,86 @@ export default function CreateEvent() {
                         <div className = "grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className = 'space-y-4'>
                                 <ToggleSwitch 
+                                    label = "Internal Event"
+                                    description = "Restrict this event exclusively to students of a specific college."
+                                    icon = {Shield}
+                                    checked = {formData.is_internal_event}
+                                    onChange = {(checked) => setFormData(prev => ({...prev, is_internal_event : checked}))}
+                                    activeColor = 'bg-indigo-500'
+                                />
+
+                                {formData.is_internal_event && (
+                                    <div className = "pl-4 border-l-2 border-zinc-800 ml-4 animate-in slide-in-from-top-2 fade-in duration-300">
+                                        {hostProfile?.school_college ? (
+                                            // College Club
+                                            <div className = "bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
+                                                <p className = "text-xs text-zinc-400 leading-relaxed">
+                                                    <span className = "font-bold text-indigo-400">
+                                                        Automated Restriction:
+                                                    </span><br />
+
+                                                    This event will be strictly limited to verified students from <strong>{hostProfile.school_college.name}</strong>
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            // External Promoter
+                                            <div className = "bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
+                                                <label className = "block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+                                                    Select Target Campuses
+                                                </label>
+
+                                                <div className = "max-h-60 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
+                                                    {availableSchoolsColleges.map(school_college => {
+                                                        const isSelected = formData.restricted_to_school_college_ids.includes(school_college.id)
+
+                                                        return (
+
+                                                            <button
+                                                                key = {school_college.id}
+                                                                type = 'button'
+                                                                onClick = {() => handleCollegeToggle(school_college.id)}
+                                                                className = {`
+                                                                    w-full text-left flex items-center gap-3 p-3 rounded-lg text-sm transition-all duration-200
+                                                                    ${isSelected
+                                                                        ? "bg-indigo-500/20 border border-indigo-500 text-white"
+                                                                        : "bg-black/40 border-zinc-800 text-zinc-400 border hover:border-zinc-600"
+                                                                    }    
+                                                                `}
+                                                            >
+                                                                <div
+                                                                    className = {`
+                                                                        h-5 w-5 rounded flex items-center justify-center shrink-0 transition-colors
+                                                                        ${isSelected
+                                                                            ? "bg-indigo-500 text-white"
+                                                                            : 'bg-zinc-800'
+                                                                        }
+                                                                    `}
+                                                                >
+                                                                    {isSelected && <Check className = "h-3 w-3" />}
+                                                                </div>
+
+                                                                <span className = 'truncate'>
+                                                                    {school_college.name} {school_college.campus ? `-${school_college.campus}` : ''} ({school_college.city})
+                                                                </span>
+                                                            </button>
+
+                                                        )
+                                                    })}
+                                                </div>
+
+                                                {pageErrors.restricted_to_school_college_ids && (
+                                                    <p className = "text-red-500 text-xs mt-2 flex items-center gap-1">
+                                                        <AlertCircle className = "h-3 w-3" />
+
+                                                        {pageErrors.restricted_to_school_college_id}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <ToggleSwitch 
                                     label = "Paid Event"
                                     description = "Enable ticket pricing for this event."
                                     icon = {IndianRupee}
@@ -1282,5 +1355,5 @@ export default function CreateEvent() {
         </div>
 
     )
-
+    
 }
