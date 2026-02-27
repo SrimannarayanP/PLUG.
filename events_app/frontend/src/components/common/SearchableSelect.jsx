@@ -7,7 +7,7 @@ import {Check, ChevronsUpDown, Plus, Loader2, School} from 'lucide-react'
 import apiPublic from '../../api/apiPublic'
 
 
-export default function SearchableSelect({value, onChange, placeholder = "Select option...", endpoint = ''}) {
+export default function SearchableSelect({value, onChange, placeholder = "Select option...", endpoint = '', hasError = false}) {
 
     const [isOpen, setIsOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
@@ -27,7 +27,13 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
         document.addEventListener('mousedown', handleClickOutside)
 
         return () => document.removeEventListener('mousedown', handleClickOutside)
-    })
+    }, [])
+
+    useEffect(() => {
+        if (!value?.name) {
+            setSearchTerm('')
+        }
+    }, [value?.name])
 
     // Debounced search
     useEffect(() => {
@@ -75,7 +81,7 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
         setIsOpen(false)
     }
 
-    const displayValue = value?.name || searchTerm || ''
+    const displayValue = isOpen ? searchTerm : (value?.name || '')
 
     return (
 
@@ -84,18 +90,37 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
             ref = {wrapperRef}
         >
             <div
-                className = "flex items-center justify-between w-full px-4 py-3 bg-zinc-900/50 border border-zinc-700 rounded-xl text-white focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500/20 cursor-text transition-all"
+                className = {`
+                    flex items-center justify-between w-full px-4 py-3 bg-zinc-900/50 border border-zinc-700 rounded-xl text-white focus-within:border-orange-500
+                    focus-within:ring-1 focus-within:ring-orange-500/20 cursor-text transition-all
+                    ${hasError
+                        ? "border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20 bg-red-500/5"
+                        : "border-zinc-700 focus-within:border-orange-500 focus-within:ring-orange-500/20"
+                    }
+                `}
                 onClick = {() => setIsOpen(true)}
             >
                 <div className = "flex items-center gap-3 w-full">
-                    <School className = "h-4 w-4 text-zinc-500 shrink-0" />
+                    <School 
+                        className = {`
+                            h-4 w-4 text-zinc-500 shrink-0
+                            ${hasError
+                                ? 'text-red-500'
+                                : 'text-zinc-500'
+                            }
+                        `}
+                    />
                 
                     <input 
                         type = 'text'
                         className = "bg-transparent border-none outline-none text-sm w-full placeholder:text-zinc-600 text-white"
                         placeholder = {placeholder}
-                        value = {isOpen ? searchTerm : displayValue}
-                        onChange = {(e) => setSearchTerm(e.target.value)}
+                        value = {displayValue}
+                        onChange = {(e) => {
+                            setSearchTerm(e.target.value)
+
+                            if (!isOpen) setIsOpen(true)
+                        }}
                         onFocus = {() => setIsOpen(true)}
                     />
                 </div>
@@ -111,23 +136,31 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
                 <div className = "absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl max-h-60 overflow-auto animate-in fade-in slide-in-from-top-2">
                     {options.length > 0 ? (
                         <ul className = 'pl-1'>
-                            {options.map((option) => (
+                            {options.map((option, index) => (
                                 <li
-                                    key = {option.id}
+                                    key = {option.id || `unlisted-${index}`}
                                     onClick = {() => handleSelect(option)}
                                     className = "flex items-center justify-between px-3 py-2.5 text-sm text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white cursor-pointer transition-colors"
                                 >
                                     <div className = "flex flex-col">
-                                        <span className = 'font-medium'>
-                                            {option.name}
-                                        </span>
+                                        <div className = "flex items-center gap-2">
+                                            <span className = 'font-medium'>
+                                                {option.name} {option.campus ? `-${option.campus}` : ''}
+                                            </span>
+
+                                            {option.status === 'requested' && (
+                                                <span className = "px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                                                    Requested
+                                                </span>
+                                            )}
+                                        </div>
 
                                         <span className = "text-[10px] text-zinc-500">
-                                            {option.city}, {option.state}
+                                            {option.city}, {option.state} {option.request_count ? `(${option.request_count} waiting)` : ''}
                                         </span>
                                     </div>
 
-                                    {value?.id === option.id && <Check className = "h-4 w-4 text-orange-500" />}
+                                    {value?.id === option.id && option.id !== null && <Check className = "h-4 w-4 text-orange-500" />}
                                 </li>
                             ))}
                         </ul>
@@ -140,11 +173,11 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
                             >
                                 <Plus className = "h-4 w-4" />
 
-                                <span>Add "<span className = 'font-bold'>{searchTerm}</span>" manually</span>
+                                <span>Select "<span className = 'font-bold'>{searchTerm}</span>" as Unlisted</span>
                             </button>
 
                             <p className = "px-3 py-2 text-[10px] text-zinc-500">
-                                Can't find your college? Add it to our list.
+                                Can't find your college? Submit it for verification.
                             </p>
                         </div>
                     )}
@@ -153,5 +186,5 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
         </div>
 
     )
-
+    
 }
