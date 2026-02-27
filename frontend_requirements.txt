@@ -13,3 +13,4 @@ lucide-react
 react-hot-toast
 react-intersection-observer
 terser # Install using npm install terser -D as it is required only during build, not during development.
+crypto-js
