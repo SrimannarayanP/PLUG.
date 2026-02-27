@@ -53,6 +53,7 @@ export default function UserProfile() {
             last_name : data.last_name || '',
             phone_number : details.phone_number || '',
             date_of_birth : details.date_of_birth || '',
+            student_id_number : details.student_id_number || '',
             organisation_name : data.role === 'host' ? (details.name || data.first_name) : '',
 
             school_college_id : details.school_college?.id || '',
@@ -421,27 +422,53 @@ export default function UserProfile() {
                         </div>
 
                         {/* DOB */}
-                        <div className = 'space-y-1'>
-                            <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
-                                <Calendar className = "h-3 w-3" />
+                        {isStudent && (
+                            <div className = 'space-y-1'>
+                                <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
+                                    <Calendar className = "h-3 w-3" />
 
-                                Date of Birth
-                            </label>
+                                    Date of Birth
+                                </label>
 
-                            {isEditing ? (
-                                <FormInput 
-                                    type = 'date'
-                                    name = 'date_of_birth'
-                                    value = {formData.date_of_birth}
-                                    onChange = {handleChange}
-                                    className = {`${inputStyle} [color-scheme:dark]`}
-                                />
-                            ) : (
-                                <p className = "text-lg font-medium text-white">
-                                    {formatDate(dob)}
-                                </p>
-                            )}
-                        </div>
+                                {isEditing ? (
+                                    <FormInput 
+                                        type = 'date'
+                                        name = 'date_of_birth'
+                                        value = {formData.date_of_birth}
+                                        onChange = {handleChange}
+                                        className = {`${inputStyle} [color-scheme:dark]`}
+                                    />
+                                ) : (
+                                    <p className = "text-lg font-medium text-white">
+                                        {formatDate(dob)}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {isStudent && (
+                            <div className = 'space-y-1'>
+                                <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
+                                    <Shield className = "h-3 w-3" />
+
+                                    Student ID/USN
+                                </label>
+
+                                {isEditing ? (
+                                    <FormInput 
+                                        name = 'student_id_number'
+                                        value = {formData.student_id_number}
+                                        onChange = {handleChange}
+                                        className = {inputStyle}
+                                        placeholder = "Enter your Student ID or USN"
+                                    />
+                                ) : (
+                                    <p className = "text-lg font-medium text-white font-mono">
+                                        {userDetails.student_id_number || "Not Provided"}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                         
                     {/* Right column : Organisation / College info */}
@@ -563,4 +590,5 @@ export default function UserProfile() {
         </div>
 
     )
+    
 }
