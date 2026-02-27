@@ -2,6 +2,7 @@
 
 
 from django.conf import settings
+from django.db.models import F
 from django.utils import timezone
 
 from rest_framework.decorators import api_view
@@ -10,7 +11,7 @@ from rest_framework.response import Response
 
 from .models import EventDocument
 
-import base64, io, jwt, qrcode, random, string
+import base64, io, jwt, qrcode, random, secrets, string
 
 # Generates a secure, signed JWT containing the registration details. This token is the ticket.
 def generate_ticket_token(registration_id, event_id):
@@ -53,35 +54,31 @@ def generate_qr_code_base64(data):
     img_str = base64.b64encode(qr_bytes).decode('utf-8')
 
     return f"data:image/png;base64,{img_str}"
-
-
-@api_view(['DELETE'])
-def delete_event_document(request, doc_id):
-    permission_classes = [IsAuthenticated]
-
-    try:
-        doc = EventDocument.objects.get(id = doc_id)
-
-        # Ensure the user owns the event this doc is attached to
-        if doc.event.organisation.user != request.user:
-
-            return Response(
-                {'error' : "Permission denied"},
-                status = 403
-            )
-        
-        doc.delete()
-
-        return Response(status = 204)
-    except EventDocument.DoesNotExist:
-
-        return Response(
-            {'error' : "Document not found"},
-            status = 404
-        )
     
 
 # Random numeric string of fixed length
 def generate_otp(length = 6):
 
     return ''.join(random.choices(string.digits, k = length))
+
+
+def track_unlisted_school_college_request(name, campus, city, state):
+    """Stores demand for an unlisted college in a shadow table. If it already exists, incremenet request_count."""
+
+    if not name or not city or not state:
+
+        return
+    
+    from .models import UnlistedSchoolCollegeRequest
+
+    obj, created = UnlistedSchoolCollegeRequest.objects.get_or_create(
+        name = name.strip(),
+        campus = campus.strip() if campus else None,
+        city = city.strip(),
+        defaults = {'state' : state.strip(), 'request_count' : 1}
+    )
+
+    if not created:
+        obj.request_count = F('request_count') + 1
+
+        obj.save(update_fields = ['request_count'])
