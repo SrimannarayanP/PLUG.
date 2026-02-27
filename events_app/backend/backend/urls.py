@@ -27,10 +27,10 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from api.views import (
     CancelTicketView, CategoryListView, CreateEventView, CreateUserView, CustomTokenObtainPairView, EventDetailsView, EventListView, FeaturedEventListView,
     HostEventDetailView, HostEventListView, HostEventUpdateView, ProcessPaymentView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView,
-    ResendTicketView, SchoolCollegeListView, SetNewPasswordView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, ResendOTPView
-)
-from api.utils import delete_event_document
+    ResendTicketView, SchoolCollegeListView, SetNewPasswordView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, ResendOTPView,
 
+    delete_event_document
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -57,7 +57,7 @@ urlpatterns = [
     # --- Student Actions ---
     path('api/events/register/', RegisterForEventView.as_view(), name = 'event-register'),
     path('api/events/my-tickets/', RegisteredEventsView.as_view(), name = 'my-tickets'),
-    path('api/ticket/resend<uuid:ticket_id>', ResendTicketView.as_view(), name = 'resend-ticket'),
+    path('api/ticket/resend/<uuid:ticket_id>', ResendTicketView.as_view(), name = 'resend-ticket'),
     path('api/ticket/cancel/<uuid:ticket_id>', CancelTicketView.as_view(), name = 'cancel-ticket'),
     # --- Host Dashboard ---
     path('api/host/events/', HostEventListView.as_view(), name = 'host-event-list'),    
