@@ -2,7 +2,7 @@
 
 
 import {useState} from 'react'
-import {Calendar, MapPin, Clock, CheckCircle, XCircle, Ticket, User, QrCode, ImageOff, Laptop, Layers, Archive} from 'lucide-react'
+import {Calendar, MapPin, Clock, CheckCircle, XCircle, Ticket, User, QrCode, ImageOff, Laptop, Layers, Archive, RefreshCcw} from 'lucide-react'
 
 import TicketModal from './TicketModal'
 
@@ -19,15 +19,15 @@ export default function TicketCard({tickets}) {
     const event = primaryTicket.event || {}
     const ticketCount = tickets.length
 
-    const hasUsableTicket = tickets.some(t => !t.is_cancelled && t.payment_status !== 'rejected')
+    const hasUsableTicket = tickets.some(t => 
+        !t.is_cancelled && 
+        t.payment_status !== 'rejected' &&
+        t.payment_status !== 'refund_processed'
+    )
     
     const posterUrl = getImageUrl(event.poster)
 
     const isExpired = checkEventExpiry(event.end_date)
-
-    // const isVoid = ticket.cancelled || payment_status === 'rejected'
-    // const isPending = payment_status === 'pending'
-    // const isUsable = !isVoid && !isPending
 
     const getLocationDisplay = () => {
         if (event.location_type === 'online') {
@@ -58,9 +58,11 @@ export default function TicketCard({tickets}) {
     }
 
     function getStatusBadge({ticket}) {
+        const {is_cancelled, payment_status, is_checked_in} = ticket
+
         const badgeBase = "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm border backdrop-blur-md"
 
-        if (ticket.is_cancelled) {
+        if (is_cancelled) {
 
             return (
 
@@ -113,13 +115,47 @@ export default function TicketCard({tickets}) {
 
         }
 
-        // If paid/free, check check-in status
-        if (checked_in) {
+        if (payment_status === 'refund_pending') {
+
+            return (
+
+                <div className = {`${badgeBase} bg-orange-950/80 text-orange-400 border-orange-500/20`}>
+                    <RefreshCcw 
+                        size = {12}
+                        strokeWidth = {3}
+                    />
+
+                    Refunding
+                </div>
+
+            )
+
+        }
+
+        if (payment_status === 'refund_processed') {
 
             return (
 
                 <div className = {`${badgeBase} bg-zinc-800 text-zinc-400 border-zinc-700`}>
-                    <CheckCircle 
+                    <CheckCircle
+                        size = {12}
+                        strokeWidth = {3}
+                    />
+
+                    Refunded
+                </div>
+
+            )
+
+        }
+
+        // If paid/free, check check-in status
+        if (is_checked_in) {
+
+            return (
+
+                <div className = {`${badgeBase} bg-zinc-800 text-zinc-400 border-zinc-700`}>
+                    <CheckCircle
                         size = {12}
                         strokeWidth = {3}
                     />
@@ -187,7 +223,7 @@ export default function TicketCard({tickets}) {
                         />
                     ) : (
                         <div className = "flex flex-col h-full w-full items-center justify-center bg-zinc-900 text-zinc-700 font-bold gap-2">
-                            <ImageOff className = "w-8 h-8 opacity-50" />
+                            <ImageOff className = "h-8 w-8 opacity-50" />
 
                             <span className = "text-xs uppercase tracking-widest">
                                 No Poster
