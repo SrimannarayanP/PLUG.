@@ -6,6 +6,7 @@ import DOMPurify from 'dompurify'
 import {X, Calendar, MapPin, FileText, Clock, ExternalLink, AlertCircle, Laptop, TicketIcon, Download} from 'lucide-react'
 
 import {getImageUrl} from '../../utils/imageHelper'
+import {getScarcityState} from '../../utils/ticketHelper'
 
 
 const CountdownTimer = ({deadline, onExpire}) => {
@@ -110,8 +111,16 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
     if (!event) return null
 
     const posterUrl = getImageUrl(event.poster)
+    const scarcity = getScarcityState(event)
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
+    const scarcityStyles = {
+        SOLD_OUT : "bg-red-500/20 text-red-400 border-red-500/30",
+        CRITICAL : "bg-orange-500/20 text-orange-400 border-orange-500/30",
+        WARNING : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+    }
+    
+    const isSoldOut = event.is_sold_out
 
     return (
 
@@ -155,26 +164,31 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                             <div className = "absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
 
                             {/* Badge */}
-                            <div className = "absolute top-6 left-6">
-                                <span 
+                            <div className = "absolute top-6 left-6 flex flex-col items-start gap-2">
+                                <span
                                     className = {`
-                                        inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-md
+                                        inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white
+                                        backdrop-blur-md
                                         ${!event.is_native 
                                             ? 'bg-blue-500/20' 
-                                            : isRegistrationClosed
-                                                ? "bg-red-500/20 border-red-500/30"
-                                                : 'bg-orange-500/20'
+                                            : isSoldOut
+                                                ? "bg-orange-500/20 border-orange-500/30"
+                                                : isRegistrationClosed
+                                                    ? "bg-red-500/20 border-red-500/30"
+                                                    : 'bg-orange-500/20'
                                         }
                                     `}
                                 >
-                                    {!event.is_native 
-                                        ? "External Event" 
-                                        : isRegistrationClosed
-                                            ? "Registration Closed"
-                                            : "Registration Open" 
+                                    {!event.is_native
+                                        ? "External Event"
+                                        : isSoldOut
+                                            ? "Sold Out"
+                                            : isRegistrationClosed
+                                                ? "Registration Closed"
+                                                : "Registration Open"
                                     }
                                 </span>
-                            </div> 
+                            </div>
                         </div>
 
                         {/* Text Content */}
@@ -300,18 +314,26 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
 
                 {/* Sticky Footer Area */}
                 <div className = "shrink-0 border-t border-zinc-800 bg-zinc-950 p-4 pb-safe sm:px-10 sm:py-6">
-                    {isRegistrationClosed ? (
-                        <div className = "flex w-full items-center justify-between rounded-xl bg-red-950/30 p-4 border border-red-900/50">
-                            <div className = "flex items-center gap-3 text-red-400">
+                    {isRegistrationClosed || isSoldOut ? (
+                        <div
+                            className = {`
+                                flex w-full items-center justify-between rounded-xl p-4 border
+                                ${isSoldOut
+                                    ? "bg-orange-950/30 border-orange-900/50 text-orange-400"
+                                    : "bg-red-950/30 border-red-900/50 text-red-400"
+                                }
+                            `}
+                        >
+                            <div className = "flex items-center gap-3">
                                 <AlertCircle className = "h-5 w-5" />
 
                                 <div>
                                     <p className = "font-bold text-sm">
-                                        Registration Closed
+                                        {isSoldOut ? "Event Sold Out" : "Registration Closed"}
                                     </p>
 
                                     <p className = "text-[10px] text-red-400/60">
-                                        Deadline passed
+                                        {isSoldOut ? "All tickets have been sold" : "Deadline Passed"}
                                     </p>
                                 </div>
                             </div>
@@ -320,10 +342,18 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                         <div className = "flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
                             {/* Timer Display */}
                             {event.registration_deadline && (
-                                <CountdownTimer 
-                                    deadline = {event.registration_deadline}
-                                    onExpire = {() => setIsRegistrationClosed(true)}
-                                />
+                                <div className = "flex flex-col gap-2">
+                                    <CountdownTimer
+                                        deadline = {event.registration_deadline}
+                                        onExpire = {() => setIsRegistrationClosed(true)}
+                                    />
+
+                                    {scarcity && (
+                                        <span className = {`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${scarcityStyles[scarcity.status] || ''}`}>
+                                            {scarcity.text}
+                                        </span>
+                                    )}
+                                </div>
                             )}
 
                             {/* Register Button */}
