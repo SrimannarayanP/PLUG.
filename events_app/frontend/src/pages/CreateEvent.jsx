@@ -110,6 +110,7 @@ export default function CreateEvent() {
     const [pageErrors, setPageErrors] = useState({})
 
     const [hasAgeLimit, setHasAgeLimit] = useState(false)
+    const [hasCapacityLimit, setHasCapacityLimit] = useState(false)
     const [hasCustomDeadline, setHasCustomDeadline] = useState(false)
     const [posterPreview, setPosterPreview] = useState(null)
 
@@ -144,6 +145,7 @@ export default function CreateEvent() {
         age_restriction_cutoff : '',
 
         max_tickets_per_user : 1,
+        capacity : '',
 
         // Payment state
         is_paid_event : false,
@@ -212,6 +214,7 @@ export default function CreateEvent() {
                 age_restriction_cutoff : eventToEdit.age_restriction_cutoff || '',
 
                 max_tickets_per_user : eventToEdit.max_tickets_per_user || 1,
+                capacity : eventToEdit.capacity || '',
 
                 is_paid_event : eventToEdit.is_paid_event,
                 ticket_price : eventToEdit.ticket_price || '',
@@ -222,25 +225,19 @@ export default function CreateEvent() {
 
             // Pre-fill categories - What this means is that the API calls gives full objs to display but selectedCategories only accepts list of IDs. So we use map
             // to map over the full objs & extract only the IDs.
-            if (eventToEdit.categories) {
-                setSelectedCategories(eventToEdit.categories.map(c => c.id))
-            }
+            if (eventToEdit.categories) setSelectedCategories(eventToEdit.categories.map(c => c.id))
 
             // Existing poster preview
-            if (eventToEdit.poster) {
-                setPosterPreview(getImageUrl(eventToEdit.poster))
-            }
+            if (eventToEdit.poster) setPosterPreview(getImageUrl(eventToEdit.poster))
 
-            if (eventToEdit.existingDocuments) {
-                setExistingDocuments(eventToEdit.documents)
-            }
+            if (eventToEdit.existingDocuments) setExistingDocuments(eventToEdit.documents)
 
-            if (eventToEdit?.age_restriction_cutoff) {
-                setHasAgeLimit(true)
-            }
+            if (eventToEdit?.age_restriction_cutoff) setHasAgeLimit(true)
 
-            if (eventToEdit.registration_deadline) {
-                setHasCustomDeadline(true)
+            if (eventToEdit.registration_deadline) setHasCustomDeadline(true)
+
+            if (eventToEdit.capacity !== null && eventToEdit.capacity !== undefined) {
+                setHasCapacityLimit(true)
             }
         }
     }, [isEditMode, eventToEdit])
@@ -365,7 +362,7 @@ export default function CreateEvent() {
 
             return {...prev, max_tickets_per_user : newVal}
         })
-    })
+    }, [])
 
     const handlePosterChange = async (e) => {
         const file = e.target.files[0]
@@ -458,6 +455,12 @@ export default function CreateEvent() {
 
             if (key === 'restricted_to_school_college_ids') return
 
+            if (hasCapacityLimit && formData.capacity) {
+                data.append('capacity', formData.capacity)
+            } else {
+                data.append('capacity', '')
+            }
+
             data.append(key, value)
         })
 
@@ -549,6 +552,15 @@ export default function CreateEvent() {
         if (formData.is_internal_event && (!hostProfile?.school_college && !formData.restricted_to_school_college_ids.length === 0)) {
             errors.restricted_to_school_college_ids = "External promoters must select target schools/colleges."
         }
+
+        if (hasCapacityLimit) {
+            if (!formData.capacity || parseInt(formData.capacity) <= 0) {
+                errors.capacity = "Valid capacity required."
+            } else if (parseInt(formData.max_tickets_per_user) > parseInt(formData.capacity)) {
+                errors.max_tickets_per_user = "Group limit cannot exceed total capacity."
+            }
+        }
+
         return errors
     }
 
@@ -707,7 +719,7 @@ export default function CreateEvent() {
                                     </div>
                                 )}
 
-                                <input 
+                                <input
                                     type = 'file'
                                     name = 'poster'
                                     className = 'hidden'
@@ -717,44 +729,6 @@ export default function CreateEvent() {
                                 />
                             </label>
                         </div>
-
-                        {/* Brochure Upload */}
-                        {/* <div className = "bg-[#18181b] border border-zinc-800 rounded-xl p-4 flex items-center gap-4 transition-colors hover:border-zinc-700 group">
-                            <div className = "bg-zinc-900 p-3 rounded-lg text-pink-500 group-hover:text-pink-400 border border-zinc-800 group-hover:border-pink-500/30 transition-colors">
-                                <FileText className = "w-6 h-6" />
-                            </div>
-
-                            <div className = "flex-1 overflow-hidden">
-                                <label className = "block text-sm font-bold text-white mb-1 cursor-pointer hover:text-pink-500 transition-colors">
-                                    {isEditMode && !brochureFile ? "Update Brochure (Optional)" : "Upload Rulebook/Brochure"}
-
-                                    <input 
-                                        type = 'file'
-                                        name = 'brochure'
-                                        className = 'hidden'
-                                        onChange = {handleFileChange}
-                                        accept = ".pdf, .doc, .docx"
-                                    />
-                                </label>
-
-                                <p className = "text-xs text-zinc-500 truncate font-mono"> {/* truncate cuts off excess text & replaces it with ... */}
-                                    {/* New file gets selected */}
-                                    {/* {brochureFile ? (
-                                        <span className = 'text-orange-500'>{brochureFile.name}</span>
-                                    // Show existing file Name
-                                    ) : existingBrochureName ? (
-                                        <span className = 'text-zinc-300'>
-                                            Current: <span className = 'text-orange-500/80'>{existingBrochureName}</span>
-                                        </span>
-                                    // No file attached
-                                    ) : (
-                                        "PDF or DOC (Max. 5MB)"
-                                    )}
-                                </p>
-                            </div>
-
-                            {(brochureFile || (isEditMode && eventToEdit?.brochure)) && <Check className = "w-5 h-5 text-orange-500" />}
-                        </div> */}
 
                         {/* Documents section */}
                         <div className = 'space-y-3'>
@@ -1067,7 +1041,7 @@ export default function CreateEvent() {
 
                         <div className = "grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className = 'space-y-4'>
-                                <ToggleSwitch 
+                                <ToggleSwitch
                                     label = "Internal Event"
                                     description = "Restrict this event exclusively to students of a specific college."
                                     icon = {Shield}
@@ -1139,7 +1113,7 @@ export default function CreateEvent() {
                                                     <p className = "text-red-500 text-xs mt-2 flex items-center gap-1">
                                                         <AlertCircle className = "h-3 w-3" />
 
-                                                        {pageErrors.restricted_to_school_college_id}
+                                                        {pageErrors.restricted_to_school_college_ids}
                                                     </p>
                                                 )}
                                             </div>
@@ -1147,79 +1121,114 @@ export default function CreateEvent() {
                                     </div>
                                 )}
 
-                                <ToggleSwitch 
-                                    label = "Paid Event"
-                                    description = "Enable ticket pricing for this event."
-                                    icon = {IndianRupee}
-                                    checked = {formData.is_paid_event}
-                                    onChange = {(checked) => setFormData(prev => ({...prev, is_paid_event : checked}))}
-                                    activeColor = 'bg-orange-500'
+                                <div className = 'space-y-4'>
+                                    <ToggleSwitch 
+                                        label = "Paid Event"
+                                        description = "Enable ticket pricing for this event."
+                                        icon = {IndianRupee}
+                                        checked = {formData.is_paid_event}
+                                        onChange = {(checked) => setFormData(prev => ({...prev, is_paid_event : checked}))}
+                                        activeColor = 'bg-orange-500'
+                                    />
+
+                                    {formData.is_paid_event && (
+                                        <div className = "pl-4 border-l-2 border-zinc-800 ml-4 animate-in slide-in-from-top-2 fade-in duration-300">
+                                            <FormInput
+                                                label = "Price (INR)"
+                                                type = 'number'
+                                                name = 'ticket_price'
+                                                value = {formData.ticket_price}
+                                                onChange = {handleChange}
+                                                className = "text-2xl font-bold text-white bg-black/50 border-zinc-700 focus:border-orange-500"
+                                                icon = {IndianRupee}
+                                                error = {pageErrors.ticket_price}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <div className = 'space-y-4'>
+                                <ToggleSwitch
+                                    label = "Total Capacity Limit"
+                                    description = "Cap the total number of tickets available for this event."
+                                    icon = {Users}
+                                    checked = {hasCapacityLimit}
+                                    onChange = {(checked) => {
+                                        setHasCapacityLimit(checked)
+
+                                        if (!checked) setFormData(prev => ({...prev, capacity : ''}))
+                                    }}
+                                    activeColor = 'bg-blue-500'
                                 />
 
-                                {formData.is_paid_event && (
+                                {hasCapacityLimit && (
                                     <div className = "pl-4 border-l-2 border-zinc-800 ml-4 animate-in slide-in-from-top-2 fade-in duration-300">
-                                        <FormInput
-                                            label = "Price (INR)"
+                                        <FormInput 
+                                            label = "Maximum Attendees"
                                             type = 'number'
-                                            name = 'ticket_price'
-                                            value = {formData.ticket_price}
+                                            name = 'capacity'
+                                            placeholder = "e.g., 500"
+                                            value = {formData.capacity}
                                             onChange = {handleChange}
-                                            className = "text-2xl font-bold text-white bg-black/50 border-zinc-700 focus:border-orange-500"
-                                            icon = {IndianRupee}
-                                            error = {pageErrors.ticket_price}
+                                            className = "text-2xl font-bold text-white bg-black/50 border-zinc-700 focus:border-blue-500"
+                                            icon = {Users}
+                                            error = {pageErrors.capacity}
                                         />
                                     </div>
                                 )}
                             </div>
+                            
+                            <div className = "h-full flex flex-col justify-between">
+                                <div 
+                                    className = {`
+                                        p-4 rounded-xl border transition-all duration-300
+                                        ${formData.max_tickets_per_user > 1
+                                            ? "bg-zinc-900 border-indigo-500/30"
+                                            : "bg-zinc-900/30 border-zinc-800"
+                                        }
+                                    `}
+                                >
+                                    <div className = "flex items-center gap-3">
+                                        <div className = "p-2 bg-zinc-900 rounded-lg text-indigo-500 border border-zinc-800">
+                                            <Users className = "h-5 w-5" />
+                                        </div>
 
-                            <div 
-                                className = {`
-                                    p-4 rounded-xl border transition-all duration-300
-                                    ${formData.max_tickets_per_user > 1
-                                        ? "bg-zinc-900 border-indigo-500/30"
-                                        : "bg-zinc-900/30 border-zinc-800"
-                                    }
-                                `}
-                            >
-                                <div className = "flex items-center gap-3 mb-4">
-                                    <div className = "p-2 bg-zinc-900 rounded-lg text-indigo-500 border border-zinc-800">
-                                        <Users className = "h-5 w-5" />
-                                    </div>
+                                        <div className = 'flex-1'>
+                                            <h3 className = "text-sm font-bold uppercase tracking-wide text-zinc-300">
+                                                Group Booking
+                                            </h3>
 
-                                    <div className = 'flex-1'>
-                                        <h3 className = "text-sm font-bold uppercase tracking-wide text-zinc-300">
-                                            Group Booking
-                                        </h3>
+                                            <p className = "text-xs text-zinc-600">
+                                                Maximum tickets per user
+                                            </p>
+                                        </div>
 
-                                        <p className = "text-xs text-zinc-600">
-                                            Maximum tickets per user
-                                        </p>
-                                    </div>
+                                        <div className = "flex items-center gap-4 bg-black/40 p-2 rounded-xl border border-zinc-800/50">
+                                            <button
+                                                type = 'button'
+                                                onClick = {() => handleTicketsChange(-1)}
+                                                className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
+                                            >
+                                                <Minus className = "h-4 w-4" />
+                                            </button>
 
-                                    <div className = "flex items-center gap-4 bg-black/40 p-2 rounded-xl border border-zinc-800/50">
-                                        <button
-                                            type = 'button'
-                                            onClick = {() => handleTicketsChange(-1)}
-                                            className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
-                                        >
-                                            <Minus className = "h-4 w-4" />
-                                        </button>
-
-                                        <span className = "text-xl font-mono font-bold text-white w-6 text-center">
-                                            {formData.max_tickets_per_user}
-                                        </span>
-                                    
-                                        <button
-                                            type = 'button'
-                                            onClick = {() => handleTicketsChange(1)}
-                                            className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
-                                        >
-                                            <Plus className = "h-4 w-4" />
-                                        </button>
+                                            <span className = "text-xl font-mono font-bold text-white w-6 text-center">
+                                                {formData.max_tickets_per_user}
+                                            </span>
+                                        
+                                            <button
+                                                type = 'button'
+                                                onClick = {() => handleTicketsChange(1)}
+                                                className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
+                                            >
+                                                <Plus className = "h-4 w-4" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            
+
                             {/* Age Restriction */}
                             <div className = "lg:col-span-2 space-y-4">
                                 <ToggleSwitch 
