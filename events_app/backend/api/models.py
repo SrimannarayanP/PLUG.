@@ -264,6 +264,7 @@ class Event(UUIDModel, TimeStampedModel):
     end_date = models.DateTimeField()
 
     max_tickets_per_user = models.PositiveIntegerField(default = 1, help_text = "Max tickets a single user can book")
+    capacity = models.PositiveIntegerField(null = True, blank = True, help_text = "Max. total capacity for the event. Leave blank for unlimited.")
 
     # Location
     location_type = models.CharField(max_length = 10, choices = LocationType.choices)
@@ -368,6 +369,28 @@ class Event(UUIDModel, TimeStampedModel):
             return False
 
         return timezone.now() < self.registration_deadline
+    
+    @property
+    def tickets_sold(self):
+        """Calculates active tickets, ignoring cancelled or rejected ones."""
+
+        return self.registrations.filter(is_cancelled = False).exclude(payment_status = Registration.PaymentStatus.REJECTED).count()
+
+    @property
+    def remaining_capacity(self):
+        if self.capacity is None:
+            
+            return None
+        
+        return max(0, self.capacity - self.tickets_sold)
+    
+    @property
+    def is_sold_out(self):
+        if self.capacity is None:
+
+            return False
+        
+        return self.remaining_capacity <= 0
 
     def __str__(self):
 
