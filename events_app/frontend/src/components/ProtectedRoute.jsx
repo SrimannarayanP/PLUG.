@@ -3,19 +3,21 @@
 
 // The idea here is that this component will wrap around any route that we want to protect. It'll be used to secure certain parts of the website, so that only
 // authenticated users can access them. If an unauthorized user tries to access a protected route, they'll be redirected to the login page.
-import {Navigate, useLocation} from 'react-router-dom'
 import {jwtDecode} from 'jwt-decode'
-import {useState, useEffect, useCallback} from 'react'
+import {useCallback, useEffect, useState} from 'react'
+import {Navigate, useLocation} from 'react-router-dom'
 
 import api from '../api/api.js'
 
 import {ACCESS_TOKEN, REFRESH_TOKEN} from '../constants'
 
 
-function ProtectedRoute({children}) {
+export default function ProtectedRoute({children, allowedRoles = []}) {
+
+    const location = useLocation()
 
     const [isAuthorized, setIsAuthorized] = useState(null)
-    const location = useLocation()
+    const [userRole, setUserRole] = useState(null)
 
     const auth = useCallback(async () => {
         const token = localStorage.getItem(ACCESS_TOKEN)
@@ -24,13 +26,14 @@ function ProtectedRoute({children}) {
             setIsAuthorized(false)
             
             return
-
         }
 
         try {
             const decodedToken = jwtDecode(token)
             const tokenExpiration = decodedToken.exp * 1000 // Convert to ms
             const now = Date.now() / 1000
+
+            if (decodedToken.role) setUserRole(decodedToken.role)
 
             // Refresh if the token is expiring in less than a minute
             if (tokenExpiration < now + 60) {  // Checks for token expiration
@@ -39,10 +42,7 @@ function ProtectedRoute({children}) {
                 setIsAuthorized(true)
             }
         } catch (error) {
-            console.error(
-                "Token decoding failed", 
-                error
-            )
+            console.error("Token decoding failed", error)
 
             setIsAuthorized(false)
         }
@@ -52,20 +52,20 @@ function ProtectedRoute({children}) {
         const refreshToken = localStorage.getItem(REFRESH_TOKEN)
 
         try {
-            const response = await api.post(
-                '/api/token/refresh/', 
-                {refresh : refreshToken}
-            )
+            const response = await api.post('/api/token/refresh/', {refresh : refreshToken})
 
             if (response.status === 200) {
                 localStorage.setItem(ACCESS_TOKEN, response.data.access)
 
+                const decodedToken = jwtDecode(response.data.access)
+
+                setUserRole(decodedToken.role)
                 setIsAuthorized(true)
             } else {
                 setIsAuthorized(false)
             }
         } catch (error) {
-            console.log(error)
+            console.error(error)
 
             setIsAuthorized(false)
         }
@@ -122,9 +122,20 @@ function ProtectedRoute({children}) {
 
     }
 
+    if (allowedRoles.length > 0 && userRole && !allowedRoles.includes(userRole)) {
+        
+        return (
+
+            <Navigate 
+                to = '/unauthorized'
+                state = {{from : location}}
+                replace
+            />
+
+        )
+
+    }
+
     return children
 
 }
-
-
-export default ProtectedRoute
