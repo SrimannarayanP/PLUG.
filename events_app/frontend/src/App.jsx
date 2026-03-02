@@ -1,8 +1,8 @@
 // App.jsx
 
 
-import {Suspense, lazy} from 'react'
-import {BrowserRouter, Routes, Route, Navigate} from 'react-router-dom'
+import {lazy, Suspense} from 'react'
+import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom'
 
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -10,19 +10,21 @@ import LoadingSpinner from './components/common/LoadingSpinner'
 
 
 // Lazy loading: Tells React to not include in index.js. Make separate files.
+const CreateEvent = lazy(() => import('./pages/CreateEvent'))
+const HostDashboard = lazy(() => import('./pages/HostDashboard'))
+const HostScanner = lazy(() => import('./pages/HostScanner'))
 const LandingPage = lazy(() => import('./pages/LandingPage'))
 const LoginSignup = lazy(() => import('./pages/LoginSignup'))
-const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
-const Onboarding = lazy(() => import('./pages/Onboarding'))
-const UserProfile = lazy(() => import('./pages/UserProfile'))
-const NotFound = lazy(() => import('./pages/NotFound'))
-const StudentDashboard = lazy(() => import('./pages/StudentDashboard'))
-const HostDashboard = lazy(() => import('./pages/HostDashboard'))
 const ManageEvent = lazy(() => import('./pages/ManageEvent'))
-const CreateEvent = lazy(() => import('./pages/CreateEvent'))
-const HostScanner = lazy(() => import('./pages/HostScanner'))
-const SetPassword = lazy(() => import('./pages/SetPassword'))
+const MockCheckout = lazy(() => import('./pages/MockCheckout'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const Onboarding = lazy(() => import('./pages/Onboarding'))
 const RequestPasswordLink = lazy(() => import('./pages/RequestPasswordLink'))
+const SetPassword = lazy(() => import('./pages/SetPassword'))
+const StudentDashboard = lazy(() => import('./pages/StudentDashboard'))
+const Unauthorized = lazy(() => import('./pages/Unauthorized'))
+const UserProfile = lazy(() => import('./pages/UserProfile'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 
 
 function Logout() {
@@ -122,7 +124,7 @@ export default function App() {
                 <Route 
                     path = '/student/dashboard'
                     element = {
-                        <ProtectedRoute>
+                        <ProtectedRoute allowedRoles = {['student', 'admin']}>
                             <Suspense fallback = {<LoadingSpinner />}>
                                 <StudentDashboard />
                             </Suspense>
@@ -134,7 +136,7 @@ export default function App() {
                 <Route 
                     path = '/host/dashboard'
                     element = {
-                        <ProtectedRoute>
+                        <ProtectedRoute allowedRoles = {['host', 'admin']}>
                             <Suspense fallback = {<LoadingSpinner />}>
                                 <HostDashboard />
                             </Suspense>
@@ -145,7 +147,7 @@ export default function App() {
                 <Route 
                     path = '/host/create-event'
                     element = {
-                        <ProtectedRoute>
+                        <ProtectedRoute allowedRoles = {['host', 'admin']}>
                             <Suspense fallback = {<LoadingSpinner />}>
                                 <CreateEvent />
                             </Suspense>
@@ -156,7 +158,7 @@ export default function App() {
                 <Route 
                     path = '/host/event/:eventId'
                     element = {
-                        <ProtectedRoute>
+                        <ProtectedRoute allowedRoles = {['host', 'admin']}>
                             <Suspense fallback = {<LoadingSpinner />}>
                                 <ManageEvent />
                             </Suspense>
@@ -167,14 +169,26 @@ export default function App() {
                 <Route 
                     path = '/host/scan'
                     element = {
-                        <ProtectedRoute>
+                        <ProtectedRoute allowedRoles = {['host', 'admin']}>
                             <Suspense fallback = {<LoadingSpinner />}>
                                 <HostScanner />
                             </Suspense>
                         </ProtectedRoute>
                     }
                 />
-                    
+                
+                {/* Checkout route */}
+                <Route 
+                    path = '/checkout'
+                    element = {
+                        <ProtectedRoute>
+                            <Suspense fallback = {<LoadingSpinner />}>
+                                <MockCheckout />
+                            </Suspense>
+                        </ProtectedRoute>
+                    }
+                />
+
                 {/* If the user tries to go to any other route apart from the ones defined it'll show error 404 - Not found page */}
                 <Route 
                     path = '*'
@@ -183,6 +197,15 @@ export default function App() {
                             <NotFound />
                         </Suspense>
                     } 
+                />
+
+                <Route 
+                    path = '/unauthorized'
+                    element = {
+                        <Suspense fallback = {<LoadingSpinner />}>
+                            <Unauthorized />
+                        </Suspense>
+                    }
                 />
             </Routes>
         </BrowserRouter>
