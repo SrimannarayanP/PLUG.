@@ -178,7 +178,7 @@ export default function App() {
                 />
                 
                 {/* Checkout route */}
-                <Route 
+                {/* <Route 
                     path = '/checkout'
                     element = {
                         <ProtectedRoute>
@@ -187,7 +187,7 @@ export default function App() {
                             </Suspense>
                         </ProtectedRoute>
                     }
-                />
+                /> */}
 
                 {/* If the user tries to go to any other route apart from the ones defined it'll show error 404 - Not found page */}
                 <Route 
