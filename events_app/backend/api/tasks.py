@@ -3,8 +3,11 @@
 
 from celery import shared_task
 
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
+from django.utils import timezone
 
 from .models import Registration
 from .utils import generate_ticket_token, generate_qr_bytes
@@ -119,3 +122,23 @@ def send_verification_email(self, user_id, otp):
     except Exception as e:
 
         raise self.retry(exc = e, countdown = 10)
+
+
+@shared_task
+def release_abandoned_tickets():
+    """Finds pending registrations older than 15 minutes & cancels them, releasing event capacity."""
+
+    expiration_cutoff = timezone.now() - timedelta(minutes = 15)
+
+    released_count = Registration.objects.filter(
+        payment_status = Registration.PaymentStatus.PENDING,
+        is_cancelled = False,
+        created_at__lt = expiration_cutoff
+    ).update(
+        payment_status = Registration.PaymentStatus.REJECTED,
+        is_cancelled = True
+    )
+
+    if released_count > 0:
+        
+        return f"Released {released_count} abandoned tickets."
