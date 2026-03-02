@@ -4,6 +4,7 @@
 import {Calendar, MapPin, User, Ticket, ExternalLink, ImageOff, Laptop, IndianRupee} from 'lucide-react'
 
 import {getImageUrl} from '../../utils/imageHelper'
+import {getScarcityState} from '../../utils/ticketHelper'
 
 
 const formatDate = (dateString) => {
@@ -19,8 +20,14 @@ const formatDate = (dateString) => {
 const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
 
     const posterUrl = getImageUrl(event.poster)
+    const scarcity = getScarcityState(event)
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
+    const scarcityStyles = {
+        SOLD_OUT : "bg-red-500/20 text-red-400 border-red-500/30",
+        CRITICAL : "bg-orange-500/20 text-orange-400 border-orange-500/30",
+        WARNING : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+    }
 
     const handleKeyDown = (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -88,6 +95,14 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
 
                             <span className = "font-mono text-xs uppercase tracking-widest opacity-60">
                                 No Poster
+                            </span>
+                        </div>
+                    )}
+
+                    {scarcity && (
+                        <div className = "absolute top-3 left-3 z-20">
+                            <span className = {`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md ${scarcityStyles[scarcity.status] || ''}`}>
+                                {scarcity.text}
                             </span>
                         </div>
                     )}
@@ -164,13 +179,27 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
                                 onClick = {(e) => {
                                     e.stopPropagation()
 
-                                    onRegisterClick(event)
+                                    if (!event.is_sold_out) onRegisterClick(event)
                                 }}
-                                className = "group/btn flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-bold uppercase tracking-wider text-black shadow-lg transition-all hover:bg-zinc-200 hover:shadow-white/10 active:scale-95"
+                                className = {`
+                                    group/btn flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-bold uppercase tracking-wider shadow-lg transition-all
+                                    ${event.is_sold_out
+                                        ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50"
+                                        : "bg-white text-black hover:bg-zinc-200 hover:shadow-white/10 active:scale-95"
+                                    }
+                                `}
                             >
-                                <Ticket className = "h-4 w-4 text-orange-600 transition-transform group-hover/btn:rotate-12" />
+                                <Ticket 
+                                    className = {`
+                                        h-4 w-4
+                                        ${event.is_sold_out
+                                            ? 'text-zinc-600'
+                                            : "text-orange-600 transition-transform group-hover/btn:rotate-12"
+                                        }
+                                    `}
+                                />
 
-                                Register
+                                {event.is_sold_out ? "Sold Out" : 'Register'}
                             </button>
                         ) : (
                             <a
