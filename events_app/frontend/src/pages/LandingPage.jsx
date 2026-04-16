@@ -1,8 +1,8 @@
 // LandingPage.jsx
 
 
-import React, {useState, useEffect, Suspense} from 'react' // useState holds data. useEffect runs code when the component is loaded
 import {CalendarX, Zap, Loader2} from 'lucide-react'
+import React, {Suspense, useEffect, useState} from 'react' // useState holds data. useEffect runs code when the component is loaded
 import {useInView} from 'react-intersection-observer'
 import {useLocation, useNavigate} from 'react-router-dom'
 
@@ -10,7 +10,7 @@ import {useEvents} from '../hooks/useEvents'
 
 import apiPublic from '../api/apiPublic' // Public API instance. Used for non-authenticated calls to the backend
 
-import {ACCESS_TOKEN} from '../constants'
+import {useAuth} from '../context/AuthContext'
 
 // Components
 import CategoryRow from '../components/ui/CategoryRow'
@@ -18,7 +18,6 @@ import EventCard from '../components/ui/EventCard'
 import EventCardSkeleton from '../components/ui/EventCardSkeleton'
 import EventDetailSkeleton from '../components/ui/EventDetailSkeleton'
 import FeaturedEventHero from '../components/ui/FeaturedEventHero'
-import Header from '../components/layout/Header'
 import RegistrationModal from '../components/ui/RegistrationModal'
 
 // Lazy load
@@ -27,14 +26,18 @@ const EventDetails = React.lazy(() => import('../components/ui/EventDetails'))
 
 export default function LandingPage() {
 
-    const {featuredEvents, upcomingEvents, loading, error, fetchInitial, fetchMoreUpcomingEvents, nextPage} = useEvents()
+    const {featuredEvents, upcomingEvents, loading, error, fetchInitial, fetchMoreUpcomingEvents, nextPage, totalEvents} = useEvents()
+    const {isAuthenticated} = useAuth()
+
     const navigate = useNavigate()
     const location = useLocation()
+
+    const [margin, setMargin] = useState(window.innerWidth > 768 ? '800px' : '200px')
 
     // Infinite scroll trigger
     const {ref, inView} = useInView({
         threshold : 0,
-        rootMargin : '400px'
+        rootMargin : margin
     })
 
     // If registeringEvent is not null, modal will open.
@@ -45,20 +48,12 @@ export default function LandingPage() {
     const [categories, setCategories] = useState([])
 
     const handleRegisterClick = (event) => {
-        const token = localStorage.getItem(ACCESS_TOKEN)
-
-        if (!token) {
-            navigate('/login', {
-                state : {
-                    from : location,
-                    targetEventId : event.id,
-                    action : 'register'
-                }
-            })
+        if (!isAuthenticated) {
+            navigate('/login', {state : {from : location, targetEventId : event.id, action : 'register'}})
 
             return
         }
-
+        
         setRegisteringEvent(event)
     }
 
@@ -126,23 +121,17 @@ export default function LandingPage() {
         <div className = "min-h-screen bg-[#09090b] text-white font-sans selection:bg-pink-500 selection:text-white relative overflow-x-hidden">
             {/* Background Texture */}
             <div
-                className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0"
+                className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0 transform-gpu"
                 style = {{
                     backgroundImage : "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
                     backgroundSize : "40px 40px"
                 }}
             />
 
-            <div className = "relative z-50">  
-                <Header />
-            </div>
-
             {/* Subtle ambient glow at the top */}
-            <div className = "absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-64 sm:h-96 bg-orange-500/10 blur-[80px] sm:blur-[120px] rounded-full pointer-events-none z-0" />
+            <div className = "absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-64 sm:h-96 bg-orange-500/10 blur-[80px] sm:blur-[120px] rounded-full pointer-events-none z-0 transform-gpu will-change-transform" />
 
-            <div className = "h-20 sm:h-24 w-full" />
-
-            <main className = "relative z-10 max-w-7xl w-full mx-auto p-4 sm:px-6 lg:px-8 pb-32">
+            <div className = "relative z-10 max-w-7xl w-full mx-auto p-4 sm:px-6 lg:px-8 pb-32">
                 {/* --- Featured Events --- */}
                 {/* This section is rendered if 'featuredEvents' has 1 or more items */}
                 {loading && featuredEvents.length === 0 ? (
@@ -156,19 +145,6 @@ export default function LandingPage() {
                             onRegisterClick = {handleRegisterClick}
                             onDetailsClick = {setViewingEvent}    
                         />
-                    </div>
-                )}
-
-                {categories.length > 0 && (
-                    <div className = "mb-8 sm:mb-12 border-b border-zinc-800/50 pb-4">
-                        {categories.slice(0, 5).map((category) => (
-                            <CategoryRow 
-                                key = {category.id}
-                                category = {category}
-                                onRegisterClick = {handleRegisterClick}
-                                onDetailsClick = {setViewingEvent}
-                            />
-                        ))}
                     </div>
                 )}
 
@@ -192,9 +168,40 @@ export default function LandingPage() {
                     </div>
                 </div>
 
+                {categories.length > 0 && (
+                    <div className = "mb-8 sm:mb-12 border-b border-zinc-800/50 pb-4">
+                        {categories.slice(0, 5).map((category) => (
+                            <CategoryRow 
+                                key = {category.id}
+                                category = {category}
+                                onRegisterClick = {handleRegisterClick}
+                                onDetailsClick = {setViewingEvent}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                <div className = "flex items-center justify-between mb-6 sm:mb-10 border-b border-zinc-800 pb-4">
+                    <h3 className = "text-lg sm:text-xl font-bold text-white uppercase tracking-widest">
+                        All Events
+                    </h3>
+
+                    {totalEvents > 0 && (
+                        <div className = "flex items-center gap-2.5 bg-zinc-900/50 border border-zinc-800 px-4 py-2 sm:py-2.5 rounded-2xl shadow-inner backdrop-blur-sm animate-in fade-in duration-500">
+                            <span className = "text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500 font-black text-lg sm:text-xl leading-none">
+                                {totalEvents}
+                            </span>
+
+                            <span className = "text-zinc-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest leading-none pt-0.5">
+                                Events to Explore
+                            </span>
+                        </div>
+                    )}
+                </div>
+
                 {/* Check if there are no upcoming events, if so, display a message */}
                 {loading && upcomingEvents.length === 0 ? (
-                    <div className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                    <div className = "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
                         {[...Array(6)].map((_, i) => <EventCardSkeleton key = {i} />)}
                     </div>
                 ) : upcomingEvents.length === 0 ? (
@@ -214,15 +221,14 @@ export default function LandingPage() {
                 ) : (
                     <>
                         {/* If we have events, display them in a grid */}
-                        <div className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                        <div className = "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
                             {/* Map over the array & if there are events, display each 1 of them in their card */}
                             {upcomingEvents.map((event, index) => (
                                 <div
                                     key = {event.id}
                                     className = "animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-backwards"
-                                    style = {{animationDelay : `${Math.min(index * 100, 1000)}ms`}}
                                 >
-                                    <EventCard 
+                                    <EventCard
                                         event = {event}
                                         onRegisterClick = {handleRegisterClick}
                                         onDetailsClick = {setViewingEvent}
@@ -255,7 +261,7 @@ export default function LandingPage() {
                         )}
                     </>
                 )}
-            </main>
+            </div>
 
             {/* Registration modal */}
             {registeringEvent && (
