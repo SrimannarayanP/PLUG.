@@ -1,10 +1,10 @@
 // Onboarding.jsx
 
 
-import {useState, useEffect} from 'react'
-import {useNavigate} from 'react-router-dom'
-import {ArrowRight, Building2, Phone, GraduationCap, Loader2, Calendar, MapPin, ChevronRight, AlertCircle} from 'lucide-react'
+import {AlertCircle, ArrowRight, Building2, Calendar, ChevronRight, GraduationCap, Loader2, Phone} from 'lucide-react'
+import {useEffect, useState} from 'react'
 import {toast} from 'react-hot-toast'
+import {useNavigate} from 'react-router-dom'
 
 import api from '../api/api'
 
@@ -43,21 +43,21 @@ export default function Onboarding() {
 
                 setUser(response.data)
 
-                const isHostUser = response.data.role === 'host' || response.data.role === 'organisation'
+                const isHostUser = !!response.data.profile?.host_type
 
-                if (isHostUser && !response.data.school_college?.id) {
+                if (isHostUser && !response.data.profile?.school_college?.id) {
                     setIsExternalPromoter(true)
                 }
 
                 // Pre-fill existing data, if any
                 setFormData(prev => ({
                     ...prev,
-                    phone_number : response.data.phone_number || '',
-                    date_of_birth : response.data.date_of_birth || '',
-                    student_id_number : response.data.student_id_number || '',
-                    organisation_name : response.data.role === 'host' ? response.data.name : '',
-                    school_college_id : response.data.school_college?.id || '',
-                    school_college_name : response.data.school_college?.name || ''
+                    phone_number : response.data.profile?.phone_number || '',
+                    date_of_birth : response.data.profile?.date_of_birth || '',
+                    student_id_number : response.data.profile?.student_id_number || '',
+                    organisation_name : isHostUser ? (response.data.profile?.name || '') : '',
+                    school_college_id : response.data.profile?.school_college?.id || '',
+                    school_college_name : response.data.profile?.school_college?.name || ''
                 }))
             } catch (err) {
                 console.error("Failed to load user", err)
@@ -121,7 +121,7 @@ export default function Onboarding() {
         }
     }
 
-    const isHost = user?.role === 'host' || user?.role === 'organisation'
+    const isHost = !!user?.profile?.host_type
 
     const validateForm = () => {
         const newErrors = {}
@@ -206,6 +206,9 @@ export default function Onboarding() {
             // Clean data before sending
             const payload = {...formData}
 
+            if (payload.date_of_birth === '') payload.date_of_birth = null
+            if (payload.school_college_id === '') payload.school_college_id = null
+
             if (isHost) {
                 delete payload.date_of_birth
                 delete payload.student_id_number
@@ -273,7 +276,7 @@ export default function Onboarding() {
                     Your School/College {isHost && !isExternalPromoter && <span className = 'text-orange-500'>*</span>}
                 </label>
 
-                <SearchableSelect 
+                <SearchableSelect
                     value = {{
                         id : formData.school_college_id,
                         name : formData.school_college_name
@@ -594,4 +597,5 @@ export default function Onboarding() {
         </div>
 
     )
+    
 }
