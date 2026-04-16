@@ -1,14 +1,18 @@
 // CategoryRow.jsx
 
 
-import {useEffect, useState} from 'react'
 import {ArrowRight} from 'lucide-react'
+import {useEffect, useState} from 'react'
+import {useNavigate} from 'react-router-dom'
 
 import apiPublic from '../../api/apiPublic'
+
 import EventCard from './EventCard'
 
 
 export default function CategoryRow({category, onRegisterClick, onDetailsClick}) {
+
+    const navigate = useNavigate()
 
     const [events, setEvents] = useState([])
     const [loading, setLoading] = useState(true)
@@ -47,7 +51,10 @@ export default function CategoryRow({category, onRegisterClick, onDetailsClick})
                     {category.name}
                 </h3>
 
-                <button className = "text-[10px] sm:text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors flex items-center gap-1 group">
+                <button
+                    onClick = {() => navigate(`/events/category/${category.id}`, {state : {categoryName : category.name}})}
+                    className = "text-[10px] sm:text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors flex items-center gap-1 group"
+                >
                     View All
 
                     <ArrowRight className = "h-3 w-3 transition-transform group-hover:translate-x-1" />
@@ -59,16 +66,16 @@ export default function CategoryRow({category, onRegisterClick, onDetailsClick})
                     [...Array(4).map((_, i) => (
                         <div
                             key = {i}
-                            className = "min-w-[280px] sm:min-w-[320px] h-[300px] bg-zinc-900/50 rounded-2xl animate-pulse border border-zinc-800"
+                            className = "w-[220px] sm:w-[260px] h-[380px] sm:h-[420px] shrink-0 bg-zinc-900/50 rounded-[20px] animate-pulse border border-zinc-800"
                         />
                     ))]
                 ) : (
                     events.map((event) => (
                         <div
                             key = {event.id}
-                            className = "min-w-[280px] sm:min-w-[320px] snap-start"
+                            className = "w-[220px] sm:w-[260px] shrink-0 snap-start"
                         >
-                            <EventCard 
+                            <EventCard
                                 event = {event}
                                 onRegisterClick = {onRegisterClick}
                                 onDetailsClick = {onDetailsClick}
