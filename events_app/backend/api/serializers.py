@@ -7,7 +7,7 @@
 
 # We're only getting data that we want to send to the frontend
 
-from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
@@ -19,9 +19,11 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import Category, CustomUser, Event, EventDocument, OrganisationProfile, Registration, SchoolCollege, StudentProfile
+from .models import Category, CustomUser, Event, EventDocument, HostProfile, Registration, SchoolCollege, StudentProfile
 from .tasks import send_verification_email
-from .utils import  generate_qr_code_base64, generate_ticket_token, generate_otp, track_unlisted_school_college_request
+from .utils import generate_otp, generate_qr_code_base64, generate_ticket_token, track_unlisted_school_college_request
+
+import json
 
 User = get_user_model()
 
@@ -37,7 +39,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
 
         # Encoding the below data into the token
-        token['role'] = user.role
+        token['is_admin'] = user.is_superuser
         token['email'] = user.email
 
         return token
@@ -63,18 +65,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         is_profile_complete = False
 
-        if user.role == CustomUser.Role.HOST:
-            if hasattr(user, 'organisation_profile'):
-                profile = user.organisation_profile
+        if hasattr(user, 'student_profile'):
+            if user.student_profile.phone_number:
+                is_profile_complete = True
 
-                if profile.name and profile.phone_number:
-                    is_profile_complete = True
-        else:
-            if hasattr(user, 'student_profile'):
-                profile = user.student_profile
-
-                if profile.phone_number:
-                    is_profile_complete = True
+        manages_host = user.host_profiles.exists()
 
         return {
 
@@ -85,8 +80,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'email' : user.email,
                 'first_name' : user.first_name,
                 'last_name' : user.last_name,
-                'role' : user.role,
                 'is_profile_complete' : is_profile_complete,
+                'manages_host' : manages_host,
                 'is_email_verified' : user.is_email_verified
             }
 
@@ -147,15 +142,26 @@ class SchoolCollegeSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'campus', 'city', 'state']
 
 
-# --- Profile Serializers ---
-class OrganisationProfileSerializer(serializers.ModelSerializer):
-    
-    school_college = SchoolCollegeSerializer(read_only = True)
+class TeamMemberSerializer(serializers.ModelSerializer):
+    """Minimal serializer to show the users under a club"""
 
     class Meta:
 
-        model = OrganisationProfile
-        fields = ['name' ,'phone_number', 'school_college']
+        model = CustomUser
+        fields = ['id', 'email', 'first_name', 'last_name']
+
+# --- Profile Serializers ---
+class HostProfileSerializer(serializers.ModelSerializer):
+    
+    school_college = SchoolCollegeSerializer(read_only = True)
+
+    owner = serializers.PrimaryKeyRelatedField(read_only = True)
+    team_members = TeamMemberSerializer(source = 'users', many = True, read_only = True)
+
+    class Meta:
+
+        model = HostProfile
+        fields = ['id', 'name', 'host_type', 'contact_email', 'school_college', 'is_verified', 'owner', 'team_members']
 
 
 class StudentProfileSerializer(serializers.ModelSerializer):
@@ -165,27 +171,30 @@ class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         
         model = StudentProfile
-        fields = ['date_of_birth', 'phone_number', 'school_college', 'student_id_number', 'unlisted_school_college_data'] # joined_organisation
+        fields = ['date_of_birth', 'phone_number', 'school_college', 'student_id_number', 'unlisted_school_college_data']
 
 
-class StudentOrgRelationSerializer(serializers.ModelSerializer):
+# class StudentOrgRelationSerializer(serializers.ModelSerializer):
 
-    username = serializers.CharField(source = 'user.username')
+#     username = serializers.CharField(source = 'user.username')
 
-    class Meta:
+#     class Meta:
 
-        model = OrganisationProfile
-        fields = ['id', 'username', 'name']
+#         model = OrganisationProfile
+#         fields = ['id', 'username', 'name']
 
 
 # --- User Serializer ---
 class UserSerializer(serializers.ModelSerializer):
 
     # Optional fields during signup
-    organisation_name = serializers.CharField(write_only = True, required = False)
-    phone_number = serializers.CharField(write_only = True, required = False)
-    date_of_birth = serializers.DateField(write_only = True, required = False)
-    student_id_number = serializers.CharField(write_only = True, required = False)
+    organisation_name = serializers.CharField(write_only = True, required = False, allow_blank = True)
+    phone_number = serializers.CharField(write_only = True, required = False, allow_blank = True)
+    date_of_birth = serializers.DateField(write_only = True, required = False, allow_null = True)
+    student_id_number = serializers.CharField(write_only = True, required = False, allow_blank = True)
+
+    register_as_host = serializers.BooleanField(write_only = True, default = False)
+    host_type = serializers.ChoiceField(choices = HostProfile.HostType.choices, write_only = True, required = False)
 
     school_college_id = serializers.PrimaryKeyRelatedField(
         queryset = SchoolCollege.objects.all(),
@@ -202,8 +211,8 @@ class UserSerializer(serializers.ModelSerializer):
 
         model = User
         fields = [
-            'id', 'email', 'password', 'first_name', 'last_name', 'role', 'organisation_name', 'phone_number', 'date_of_birth', 'student_id_number', 'school_college_id', 
-            'unlisted_school_college_data', 'profile', 'is_email_verified'
+            'id', 'email', 'password', 'first_name', 'last_name', 'register_as_host', 'organisation_name', 'phone_number', 'date_of_birth', 'student_id_number', 
+            'school_college_id', 'unlisted_school_college_data', 'profile', 'is_email_verified', 'host_type'
         ]
         extra_kwargs = {
             'password' : {'write_only' : True}, # This ensures that when we're creating a new user, we accept a password but we don't want to return the
@@ -217,13 +226,14 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # Pop the profile data off from the dictionary.
         # We don't want to pass 'organisation_name' to the User model, it would crash   
-        org_name = validated_data.pop('organisation_name', None) # Returns None if not provided
+        organisation_name = validated_data.pop('organisation_name', None) # Returns None if not provided
         phone_number = validated_data.pop('phone_number', None)
         date_of_birth = validated_data.pop('date_of_birth', None)
         student_id_number = validated_data.pop('student_id_number', None)
         school_college = validated_data.pop('school_college', None)
         unlisted_school_college_data = validated_data.pop('unlisted_school_college_data', None)
-        role = validated_data.get('role', CustomUser.Role.STUDENT)
+        register_as_host = validated_data.pop('register_as_host', False)
+        host_type = validated_data.pop('host_type', HostProfile.HostType.CLUB)
 
         user = User.objects.create_user(**validated_data)
 
@@ -233,31 +243,33 @@ class UserSerializer(serializers.ModelSerializer):
         user.otp_created_at = timezone.now()
         user.save()
 
-        if role == CustomUser.Role.HOST:
-            OrganisationProfile.objects.create(
-                user = user, 
-                name = org_name, 
-                phone_number = phone_number,
-                school_college = school_college
-            )
-        else:
-            # Default to student
-            StudentProfile.objects.create(
-                user = user,
-                phone_number = phone_number,
-                date_of_birth = date_of_birth,
-                student_id_number = student_id_number,
-                school_college = school_college,
-                unlisted_school_college_data = unlisted_school_college_data if not school_college else {}
+        # Everyone gets a StudentProfile so they can buy tickets
+        StudentProfile.objects.create(
+            user = user,
+            phone_number = phone_number,
+            date_of_birth = date_of_birth,
+            student_id_number = student_id_number,
+            school_college = school_college,
+            unlisted_school_college_data = unlisted_school_college_data if not school_college else {}
+        )
+
+        if unlisted_school_college_data and not school_college:
+            track_unlisted_school_college_request(
+                name = unlisted_school_college_data.get('name'),
+                campus = unlisted_school_college_data.get('campus'),
+                city = unlisted_school_college_data.get('city'),
+                state = unlisted_school_college_data.get('state')
             )
 
-            if unlisted_school_college_data and not school_college:
-                track_unlisted_school_college_request(
-                    name = unlisted_school_college_data.get('name'),
-                    campus = unlisted_school_college_data.get('campus'),
-                    city = unlisted_school_college_data.get('city'),
-                    state = unlisted_school_college_data.get('state')
-                )
+        if register_as_host and organisation_name:
+            host_profile = HostProfile.objects.create(
+                name = organisation_name,
+                host_type = host_type,
+                school_college = school_college,
+                owner = user
+            )
+
+            host_profile.users.add(user)
 
         # We use on_commit to ensure the user exists in DB before Celery tries to find them.
         transaction.on_commit(lambda: send_verification_email.delay(str(user.id), otp))
@@ -266,9 +278,9 @@ class UserSerializer(serializers.ModelSerializer):
     
     # Checks who the user & gets the right data.
     def get_profile(self, obj):
-        if hasattr(obj, 'organisation_profile'):
+        if obj.host_profiles.exists():
 
-            return OrganisationProfileSerializer(obj.organisation_profile).data
+            return HostProfileSerializer(obj.host_profiles.first()).data
         
         if hasattr(obj, 'student_profile'):
 
@@ -279,7 +291,8 @@ class UserSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         phone_number = validated_data.pop('phone_number', None)
-        org_name = validated_data.pop('organisation_name', None)
+        organisation_name = validated_data.pop('organisation_name', None)
+        host_type = validated_data.pop('host_type', None)
         date_of_birth = validated_data.pop('date_of_birth', None)
         student_id_number = validated_data.pop('student_id_number', None) 
 
@@ -297,14 +310,14 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
 
         # Update host profile
-        if hasattr(instance, 'organisation_profile'):
-            profile = instance.organisation_profile
+        if instance.owned_clubs.exists():
+            profile = instance.owned_clubs.first()
 
-            if phone_number is not None:
-                profile.phone_number = phone_number
+            if organisation_name is not None:
+                profile.name = organisation_name
 
-            if org_name is not None:
-                profile.name = org_name
+            if host_type is not None:
+                profile.host_type = host_type
 
             if update_school_college:
                 profile.school_college = school_college
@@ -364,7 +377,7 @@ class EventDocumentSerializer(serializers.ModelSerializer):
 class EventSerializer(serializers.ModelSerializer):
 
     # Read the list of nested objects 
-    organisation = OrganisationProfileSerializer(read_only = True)
+    host = HostProfileSerializer(read_only = True)
     categories = CategorySerializer(many = True, read_only = True)
     documents = EventDocumentSerializer(many = True, read_only = True)
     # Write list of IDs
@@ -391,6 +404,8 @@ class EventSerializer(serializers.ModelSerializer):
     is_registration_open = serializers.BooleanField(read_only = True)    
     is_internal_event = serializers.SerializerMethodField()
 
+    has_pending_refunds = serializers.SerializerMethodField()
+
     restricted_to_school_college_ids = serializers.PrimaryKeyRelatedField(
         queryset = SchoolCollege.objects.all(),
         source = 'restricted_to_schools_colleges',
@@ -399,14 +414,17 @@ class EventSerializer(serializers.ModelSerializer):
         many = True
     )
 
+    event_contacts = serializers.JSONField(required = False, allow_null = True)
+
     class Meta:
 
         model = Event
         fields = [
             'id', 'name', 'description', 'start_date', 'start_date_formatted', 'end_date', 'location_type', 'physical_location', 'google_maps_link',
             'virtual_location', 'register_link', 'registration_deadline', 'is_native', 'is_featured', 'poster', 'is_paid_event', 'payment_qr_image',
-            'ticket_price', 'max_tickets_per_user', 'organisation', 'categories', 'category_ids', 'is_registration_open', 'age_restriction_cutoff', 'collect_phone',
-            'collect_college_school', 'collect_student_id', 'documents', 'uploaded_documents', 'restricted_to_school_college_ids', 'is_internal_event'
+            'ticket_price', 'max_tickets_per_user', 'host', 'categories', 'category_ids', 'is_registration_open', 'age_restriction_cutoff', 'collect_phone',
+            'collect_college_school', 'collect_student_id', 'documents', 'uploaded_documents', 'restricted_to_school_college_ids', 'is_internal_event', 'capacity',
+            'remaining_capacity', 'is_sold_out', 'event_contacts', 'is_cancelled', 'has_pending_refunds'
         ]
 
     def get_is_internal_event(self, obj):
@@ -417,7 +435,7 @@ class EventSerializer(serializers.ModelSerializer):
         """Before creating/updating, we create a dummy instance & run .clean() on it to check if there's bad data in the request sent."""
 
         # Taking out fields that would crash the .clean() method.
-        non_model_fields = ['uploaded_documents', 'categories', 'documents']
+        non_model_fields = ['uploaded_documents', 'categories', 'documents', 'restricted_to_schools_colleges', 'event_contacts']
         model_attrs = {k: v for k, v in attrs.items() if k not in non_model_fields}
 
         # Temp. instance
@@ -438,6 +456,10 @@ class EventSerializer(serializers.ModelSerializer):
         except ValidationError as e:
 
             raise serializers.ValidationError(e.message_dict)
+        
+        if not temp_instance.is_native and not temp_instance.register_link:
+
+            raise serializers.ValidationError({'register_link' : "External events must provide a valid registration link."})
         
         start_date = attrs.get('start_date') or (self.instance.start_date if self.instance else None)
         end_date = attrs.get('end_date') or (self.instance.end_date if self.instance else None)
@@ -464,10 +486,14 @@ class EventSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         documents_data = validated_data.pop('uploaded_documents', [])
         categories = validated_data.pop('categories', [])
+        restricted_schools_colleges = validated_data.pop('restricted_to_schools_colleges', [])
 
         event = Event.objects.create(**validated_data)
 
         event.categories.set(categories)
+
+        if restricted_schools_colleges:
+            event.restricted_to_schools_colleges.set(restricted_schools_colleges)
 
         for file in documents_data[:5]:
             EventDocument.objects.create(event = event, file = file, name = file.name)
@@ -477,12 +503,16 @@ class EventSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         documents_data = validated_data.pop('uploaded_documents', [])
         categories = validated_data.pop('categories', None) # If no categories provided, don't update
+        restricted_schools_colleges = validated_data.pop('restricted_to_schools_colleges', [])
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
         if categories is not None:
             instance.categories.set(categories)
+
+        if restricted_schools_colleges is not None:
+            instance.restricted_to_schools_colleges.set(restricted_schools_colleges)
 
         current_count = instance.documents.count()
 
@@ -495,6 +525,17 @@ class EventSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+    
+    def get_has_pending_refunds(self, obj):
+        if not obj.is_paid_event or not obj.is_cancelled:
+            
+            return False
+        
+        if hasattr(obj, '_prefetched_objects_cache') and 'registrations' in obj._prefetched_objects_cache:
+            
+            return any(reg.payment_status == Registration.PaymentStatus.REFUND_PENDING for reg in obj.registrations.all())
+        
+        return obj.registrations.filter(payment_status = Registration.PaymentStatus.REFUND_PENDING).exists()
     
 
 # --- Ticket & Registration Serializers ---
@@ -509,10 +550,13 @@ class RegistrationSerializer(serializers.ModelSerializer):
     class Meta:
 
         model = Registration
-        fields = ['id', 'event', 'attendee_name', 'email', 'created_at', 'is_checked_in', 'is_cancelled', 'qr_code', 'ticket_code', 'payment_status', 'transaction_id']
+        fields = [
+            'id', 'event', 'attendee_name', 'email', 'created_at', 'is_checked_in', 'is_cancelled', 'qr_code', 'ticket_code', 'payment_status', 'razorpay_order_id',
+            'razorpay_payment_id'
+        ]
 
     def get_qr_code(self, obj):
-        token = generate_ticket_token(str(obj.id), str(obj.event.id))
+        token = generate_ticket_token(str(obj.id), str(obj.event.id), obj.event.end_date)
 
         return generate_qr_code_base64(token)
     
@@ -538,12 +582,17 @@ class TicketAttendeeSerializer(serializers.Serializer):
 class BulkRegistrationSerializer(serializers.Serializer):
 
     event_id = serializers.UUIDField()
-    transaction_id = serializers.CharField(required = False, allow_blank = True)
 
     attendees = TicketAttendeeSerializer(many = True, allow_empty = False)
 
     def validate(self, data):
         event_id = data.get('event_id')
+        event = self.context.get('locked_event')
+
+        if not event:
+
+            raise serializers.ValidationError("System error: Event context missing.")
+        
         attendees = data.get('attendees')
         user = self.context['request'].user
 
@@ -565,11 +614,81 @@ class BulkRegistrationSerializer(serializers.Serializer):
                 allowed_schools_colleges = ", ".join([f"{sc.name} - {sc.campus}" if sc.campus else sc.name for sc in internal_colleges])
 
                 raise serializers.ValidationError(f"This event is strictly internal to: {allowed_schools_colleges}.")
-        
-        if len(attendees) > event.max_tickets_per_user:
+            
+        if event.capacity is not None:
+            if len(attendees) > event.remaining_capacity:
 
-            raise serializers.ValidationError(f"You can only book a maximum of {event.max_tickets_per_user} tickets.")
+                raise serializers.ValidationError(f"Only {event.remaining_capacity} tickets remaining.")
         
+        user_existing_tickets = Registration.objects.filter(student = user.student_profile, event = event, is_cancelled = False).count()
+
+        if user_existing_tickets + len(attendees) > event.max_tickets_per_user:
+            remaining = event.max_tickets_per_user - user_existing_tickets
+
+            if remaining == 0:
+
+                raise serializers.ValidationError(f"You have already reached the limit of {event.max_tickets_per_user} ticket(s) for this event.")
+            
+            else:
+
+                raise serializers.ValidationError(f"You already hold {user_existing_tickets} ticket(s). You can only book {remaining} more.")
+
+        attendee_emails = []
+        attendee_student_ids = []
+
+        for i, att in enumerate(attendees):
+            email = att.get('email')
+
+            if not email and i == 0:
+                email = user.email
+            
+            if email:
+                attendee_emails.append(email.lower().strip())
+
+            if event.collect_student_id:
+                student_id = att.get('student_id_number')
+
+                if not student_id and i == 0:
+                    student_id = user.student_profile.student_id_number
+
+                if student_id:
+                    attendee_student_ids.append(str(student_id).strip())
+
+        if len(attendee_emails) != len(set(attendee_emails)):
+
+            raise serializers.ValidationError("Duplicate emails found in your attendee list. Each ticket must belong to a unique person.")
+        
+        if event.collect_student_id and len(attendee_student_ids) != len(set(attendee_student_ids)):
+
+            raise serializers.ValidationError("Duplicate student IDs found in your attendee list. Each ticket must belong to a unique person.")
+        
+        existing_active_regs = Registration.objects.filter(event = event, is_cancelled = False)
+
+        db_emails = existing_active_regs.values_list('email', flat = True)
+        email_overlap = set(attendee_emails).intersection(set([e.lower().strip() for e in db_emails if e]))
+
+        if email_overlap:
+            duplicates = ', '.join(email_overlap)
+
+            raise serializers.ValidationError(f"Tickets are already registered for these emails: {duplicates}")
+        
+        if event.collect_student_id and attendee_student_ids:
+            db_student_ids = []
+
+            for reg in existing_active_regs:
+                if reg.student and reg.student.student_id_number:
+                    db_student_ids.append(str(reg.student.student_id_number).strip())
+
+                if reg.guest_data and reg.guest_data.get('student_id_number'):
+                    db_student_ids.append(str(reg.guest_data.get('student_id_number')).strip())
+        
+            id_overlap = set(attendee_student_ids).intersection(set(db_student_ids))
+
+            if id_overlap:
+                duplicates = ', '.join(id_overlap)
+
+                raise serializers.ValidationError(f"Tickets are already registered for these Student IDs: {duplicates}")
+
         internal_college_ids = [sc.id for sc in internal_colleges] if is_internal_event else []
         
         for index, attendee in enumerate(attendees):
@@ -665,12 +784,16 @@ class AttendeeListSerializer(serializers.ModelSerializer):
     school_college = serializers.SerializerMethodField()
     student_id_number = serializers.SerializerMethodField()
 
+    buyer_email = serializers.EmailField(source = 'student.user.email', read_only = True)
+    buyer_first_name = serializers.CharField(source = 'student.user.first_name', read_only = True)
+    buyer_last_name = serializers.CharField(source = 'student.user.last_name', read_only = True)
+
     class Meta:
 
         model = Registration
         fields = [
             'id', 'first_name', 'last_name', 'email', 'phone_number', 'school_college', 'student_id_number', 'is_checked_in', 'created_at', 'payment_status', 
-            'transaction_id'
+            'razorpay_order_id', 'razorpay_payment_id', 'buyer_email', 'buyer_first_name', 'buyer_last_name'
         ]
 
     def get_phone_number(self, obj):
