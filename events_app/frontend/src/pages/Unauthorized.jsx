@@ -2,7 +2,7 @@
 
 
 import {ArrowLeft, LogIn, ShieldAlert} from 'lucide-react'
-import {useNavigate, useLocation} from 'react-router-dom'
+import {useLocation, useNavigate} from 'react-router-dom'
 
 import Logo from '../components/common/Logo'
 
