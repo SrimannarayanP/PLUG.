@@ -1,10 +1,10 @@
 // LoginSignup.jsx
 
 
+import {ArrowRight, Check, ChevronDown, Loader2} from 'lucide-react'
 import {useState} from 'react'
-import {useNavigate, Link} from 'react-router-dom'
-import {ArrowRight, Check, Loader2} from 'lucide-react'
 import {toast} from 'react-hot-toast'
+import {Link, useNavigate} from 'react-router-dom'
 
 import FormInput from '../components/common/FormInput'
 import BackgroundPaths from '../components/ui/BackgroundPaths'
@@ -12,7 +12,7 @@ import SolidAnimatedButton from '../components/ui/SolidAnimatedButton'
 
 import api from '../api/api'
 
-import {ACCESS_TOKEN, REFRESH_TOKEN} from '../constants'
+import {useAuth} from '../context/AuthContext'
 
 
 export default function LoginSignup() {
@@ -21,16 +21,31 @@ export default function LoginSignup() {
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState('')
 
+    const [isHostTypeOpen, setIsHostTypeOpen] = useState(false)
+    const hostTypeOptions = [
+        {value : 'club', label : "School/College Club/Society"},
+        {value : 'institution', label : 'Institution'},
+        {value : 'promoter', label : "Independent Promoter"}
+    ]
+
     const [formData, setFormData] = useState({
         first_name : '',
         last_name : '',
         email : '',
         password : '',
         confirmPassword : '',
-        role : 'student', // Default
+        register_as_host : false,
+        organisation_name : '',
+        host_type : 'club' // Default
     })
 
     const navigate = useNavigate()
+
+    const {login} = useAuth()
+
+    const handleHostToggle = (isHost) => {
+        setFormData(prev => ({...prev, register_as_host : isHost}))
+    }
 
     const handleChange = (e) => {
         const {name, value} = e.target
@@ -40,20 +55,18 @@ export default function LoginSignup() {
         if (error) setError('')
     }
 
-    const handleRoleChange = (role) => {
-        setFormData(prev => ({...prev, role : role}))
-    }
-
     const handleToggle = () => {
         setIsLogin(prev => !prev)
         // Reset form but keep role preference if selected
         setFormData(prev => ({
             first_name : '',
             last_name : '',
-            email : '', 
-            password : '', 
+            email : '',
+            password : '',
             confirmPassword : '',
-            role : prev.role,
+            register_as_host : prev.register_as_host,
+            organisation_name : prev.organisation_name,
+            host_type : prev.host_type
         }))
         setError('')
     }
@@ -169,7 +182,19 @@ export default function LoginSignup() {
                 ...payload,
                 first_name : formData.first_name,
                 last_name : formData.last_name,
-                role : formData.role,
+                register_as_host : formData.register_as_host
+            }
+
+            if (formData.register_as_host) {
+                if (!formData.organisation_name.trim()) {
+                    setError("Organisation/Club Name is required.")
+                    setIsLoading(false)
+
+                    return
+                }
+
+                payload.organisation_name = formData.organisation_name
+                payload.host_type = formData.host_type
             }
         }
 
@@ -177,9 +202,9 @@ export default function LoginSignup() {
             const response = await api.post(endpoint, payload)
 
             if (response.status === 200 || response.status === 201) {
-                // Store tokens
-                localStorage.setItem(ACCESS_TOKEN, response.data.access)
-                localStorage.setItem(REFRESH_TOKEN, response.data.refresh)
+                const user = response.data?.user || null
+
+                login(response.data.access, response.data.refresh)
 
                 // Clear form
                 setFormData({
@@ -188,29 +213,37 @@ export default function LoginSignup() {
                     email : '', 
                     password : '', 
                     confirmPassword : '',
-                    role : 'student',
+                    register_as_host : false,
+                    organisation_name : '',
+                    host_type : 'club'
                 })
 
-                // If it's a signup, always redirect the user to onboarding
-                if (!isLogin) {
-                    navigate('/verify-email')
+                // Prevent ProtectedRoute race condition.
+                setTimeout(() => {
+                    // If it's a signup, always redirect the user to onboarding
+                    if (!isLogin) {
+                        navigate('/verify-email')
+                        
+                        return
+                    }
                     
-                    return
-                }
+                    // If login, check the profile status.
+                    if (user) {
+                        if (user.is_email_verified === false) {
+                            navigate('/verify-email')
 
-                // If login, check if the profile is complete
-                const user = response.data.user
-                
-                if (!user.is_email_verified) {
-                    navigate('/verify-email')
+                            return
+                        }
 
-                    return
-                }
-                if (!user.is_profile_complete) {
-                    navigate('/onboarding')
-                } else {
-                    user.role === 'host' ? navigate('/host/dashboard') : navigate('/')
-                }
+                        if (user.is_profile_complete === false) {
+                            navigate('/onboarding')
+
+                            return
+                        }
+                    }
+
+                    navigate('/')
+                }, 50)
             }
         } catch (error) {
             handleError(error, isLogin ? 'Login' : 'Signup')
@@ -296,7 +329,15 @@ export default function LoginSignup() {
                             
                         <div className = "absolute inset-0">
                         {/* Login form */}
-                            <div className = {`absolute inset-0 transition-all duration-700 ease-[cubic-bezier(0.23, 1, 0.32, 1)] ${isLogin ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"}`}>
+                            <div
+                                className = {`
+                                    absolute inset-0 transition-all duration-700 ease-[cubic-bezier(0.23, 1, 0.32, 1)]
+                                    ${isLogin 
+                                        ? "translate-y-0 opacity-100"
+                                        : "-translate-y-full opacity-0 pointer-events-none"
+                                    }
+                                `}
+                            >
                                 <form 
                                     className = "p-6 sm:p-8 h-full flex flex-col justify-center gap-6" 
                                     onSubmit = {handleSubmit} 
@@ -313,14 +354,15 @@ export default function LoginSignup() {
                                     </div>
 
                                     <div className = 'space-y-5'>
-                                        <FormInput 
-                                            id = 'login-email' 
+                                        <FormInput
+                                            id = 'login-email'
                                             name = 'email' 
-                                            type = 'email' 
-                                            placeholder = "Email Address" 
+                                            type = 'email'
+                                            placeholder = "Email Address"
                                             value = {formData.email} 
                                             onChange = {handleChange} 
                                         />
+
                                         <div className = 'space-y-2'>
                                             <FormInput 
                                                 id = 'login-password' 
@@ -398,39 +440,105 @@ export default function LoginSignup() {
 
                                     {/* Role toggle */}
                                     <div className = "flex-shrink-0 grid grid-cols-2 gap-3 sm:gap-4 mb-6">
-                                        {['student', 'host'].map((role) => {
-                                            const isSelected = formData.role === role
-
-                                            return (
-
+                                        <div
+                                            onClick = {() => handleHostToggle(false)}
+                                            className = {`
+                                                cursor-pointer rounded-xl p-[1px] relative overflow-hidden group transition-all duration-300
+                                                ${!formData.register_as_host
+                                                    ? 'shadow-[0_0_25px_rgba(236, 72, 153, 0.3)]'
+                                                    : 'hover:bg-zinc-800/50'
+                                                }
+                                            `}
+                                        >
+                                            <div
+                                                className = {`
+                                                    relative h-full bg-[#18181b] rounded-[11px] p-3 flex flex-col items-center justify-center gap-2
+                                                    ${!formData.register_as_host
+                                                        ? 'bg-[#18181b]/90'
+                                                        : ''
+                                                    }
+                                                `}
+                                            >
                                                 <div
-                                                    key = {role}
-                                                    onClick = {() => handleRoleChange(role)}
                                                     className = {`
-                                                        cursor-pointer rounded-xl p-[1px] relative overflow-hidden group transition-all duration-300
-                                                        ${isSelected 
-                                                            ? 'shadow-[0_0_25px_rgba(236, 72, 153, 0.3)]' 
-                                                            : 'hover:bg-zinc-800/50'
+                                                        h-5 w-5 rounded-full flex items-center justify-center transition-all
+                                                        ${!formData.register_as_host
+                                                            ? festiveGradient
+                                                            : "border border-zinc-600 bg-zinc-900"
                                                         }
                                                     `}
                                                 >
-                                                    <div className = {`relative h-full bg-[#18181b] rounded-[11px] p-3 flex flex-col items-center justify-center gap-2 ${isSelected ? 'bg-[#18181b]/90' : ''}`}>
-                                                        <div className = {`h-5 w-5 rounded-full flex items-center justify-center transition-all ${isSelected ? `${festiveGradient}` : "border border-zinc-600 bg-zinc-900"}`}>
-                                                            {isSelected && (
-                                                                <Check 
-                                                                    size = {12} 
-                                                                    className = "text-white font-bold" 
-                                                                />
-                                                            )}
-                                                        </div>
-
-                                                        <span className = {`text-xs font-bold uppercase tracking-wider ${isSelected ? 'text-white' : "text-zinc-500 group-hover:text-zinc-300"}`}>
-                                                            {role}
-                                                        </span>
-                                                    </div>
+                                                    {!formData.register_as_host && (
+                                                        <Check
+                                                            size = {12}
+                                                            className = "text-white font-bold"
+                                                        />
+                                                    )}
                                                 </div>
-                                            )
-                                        })}
+
+                                                <span
+                                                    className = {`
+                                                        text-xs font-bold uppercase tracking-wider
+                                                        ${!formData.register_as_host
+                                                            ? 'text-white'
+                                                            : "text-zinc-500 group-hover:text-zinc-300"
+                                                        }
+                                                    `}
+                                                >
+                                                    Student
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            onClick = {() => handleHostToggle(true)}
+                                            className = {`
+                                                cursor-pointer rounded-xl p-[1px] relative overflow-hidden group transition-all duration-300
+                                                ${formData.register_as_host
+                                                    ? 'shadow-[0_0_25px_rgba(236, 72, 153, 0.3)]'
+                                                    : 'hover:bg-zinc-800/50'
+                                                }
+                                            `}
+                                        >
+                                            <div
+                                                className = {`
+                                                    relative h-full bg-[#18181b] rounded-[11px] p-3 flex flex-col items-center justify-center gap-2
+                                                    ${formData.register_as_host
+                                                        ? 'bg-[#18181b]/90'
+                                                        : ''
+                                                    }
+                                                `}
+                                            >
+                                                <div
+                                                    className = {`
+                                                        h-5 w-5 rounded-full flex items-center justify-center transition-all
+                                                        ${formData.register_as_host
+                                                            ? festiveGradient
+                                                            : "border border-zinc-600 bg-zinc-900"
+                                                        }
+                                                    `}
+                                                >
+                                                    {formData.register_as_host && ( 
+                                                        <Check
+                                                            size = {12}
+                                                            className = "text-white font-bold"
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                <span
+                                                    className = {`
+                                                        text-xs font-bold uppercase tracking-wider
+                                                        ${formData.register_as_host
+                                                            ? 'text-white'
+                                                            : "text-zinc-500 group-hover:text-zinc-300"
+                                                        }
+                                                    `}
+                                                >
+                                                    Host
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                     
                                     <div className = "space-y-4 flex-grow">
@@ -480,6 +588,102 @@ export default function LoginSignup() {
                                             value = {formData.confirmPassword} 
                                             onChange = {handleChange} 
                                         />
+
+                                        {formData.register_as_host && (
+                                            <div className = "space-y-5 pt-6 mt-4 pb-4 border-t border-zinc-800/50 animate-in slide-in-from-top-2 duration-300">
+                                                <div className = "text-center space-y-1.5 mb-4">
+                                                    <h3 className = "text-sm font-bold text-white uppercase tracking-widest">
+                                                        Host Details
+                                                    </h3>
+
+                                                    <p className = "text-[10px] text-zinc-500 uppercase">
+                                                        What entity are you representing?
+                                                    </p>
+                                                </div>
+
+                                                <FormInput 
+                                                    id = 'signup-orgname'
+                                                    name = 'organisation_name'
+                                                    type = 'text'
+                                                    placeholder = "Organisation/Club Name"
+                                                    value = {formData.organisation_name}
+                                                    onChange = {handleChange}
+                                                />
+
+                                                <div className = "relative z-50">
+                                                    <label
+                                                        className = {`
+                                                            absolute -top-2.5 left-3 bg-[#18181b] px-1.5 text-[11px] font-bold z-10 transition-colors
+                                                            pointer-events-none
+                                                            ${isHostTypeOpen
+                                                                ? 'text-yellow-500'
+                                                                : 'text-zinc-500'
+                                                            }
+                                                        `}
+                                                    >
+                                                        Entity Type
+                                                    </label>
+
+                                                    <div
+                                                        onClick = {() => setIsHostTypeOpen(!isHostTypeOpen)}
+                                                        className = {`
+                                                           w-full bg-zinc-900/50 border text-white rounded-xl px-4 py-3.5 text-sm cursor-pointer flex justify-between
+                                                           items-center transition-all
+                                                           ${isHostTypeOpen
+                                                                ? "border-yellow-500 ring-1 ring-yellow-500/20"
+                                                                : "border-zinc-700 hover:border-zinc-500"
+                                                           }
+                                                        `}
+                                                    >
+                                                        <span className = {formData.host_type ? 'text-white' : 'text-zinc-500'}>
+                                                            {hostTypeOptions.find(o => o.value === formData.host_type)?.label || "Select Host Type"}
+                                                        </span>
+
+                                                        <ChevronDown
+                                                            className = {`
+                                                                h-4 w-4 text-zinc-400 transition-transform duration-300
+                                                                ${isHostTypeOpen
+                                                                    ? "rotate-180 text-yellow-500"
+                                                                    : 'text-zinc-400'
+                                                                }
+                                                            `}
+                                                        />
+                                                    </div>
+
+                                                    {isHostTypeOpen && (
+                                                        <>
+                                                            <div
+                                                                className = "fixed inset-0 z-40"
+                                                                onClick = {() => setIsHostTypeOpen(false)}
+                                                            />
+
+                                                            <div className = "absolute top-full left-0 w-full mt-2 bg-[#18181b] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                                {hostTypeOptions.map((opt) => (
+                                                                    <div
+                                                                        key = {opt.value}
+                                                                        onClick = {() => {
+                                                                            handleChange({target : {name : 'host_type', value : opt.value}})
+                                                                            setIsHostTypeOpen(false)
+                                                                        }}
+                                                                        className = {`
+                                                                            px-4 py-3.5 text-sm cursor-pointer transition-colors flex items-center justify-between
+                                                                            ${formData.host_type === opt.value
+                                                                                ? "bg-yellow-500/10 text-yellow-500 font-bold"
+                                                                                : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                                                                            }    
+                                                                        `}
+                                                                    >
+                                                                        {opt.label}
+
+                                                                        {formData.host_type === opt.value && <Check className = "h-4 w-4 text-yellow-500" />}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className = "flex-shrink-0 pt-6 pb-2">
