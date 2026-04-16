@@ -6,9 +6,10 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
 from django.core.files import File
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.encoding import force_bytes
@@ -17,31 +18,33 @@ from django.utils.http import urlsafe_base64_encode
 from rest_framework import generics, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import Category, Event, Registration, SchoolCollege, EventDocument
+from .models import Category, Event, EventClick, EventDocument, HostProfile, Registration, SchoolCollege
 from .permissions import IsEmailVerified, IsEventOwner, IsHostUser
-from .serializers import (AttendeeListSerializer, BulkRegistrationSerializer, CategorySerializer, CustomTokenObtainPairSerializer, EventSerializer, RegistrationSerializer,
-                          SchoolCollegeSerializer, SetNewPasswordSerializer, UserSerializer)
-from .tasks import send_password_reset_email, send_ticket_email, send_verification_email
+from .serializers import (AttendeeListSerializer, BulkRegistrationSerializer, CategorySerializer, CustomTokenObtainPairSerializer, EventSerializer,
+                          RegistrationSerializer, SetNewPasswordSerializer, StudentProfileSerializer, UserSerializer)
+from .tasks import initiate_mass_refunds, process_transaction_refund, send_password_reset_email, send_ticket_email, send_verification_email
 from .utils import generate_otp, track_unlisted_school_college_request
 
-import jwt, os
+import logging, hashlib, hmac, jwt, json, os, razorpay, uuid
 
 User = get_user_model()
 
+logger = logging.getLogger(__name__)
+
+razorpay_client = razorpay.Client(auth = (settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_event_document(request, doc_id):
-
     doc = get_object_or_404(EventDocument, id = doc_id)
 
-    if doc.event.organisation.user != request.user:
+    if not doc.event.host.users.filter(id = request.user.id).exists():
 
         return Response({'error' : "Permission denied"}, status = 403)
     
@@ -126,10 +129,8 @@ class RequestPasswordResetView(APIView):
 
                 transaction.on_commit(lambda: send_password_reset_email.delay(email, reset_link))
         except Exception as e:
-            print(f"Error sending password reset: {e}")
-            
-            pass
-
+            logger.error(f"Failed to process password reset for {email}: {str(e)}")
+        
         return Response({'message' : "If an account exists, a reset link has been sent."}, status = 200)
 
 
@@ -145,7 +146,7 @@ class SetNewPasswordView(generics.GenericAPIView):
         if serializer.is_valid():
             serializer.save()
 
-            return Response({'message' : "Password reset succesfully. You can now login."}, status = 200)
+            return Response({'message' : "Password reset successfully. You can now login."}, status = 200)
         
         return Response(serializer.errors, status = 400)
 
@@ -223,7 +224,7 @@ class EventListView(generics.ListAPIView):
     def get_queryset(self):
 
         return Event.objects.visible_to(self.request.user).select_related(
-            'organisation', 'organisation__school_college'
+            'host', 'host__school_college'
         ).prefetch_related('restricted_to_schools_colleges').order_by('start_date')
 
 
@@ -235,9 +236,9 @@ class UpcomingEventListView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = Event.objects.visible_to(self.request.user).filter(
-            is_featured = False, start_date__gte = timezone.now()
+            is_featured = False, start_date__gte = timezone.now(), is_cancelled = False
         ).select_related(
-            'organisation', 'organisation__school_college'
+            'host', 'host__school_college'
         ).prefetch_related('restricted_to_schools_colleges').order_by('start_date')
 
         category_id = self.request.query_params.get('category_id')
@@ -257,9 +258,9 @@ class FeaturedEventListView(generics.ListAPIView):
     def get_queryset(self):
         
         return Event.objects.visible_to(self.request.user).filter(
-            is_featured = True, start_date__gte = timezone.now()
+            is_featured = True, start_date__gte = timezone.now(), is_cancelled = False
         ).select_related(
-            'organisation', 'organisation__school_college'
+            'host', 'host__school_college'
         ).prefetch_related('restricted_to_schools_colleges').order_by('start_date')
 
 
@@ -273,7 +274,7 @@ class EventDetailsView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
 
         return Event.objects.visible_to(self.request.user).select_related(
-            'organisation', 'organisation__school_college'
+            'host', 'host__school_college'
         ).prefetch_related('restricted_to_schools_colleges')
 
     def get_permissions(self):
@@ -297,13 +298,21 @@ class CreateEventView(APIView):
         serializer = EventSerializer(data = request.data) # We get the raw data from the request & pass it to the serializer. The serializer than maps this raw data to
                                                     # the 'Event' model fields.
 
+        serializer = EventSerializer(data = request.data)
+
         # This method runs all the rules defined in the 'Event' model & 'EventSerializer'. Are required fields present? Is the email valid? etc. It returns True if
         # everything is perfect, false if there is even 1 error.
         if serializer.is_valid():
             # The request.data does not contain the "Organisation ID" (because we don't trust the users to set it). We call .save() but we pass
             # "organisation = user.organisationprofile" as an argument. Toh pehle frontend se event ke poore details aa jaayenge, Django usse validate krega, agar
             # sab sahi rha, phir uss data me "Organisation ID" ko 'inject'/add karega. Phir usko backend me save karega.    
-            save_kwargs = {'organisation' : user.organisation_profile}
+            host_profile = user.host_profiles.first()
+
+            if not host_profile:
+
+                return Response({'error' : "You do not manage any host profiles."}, status = 403)
+            
+            save_kwargs = {'host' : host_profile}
 
             is_internal_event = str(request.data.get('is_internal_event', '')).lower() == 'true'
             is_paid_event = str(request.data.get('is_paid_event')).lower() == 'true'
@@ -327,7 +336,7 @@ class CreateEventView(APIView):
                 event = serializer.save(**save_kwargs)
 
             if is_internal_event:
-                host_school_college = user.organisation_profile.school_college
+                host_school_college = host_profile.school_college
 
                 if host_school_college:
                     event.restricted_to_schools_colleges.set([host_school_college])
@@ -359,9 +368,9 @@ class HostEventListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
 
-        return Event.objects.filter(organisation = user.organisation_profile).select_related(
-            'organisation', 'organisation__school_college'
-        ).prefetch_related('restricted_to_schools_colleges').order_by('-start_date')
+        return Event.objects.filter(host__in = user.host_profiles.all()).select_related(
+            'host', 'host__school_college'
+        ).prefetch_related('restricted_to_schools_colleges', 'registrations').order_by('-start_date')
 
 
 class HostEventDetailView(APIView):
@@ -369,11 +378,10 @@ class HostEventDetailView(APIView):
 
     permission_classes = [IsAuthenticated, IsHostUser]
 
-    def get(self, request, event_id):
+    def get(self, request, id):
         user = request.user
-        profile = user.organisation_profile
 
-        event = get_object_or_404(Event, id = event_id, organisation = profile)
+        event = get_object_or_404(Event, id = id, host__in = user.host_profiles.all())
         
         # Attendee List (.select_related avoids the problem of running 100 SQL queries for 100 students)
         registrations = Registration.objects.filter(
@@ -393,17 +401,16 @@ class HostEventDetailView(APIView):
             )
         
         # Stats
-        total_registrations = Registration.objects.filter(event = event, is_cancelled = False).count()
-        checked_in_count = Registration.objects.filter(event = event, is_checked_in = True, is_cancelled = False).count()
+        stats = Registration.objects.filter(event = event).aggregate(
+            total = Count('id', filter = Q(is_cancelled = False)),
+            checked_in = Count('id', filter = Q(is_cancelled = False, is_checked_in = True))
+        )
 
         attendee_serializer = AttendeeListSerializer(registrations, many = True)
 
         return Response({
             'event' : EventSerializer(event).data,
-            'stats' : {
-                'total' : total_registrations,
-                'checked_in' : checked_in_count,
-            },
+            'stats' : stats,
             'attendees' : attendee_serializer.data
         })
 
@@ -412,27 +419,41 @@ class HostEventDetailView(APIView):
 class HostEventUpdateView(generics.RetrieveUpdateDestroyAPIView):
 
     serializer_class = EventSerializer
-    permission_classes = [IsAuthenticated]
-    parser_classes = [FormParser, MultiPartParser]
+    permission_classes = [IsAuthenticated, IsHostUser]
+    parser_classes = [FormParser, JSONParser, MultiPartParser]
+    lookup_field = 'id'
 
     def get_queryset(self):
-        if hasattr(self.request.user, 'organisation_profile'):
+        if self.request.user.is_authenticated and self.request.user.host_profiles.exists():
 
-            return Event.objects.filter(organisation = self.request.user.organisation_profile).select_related(
-                'organisation', 'organisation__school_college'
+            return Event.objects.filter(host__in = self.request.user.host_profiles.all()).select_related(
+                'host', 'host__school_college'
             ).prefetch_related('restricted_to_schools_colleges')
 
         return Event.objects.none()
-    
+
+    @transaction.atomic
     def perform_update(self, serializer):
-        user = self.request.user
+        instance = self.get_object()
+        was_cancelled = instance.is_cancelled
+
+        becoming_cancelled = serializer.validated_data.get('is_cancelled', was_cancelled)
+
+        if was_cancelled and not becoming_cancelled:
+
+            return ValidationError({'is_cancelled' : "You cannot un-cancel an event once it has been cancelled & refunds are initiated."})
+        
+        if not was_cancelled and becoming_cancelled:
+            if instance.start_date <= timezone.now():
+
+                raise ValidationError({'is_cancelled' : "Cannot cancel an event that has already started or passed."})
 
         is_internal_event = str(self.request.data.get('is_internal_event', '')).lower() == 'true'
 
         event = serializer.save()
 
         if is_internal_event:
-            host_school_college = user.organisation_profile.school_college
+            host_school_college = event.host.school_college
 
             if host_school_college:
                 event.restricted_to_schools_colleges.set([host_school_college])
@@ -450,6 +471,120 @@ class HostEventUpdateView(generics.RetrieveUpdateDestroyAPIView):
             if 'is_internal_event' in self.request.data:
                 event.restricted_to_schools_colleges.clear()
 
+        if becoming_cancelled and not was_cancelled:
+            Registration.objects.filter(
+                event = event,
+                is_cancelled = False,
+                payment_status = Registration.PaymentStatus.VERIFIED
+            ).update(
+                is_cancelled = True,
+                payment_status = Registration.PaymentStatus.REFUND_PENDING
+            )
+
+            Registration.objects.filter(
+                event = event,
+                is_cancelled = False,
+                payment_status = Registration.PaymentStatus.PENDING
+            ).update(
+                is_cancelled = True,
+                payment_status = Registration.PaymentStatus.REJECTED
+            )
+
+            transaction.on_commit(lambda e_id = str(event.id): initiate_mass_refunds.delay(e_id))
+
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object() # Ensures event belongs to logged-in host before deletion.
+
+        finances = instance.registrations.filter(
+            payment_status__in = [
+                Registration.PaymentStatus.VERIFIED,
+                Registration.PaymentStatus.REFUND_PENDING,
+                Registration.PaymentStatus.PENDING,
+            ]
+        ).exists()
+
+        if instance.tickets_sold > 0:
+
+            return Response({'error' : "Cannot delete an event with active tickets. You must cancel all registrations before deleting the event."}, status = 400)
+
+        if finances:
+
+            return Response({
+                'error' : "Cannot delete this event. There are active, pending or un-refunded tickets attached to it. Process all refunds & reject pending payments first."
+            }, status = 400)
+
+        self.perform_destroy(instance)
+
+        return Response({'event' : "Event deleted successfully."}, status = 204)
+    
+
+class TrackEventClickView(APIView):
+
+    permission_classes = [AllowAny]
+
+    def post(self, request, id):
+        event = get_object_or_404(Event, id = id)
+        user = request.user if request.user.is_authenticated else None
+
+        EventClick.objects.create(event = event, user = user)
+
+        return Response({'status' : 'tracked'}, status = 200)
+
+
+# --- Team Management Views ---
+class ClubTeamManagementView(APIView):
+    """Allows owner to add/remove members related to club"""
+
+    permission_classes = [IsAuthenticated, IsHostUser, IsEmailVerified]
+
+    def post(self, request, club_id):
+        host_profile = get_object_or_404(HostProfile, id = club_id, owner = request.user)
+
+        email = request.data.get('email')
+
+        if not email:
+
+            return Response({'error' : "Email is required."}, status = 400)
+        
+        try:
+            target_user = User.objects.get(email__iexact = email.strip())
+        except User.DoesNotExist:
+
+            return Response({'error' : "Student not found. They must sign up for PLUG first."}, status = 404)
+        
+        if host_profile.users.filter(id = target_user.id).exists():
+
+            return Response({'error' : "User is already on the team."}, status = 200)
+
+        host_profile.users.add(target_user)
+
+        return Response({'message' : f"Added {target_user.first_name} to the team."}, status = 200)
+    
+    def delete(self, request, club_id):
+        host_profile = get_object_or_404(HostProfile, id = club_id, owner = request.user)
+
+        email = request.data.get('email')
+
+        if not email:
+
+            return Response({'error' : "Email is required."}, status = 400)
+
+        try:
+            target_user = User.objects.get(email__iexact = email.strip())
+        except User.DoesNotExist:
+
+            return Response({'error' : "User not found."}, status = 404)
+        
+        if target_user == host_profile.owner:
+
+            return Response({'error' : "You cannot remove the founder from the team."}, status = 400)
+        
+        host_profile.users.remove(target_user)
+
+        return Response({'message' : f"Removed {target_user.first_name} from the team."}, status = 200)
+
+
 
 class ProcessPaymentView(APIView):
 
@@ -462,74 +597,89 @@ class ProcessPaymentView(APIView):
         registration_id = request.data.get('registration_id')
         action = request.data.get('action')
 
-        if action not in ['approve', 'reject']:
+        if action not in ['refund']:
 
-            return Response({'error' : "Invalid action"}, status = 400)
+            return Response({'error' : "Invalid action. Payments are verified automatically by the system."}, status = 400)
         
         try:
             # We filter by the registration ID & the organisation linked to the logged-in host. This prevents hackers from approving tickets for other people's events.
-            registration = Registration.objects.select_for_update().get(id = registration_id, event__organisation = user.organisation_profile) # Checks if event belongs to host
+            registration = Registration.objects.select_for_update().get(id = registration_id, event__host__in = user.host_profiles.all()) 
+                                                                                                                                        # Checks if event belongs to host
         except Registration.DoesNotExist:
 
             return Response({'error' : "Registration not found or authorized."}, status = 404)
         
         # Handle rejection
-        if action == 'reject':
-            registration.payment_status = Registration.PaymentStatus.REJECTED
-            registration.is_cancelled = True
-            registration.save()
+        if action == 'refund':
+            if registration.payment_status != Registration.PaymentStatus.REFUND_PENDING:
 
-            return Response({'message' : "Registration rejected."}, status = 200)
-        
-        # Handle approval
-        if action == 'approve':
-            # Don't verify again if already verified
-            if registration.payment_status == Registration.PaymentStatus.VERIFIED:
-
-                return Response({'message' : "Already verified."}, status = 200)
+                return Response({'error' : "Ticket is not pending a refund."}, status = 400)
             
-            registration.payment_status = Registration.PaymentStatus.VERIFIED
-            registration.is_cancelled = False
-            registration.save()
+            # We don't mark as processed here. We'll use the webhook for that.
+            transaction.on_commit(lambda pid = registration.razorpay_payment_id: process_transaction_refund.delay(pid))
 
-            transaction.on_commit(lambda: send_ticket_email.delay(str(registration.id)))
+            return Response({'message' : "Refund initiated with the bank. Status will update automatically."}, status = 200)
 
-            return Response({'message' : "Payment verified. Ticket sent to student."}, status = 200)
-        
 
 # --- Student & Ticket Views ---
 class RegisterForEventView(APIView):
 
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ticket_checkout'
 
-    @transaction.atomic
     def post(self, request, *args, **kwargs):
-        serializer = BulkRegistrationSerializer(data = request.data, context = {'request' : request})
+        event_id = request.data.get('event_id')
+
+        if not event_id:
+
+            return Response({'error' : "event_id is required."}, status = 400)
+        
+        try:
+            uuid.UUID(str(event_id))
+        except ValueError:
+
+            return Response({'error' : "Invalid event_id format."}, status = 400)
+        
+        try:
+            event = Event.objects.get(id = event_id)
+        except Event.DoesNotExist:
+
+            return Response({'error' : "Event not found."}, status = 404)
+        
+        Registration.objects.filter(
+            student = request.user.student_profile,
+            event = event,
+            payment_status = Registration.PaymentStatus.PENDING,
+            is_cancelled = False
+        ).update(
+            is_cancelled = True,
+            payment_status = Registration.PaymentStatus.REJECTED
+        )
+        
+        # Deadline check
+        if not event.is_registration_open:
+
+            return Response({'error' : f"Registration for this event closed on {event.registration_deadline.strftime(r"%d %b, %I:%M %p")}."}, status = 400)
+        
+        serializer = BulkRegistrationSerializer(data = request.data, context = {'request' : request, 'locked_event' : event})
 
         if not serializer.is_valid():
 
             return Response(serializer.errors, status = 400)
 
         data = serializer.validated_data
-        event = data['event']
         attendees = data['attendees']
         
         user = request.user
         student_profile = user.student_profile
 
-        # Deadline check
-        if not event.is_registration_open:
-
-            return Response({'error' : f"Registration for this event closed on {event.registration_deadline.strftime(r"%d %b, %I:%M %p")}."}, status = 400)
-
         buyer_data = attendees[0]
-        profile_updated = False
+
+        profile_updates = {}
 
         # Phone check
         if event.collect_phone and not student_profile.phone_number:
-            student_profile.phone_number = buyer_data.get('phone_number')
-
-            profile_updated = True
+            profile_updates['phone_number'] = buyer_data.get('phone_number')
 
         # College check
         if event.collect_college_school and not student_profile.school_college:
@@ -537,122 +687,144 @@ class RegisterForEventView(APIView):
             school_college_name = buyer_data.get('school_college_name')
 
             if school_college_id:
-                student_profile.school_college_id = school_college_id
-                student_profile.unlisted_school_college_data = {} # Clear any unlisted data if they selected a valid college from the dropdown
-                
-                profile_updated = True
+                profile_updates['school_college'] = school_college_id
+                profile_updates['unlisted_school_college_data'] = {} # Clear any unlisted data if they selected a valid college from the dropdown
             elif school_college_name:
                 unlisted_city = buyer_data.get('school_college_city', '').strip()
                 unlisted_state = buyer_data.get('school_college_state', '').strip()
 
-                if not unlisted_city or not unlisted_state:
-
-                    return Response({'error' : "City & State are required for unlisted colleges."}, status = 400)
-
-                unlisted_name = buyer_data.get('school_college_name').strip()
-                unlisted_campus = buyer_data.get('school_college_campus', '').strip()
-
-                student_profile.unlisted_school_college_data = {
-                    'name' : unlisted_name,
-                    'campus' : unlisted_campus,
+                profile_updates['unlisted_school_college_data'] = {
+                    'name' : buyer_data.get('school_college_name').strip(),
+                    'campus' : buyer_data.get('school_college_campus', '').strip(),
                     'city' : unlisted_city,
                     'state' : unlisted_state
                 }
 
-                profile_updated = True
-
-                track_unlisted_school_college_request(unlisted_name, unlisted_campus, unlisted_city, unlisted_state)
-
         # Student ID check
         if event.collect_student_id and not student_profile.student_id_number:
-            student_profile.student_id_number = buyer_data.get('student_id_number')
-
-            profile_updated = True
+            profile_updates['student_id_number'] = buyer_data.get('student_id_number')
 
         if event.age_restriction_cutoff and not student_profile.date_of_birth:
             dob = buyer_data.get('date_of_birth')
 
             if dob:
-                student_profile.date_of_birth = dob
+                profile_updates['date_of_birth'] = dob
 
-                profile_updated = True
-
+        profile_serializer = None
         # Save the new data if we found any.
-        if profile_updated:
-            student_profile.save()
+        if profile_updates:
+            profile_serializer = StudentProfileSerializer(student_profile, data = profile_updates, partial = True)
 
-        created_registrations = []
-        
-        for i, attendee in enumerate(attendees):
-            is_buyer = (i == 0)
+            if not profile_serializer.is_valid():
 
-            if is_buyer:
-                reg_email = user.email
-                reg_first_name = user.first_name
-                reg_last_name = user.last_name
-            else:
-                reg_email = attendee.get('email', user.email)
-                reg_first_name = attendee.get('first_name', 'Guest')
-                reg_last_name = attendee.get('last_name', '')
+                return Response({
+                    'error' : "Invalid profile data provided.",
+                    'details' : profile_serializer.errors
+                }, status = 400)
+            
+        total_attendees = len(attendees)
+        total_amount_rupees = float(event.ticket_price) * total_attendees
+        total_amount_paise = int(total_amount_rupees * 100)
 
-            # String form of college name
-            school_college_name_str = None
-            school_college_id = attendee.get('school_college_id')
+        razorpay_order = None
 
-            if school_college_id:
-                try:
-                    sc = SchoolCollege.objects.get(id = attendee['school_college_id'])
-                    school_college_name_str = f"{sc.name} - {sc.campus} ({sc.city})" if sc.campus else f"{sc.name} ({sc.city})"
-                except SchoolCollege.DoesNotExist:
-                    pass
-            elif attendee.get('school_college_name'):
-                raw_name = attendee.get('school_college_name').strip()
-                raw_campus = attendee.get('school_college_campus', '').strip()
-                raw_city = attendee.get('school_college_city', '').strip()
-                raw_state = attendee.get('school_college_state', '').strip()
+        if event.is_paid_event:
+            try:
+                order_data = {
+                    'amount' : total_amount_paise,
+                    'currency' : 'INR',
+                    'receipt' : f"rcpt_{user.id}_{uuid.uuid4().hex[:8]}",
+                    'payment_capture' : 1
+                }
 
-                if raw_campus:
-                    school_college_name_str = f"{raw_name} - {raw_campus} ({raw_city})"
-                else:
-                    school_college_name_str = f"{raw_name} ({raw_city})"
+                razorpay_order = razorpay_client.order.create(data = order_data)
+            except Exception as e:
+                logger.error(f"Razorpay Order Creation Failed: {str(e)}")
 
-                track_unlisted_school_college_request(raw_name, raw_campus, raw_city, raw_state)
-            elif is_buyer and student_profile.school_college:
-                sc = student_profile.school_college
-                school_college_name_str = f"{sc.name} ({sc.city})" if sc.campus else f"{sc.name} ({sc.city})"
+                return Response({'error' : "Payment Gateway is currently down. Try again later."}, status = 503)
 
-            guest_extra_info = {}
+        with transaction.atomic():
+            locked_event = Event.objects.select_for_update().get(id = event_id)
 
-            if school_college_name_str:
-                guest_extra_info['school_college_name'] = school_college_name_str
-            if attendee.get('phone_number'):
-                guest_extra_info['phone_number'] = attendee.get('phone_number')
-            if attendee.get('student_id_number'):
-                guest_extra_info['student_id_number'] = attendee.get('student_id_number')
-            if attendee.get('date_of_birth'):
-                guest_extra_info['date_of_birth'] = str(attendee.get('date_of_birth'))
+            if locked_event.capacity is not None:
+                if total_attendees > locked_event.remaining_capacity:
 
-            registration = Registration.objects.create(
-                student = student_profile,
-                event = event,
-                email = reg_email,
-                first_name = reg_first_name,
-                last_name = reg_last_name,
-                guest_data = guest_extra_info,
-                is_cancelled = False,
-                payment_status = Registration.PaymentStatus.PENDING if event.is_paid_event else Registration.PaymentStatus.VERIFIED,
-                transaction_id = data.get('transaction_id')
-            )
+                    return Response({'error' : f"Only {locked_event.remaining_capacity} tickets remaining."}, status = 400)
 
-            created_registrations.append(registration)
+            if profile_serializer:
+                profile_serializer.save()
+
+            created_registrations = []
+            
+            for i, attendee in enumerate(attendees):
+                is_buyer = (i == 0)
+
+                reg_email = user.email if is_buyer else attendee.get('email', user.email)
+                reg_first_name = user.first_name if is_buyer else attendee.get('first_name', 'Guest')
+                reg_last_name = user.last_name if is_buyer else attendee.get('last_name', '')
+
+                # String form of college name
+                school_college_name_str = None
+                school_college_id = attendee.get('school_college_id')
+
+                if school_college_id:
+                    try:
+                        sc = SchoolCollege.objects.get(id = attendee['school_college_id'])
+
+                        school_college_name_str = f"{sc.name} - {sc.campus} ({sc.city})" if sc.campus else f"{sc.name} ({sc.city})"
+                    except SchoolCollege.DoesNotExist:
+                        pass
+                elif attendee.get('school_college_name'):
+                    raw_name = attendee.get('school_college_name').strip()
+                    raw_campus = attendee.get('school_college_campus', '').strip()
+                    raw_city = attendee.get('school_college_city', '').strip()
+                    raw_state = attendee.get('school_college_state', '').strip()
+
+                    school_college_name_str = f"{raw_name} - {raw_campus} ({raw_city})" if raw_campus else f"{raw_name} ({raw_city})"
+
+                    track_unlisted_school_college_request(raw_name, raw_campus, raw_city, raw_state)
+                elif is_buyer and student_profile.school_college:
+                    sc = student_profile.school_college
+                    school_college_name_str = f"{sc.name} ({sc.city})" if sc.campus else f"{sc.name} ({sc.city})"
+
+                guest_extra_info = {}
+
+                if school_college_name_str:
+                    guest_extra_info['school_college_name'] = school_college_name_str
+                if attendee.get('phone_number'):
+                    guest_extra_info['phone_number'] = attendee.get('phone_number')
+                if attendee.get('student_id_number'):
+                    guest_extra_info['student_id_number'] = attendee.get('student_id_number')
+                if attendee.get('date_of_birth'):
+                    guest_extra_info['date_of_birth'] = str(attendee.get('date_of_birth'))
+
+                registration = Registration.objects.create(
+                    student = student_profile,
+                    event = locked_event,
+                    email = reg_email,
+                    first_name = reg_first_name,
+                    last_name = reg_last_name,
+                    guest_data = guest_extra_info,
+                    is_cancelled = False,
+                    payment_status = Registration.PaymentStatus.PENDING if locked_event.is_paid_event else Registration.PaymentStatus.VERIFIED,
+                    razorpay_order_id = razorpay_order['id'] if locked_event.is_paid_event else None
+                )
+
+                created_registrations.append(registration)
 
         # Handling payment state
         if event.is_paid_event:
 
             return Response({
-                'message' : "Payment submitted. Waiting for host's approval.",
-                'count' : len(created_registrations)
-            }, status = 201)
+                'message' : "Order created. Proceed to payment.",
+                'razorpay_order_id' : razorpay_order['id'],
+                'razorpay_key' : settings.RAZORPAY_KEY_ID,
+                'amount' : total_amount_rupees,
+                'currency' : 'INR',
+                'user_name' : f"{user.first_name} {user.last_name}".strip(),
+                'user_email' : user.email,
+                'user_phone' : student_profile.phone_number or ''
+            }, status = 200)
 
         # Trigger async task to send ticket email only after the transaction is committed. This is to ensure that Celery & Django go hand-in-hand. Pehle kya hota tha,
         # Django user ko register krta, phir send_ticket_email_task.delay() ko call krta, lekin ye abhi tak DB me reflect hi nhi hua ki naya user bna hai. Isliye Celery
@@ -674,10 +846,10 @@ class RegisteredEventsView(generics.ListAPIView):
     def get_queryset(self):
 
         return Registration.objects.filter(
-            student__user = self.request.user, is_cancelled = False
+            student__user = self.request.user
         ).select_related(
             'event', # Fetches event details
-            'event__organisation', # Fetches host details 
+            'event__host', # Fetches host details
             'student__school_college' # Fetches college details
         ).order_by('-created_at')
     
@@ -743,7 +915,7 @@ class VerifyTicketView(APIView):
             return Response({'error' : "No ticket token or code provided."}, status = 400)
         
         try:
-            event = Event.objects.get(id = token_event_id)
+            event = Event.objects.get(id = token_event_id, host__in = request.user.host_profiles.all())
 
             grace_period = timedelta(hours = 12)
 
@@ -797,7 +969,7 @@ class VerifyTicketView(APIView):
 
             if registration.payment_status != Registration.PaymentStatus.VERIFIED:
 
-                return Response({'error' : f"Ticket payment is {registration.get_}"})
+                return Response({'error' : f"Ticket payment is {registration.get_payment_status_display().upper()}."}, status = 400)
 
             if registration.is_checked_in:
 
@@ -829,6 +1001,12 @@ class CancelTicketView(APIView):
         if ticket.is_cancelled:
 
             return Response({'error' : "This ticket is already cancelled."}, status = 400)
+
+        time_until_event = ticket.event.start_date - timezone.now()
+
+        if time_until_event <= timedelta(hours = 24):
+
+            return Response({'error' : "Cancellations are strictly prohibited within 24 hours of the event start time."}, status = 400)
         
         if ticket.event.start_date <= timezone.now():
 
@@ -840,7 +1018,9 @@ class CancelTicketView(APIView):
                 ticket.is_cancelled = True
                 ticket.save()
 
-                return Response({'message' : "Cancellation successful. Refund request sent to host."}, status = 200)
+                transaction.on_commit(lambda pid = ticket.razorpay_payment_id: process_transaction_refund.delay(pid))
+
+                return Response({'message' : "Cancellation successful. Refund processing initiated with the bank."}, status = 200)
         elif ticket.payment_status == Registration.PaymentStatus.PENDING:
             ticket.payment_status = Registration.PaymentStatus.REJECTED
             ticket.is_cancelled = True
@@ -873,7 +1053,7 @@ class SchoolCollegeListView(generics.ListAPIView):
     def list(self, request, *args, **kwargs):
         search_query = request.query_params.get('search', '').strip()
 
-        official_queryset = SchoolCollege.objects.all()
+        official_queryset = SchoolCollege.objects.all().order_by('name')
 
         if search_query:
             official_queryset = official_queryset.filter(
@@ -912,3 +1092,207 @@ class SchoolCollegeListView(generics.ListAPIView):
                 requested_results.append(item)
 
         return Response(official_results + requested_results)
+    
+
+# --- Payment & PG Related Views ---
+class VerifyRazorpayPaymentView(APIView):
+    
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        razorpay_payment_id = request.data.get('razorpay_payment_id')
+        razorpay_order_id = request.data.get('razorpay_order_id')
+        razorpay_signature = request.data.get('razorpay_signature')
+
+        if not all([razorpay_payment_id, razorpay_order_id, razorpay_signature]):
+
+            return Response({'error' : "Missing payment parameters from Razorpay."}, status = 400)
+        
+        params_dict = {
+            'razorpay_order_id' : razorpay_order_id,
+            'razorpay_payment_id' : razorpay_payment_id,
+            'razorpay_signature' : razorpay_signature
+        }
+
+        try:
+            razorpay_client.utility.verify_payment_signature(params_dict)
+        except razorpay.errors.SignatureVerificationError:
+            logger.critical(f"Forge attempt detected for order {razorpay_order_id}")
+
+            return Response({'error' : "Payment verification failed. Invalid signature."}, status = 400)
+        
+        with transaction.atomic():
+            registrations = Registration.objects.select_for_update().filter(
+                razorpay_order_id = razorpay_order_id,
+                is_cancelled = False
+            )
+
+            if not registrations.exists():
+
+                return Response({'error' : "Order not found."}, status = 400)
+            
+            pending_registrations = registrations.filter(payment_status = Registration.PaymentStatus.PENDING)
+            
+            # If no tickets are pending, check if they are verified.
+            if not pending_registrations.exists():
+                if registrations.filter(payment_status = Registration.PaymentStatus.VERIFIED).exists():
+
+                    # Webhook beat the frontend. Tell the frontend, it's a success.
+                    return Response({
+                        'message' : "Payment already verified by the system.",
+                        'tickets_processed' : 0
+                    }, status = 200)
+
+                return Response({'error' : "Order already processed or in an invalid state."}, status = 400)
+
+            processed_count = 0
+
+            for reg in pending_registrations:
+                reg.payment_status = Registration.PaymentStatus.VERIFIED
+                reg.razorpay_payment_id = razorpay_payment_id
+                reg.razorpay_signature = razorpay_signature
+                reg.save()
+
+                transaction.on_commit(lambda r = reg: send_ticket_email.delay(str(r.id)))
+
+                processed_count += 1
+
+        return Response({
+            'message' : "Payment successful. Tickets verified & sent.",
+            'tickets_processed' : processed_count
+        }, status = 200)
+    
+
+class RazorpayWebhookView(APIView):
+
+    permission_classes = [AllowAny]
+    
+    def post(self, request, *arg, **kwargs):
+        payload_body = request.body.decode('utf-8')
+        signature_header = request.headers.get('X-Razorpay-Signature')
+
+        if not signature_header:
+
+            return Response({'error' : "Missing signature"}, status = 400)
+        
+        webhook_secret = getattr(settings, 'RAZORPAY_WEBHOOK_SECRET', None)
+
+        if not webhook_secret:
+            logger.critical("RAZORPAY_WEBHOOK_SECRET is not set in Django settings.")
+
+            return Response({'error' : "Server misconfig."}, status = 500)
+        
+        try:
+            razorpay_client.utility.verify_webhook_signature(payload_body, signature_header, webhook_secret)
+        except razorpay.errors.SignatureVerificationError:
+            logger.warning("Invalid Razorpay webhook signature detected.")
+
+            return Response({'error' : "Invalid signature"}, status = 400)
+        
+        # Drop duplicate webhooks using Razorpay's unique event ID header
+        razorpay_event_id = request.headers.get('X-Razorpay-Event-Id')
+
+        if razorpay_event_id and cache.get(f"webhook_processed_{razorpay_event_id}"):
+            logger.info(f"Duplicate webhook {razorpay_event_id} ignored.")
+
+            return Response({'status' : 'ignored', 'reason' : "already processed"}, status = 200)
+        
+        try:
+            payload_dict = json.loads(payload_body)
+        except json.JSONDecodeError:
+
+            return Response({'error' : "Invalid JSON payload."}, status = 400)
+        
+        event_name = payload_dict.get('event')
+
+        if event_name == 'payment.captured':
+            payment_entity = payload_dict['payload']['payment']['entity']
+            razorpay_payment_id = payment_entity['id']
+            razorpay_order_id = payment_entity['order_id']
+
+            with transaction.atomic():
+                # Lock the table so that Celery can't modify at the same time.
+                registrations = Registration.objects.select_for_update().filter(razorpay_order_id = razorpay_order_id)
+
+                if not registrations.exists():
+                    logger.error(f"Webhook received for unknown order: {razorpay_order_id}")
+
+                    return Response({'status' : 'ignored'}, status = 200)
+                
+                # Check if any ticket in this order is cancelled before looping.
+                cancelled_registrations = registrations.filter(
+                    is_cancelled = True,
+                    payment_status__in = [Registration.PaymentStatus.PENDING, Registration.PaymentStatus.REJECTED]
+                )
+                pending_valid_registrations = registrations.filter(is_cancelled = False, payment_status = Registration.PaymentStatus.PENDING)
+
+                if cancelled_registrations.exists():
+                    refund_amount_rupees = sum([reg.event.ticket_price for reg in cancelled_registrations])
+                    refund_amount_paise = int(refund_amount_rupees * 100)
+
+                    logger.info(f"Late payment detected for cancelled order {razorpay_order_id}. Initiating auto-refund ONCE.")
+
+                    try:
+                        razorpay_client.payment.refund(razorpay_payment_id, {'amount' : refund_amount_paise})
+
+                        cancelled_registrations.update(
+                            payment_status = Registration.PaymentStatus.REFUND_PROCESSED,
+                            razorpay_payment_id = razorpay_payment_id
+                        )
+                    except Exception as e:
+                        logger.error(f"Auto-refund failed for payment {razorpay_payment_id}: {str(e)}")
+
+                for reg in pending_valid_registrations:
+                    reg.payment_status = Registration.PaymentStatus.VERIFIED
+                    reg.razorpay_payment_id = razorpay_payment_id
+                    reg.save()
+
+                    transaction.on_commit(lambda r = reg: send_ticket_email.delay(str(r.id)))
+        elif event_name == 'refund.processed':
+            refund_entity = payload_dict['payload']['refund']['entity']
+            razorpay_payment_id = refund_entity['payment_id']
+
+            with transaction.atomic():
+                # Lock all pending refund tickets tied to this specific Razorpay transaction
+                pending_refunds = Registration.objects.select_for_update().filter(
+                    razorpay_payment_id = razorpay_payment_id,
+                    payment_status = Registration.PaymentStatus.REFUND_PENDING
+                )
+
+                if pending_refunds.exists():
+                    # The bank has confirmed the money moved. Officially close the loop.
+                    updated_count = pending_refunds.update(payment_status = Registration.PaymentStatus.REFUND_PROCESSED)
+
+                    logger.info(f"Successfully marked {updated_count} tickets as REFUND_PROCESSED for payment {razorpay_payment_id}.")
+                else:
+                    logger.warning(f"Received refund.processed for {razorpay_payment_id} but no pending tickets found.")
+        
+        if razorpay_event_id:
+            cache.set(f"webhook_processed_{razorpay_event_id}", True, timeout = 86400)
+
+        return Response({'status' : 'processed'}, status = 200)
+
+
+class CancelPendingOrderView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        razorpay_order_id = request.data.get('razorpay_order_id')
+
+        if not razorpay_order_id:
+
+            return Response({'error' : "Order ID is required."}, status = 400)
+        
+        # Only touch pending tickets belonging to the logged-in user for this specific order.
+        released_count = Registration.objects.filter(
+            student__user = request.user,
+            razorpay_order_id = razorpay_order_id,
+            payment_status = Registration.PaymentStatus.PENDING,
+            is_cancelled = False
+        ).update(
+            is_cancelled = True,
+            payment_status = Registration.PaymentStatus.REJECTED
+        )
+
+        return Response({'message' : f"Released {released_count} pending tickets."}, status = 200)
