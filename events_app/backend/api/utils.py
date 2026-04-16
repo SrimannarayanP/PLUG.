@@ -1,24 +1,24 @@
 # utils.py
 
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.db.models import F
 from django.utils import timezone
 
-from rest_framework.decorators import api_view
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
+import base64, io, jwt, qrcode, random, string
 
-from .models import EventDocument
-
-import base64, io, jwt, qrcode, random, secrets, string
 
 # Generates a secure, signed JWT containing the registration details. This token is the ticket.
-def generate_ticket_token(registration_id, event_id):
+def generate_ticket_token(registration_id, event_id, event_end_date):
+    expiration_date = event_end_date + timedelta(hours = 12)
+
     payload = {
         'rid' : str(registration_id), # Registration ID
         'eid' : str(event_id), # Event ID
-        'iat' : timezone.now() # Issued At
+        'iat' : timezone.now(), # Issued At
+        'exp' : expiration_date # Expiration date
     }
 
     # Sign the token using HS256 algorithm & my secret key
@@ -69,9 +69,9 @@ def track_unlisted_school_college_request(name, campus, city, state):
 
         return
     
-    from .models import UnlistedSchoolCollegeRequest
+    from .models import UnlistedSchoolCollege
 
-    obj, created = UnlistedSchoolCollegeRequest.objects.get_or_create(
+    obj, created = UnlistedSchoolCollege.objects.get_or_create(
         name = name.strip(),
         campus = campus.strip() if campus else None,
         city = city.strip(),
