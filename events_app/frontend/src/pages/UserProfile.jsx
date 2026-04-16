@@ -1,18 +1,19 @@
 // UserProfile.jsx
 
 
+import {AlertTriangle, ArrowLeft, Building2, Calendar, CheckCircle2, Edit2, GraduationCap, LogOut, Mail, MapPin, Phone, Save, Shield, User, X} from 'lucide-react'
 import {useEffect, useState} from 'react'
-import {useNavigate} from 'react-router-dom'
-import {Mail, Shield, Building2, LogOut, ArrowLeft, GraduationCap, Phone, Calendar, CheckCircle2, AlertTriangle, MapPin, Edit2, Save, X, User, Check} from 'lucide-react'
 import {toast} from 'react-hot-toast'
+import {useNavigate} from 'react-router-dom'
 
 import api from '../api/api'
 
 import {getImageUrl} from '../utils/imageHelper'
 
-import LoadingSpinner from '../components/common/LoadingSpinner'
 import FormInput from '../components/common/FormInput'
+import LoadingSpinner from '../components/common/LoadingSpinner'
 import SearchableSelect from '../components/common/SearchableSelect'
+import SolidAnimatedButton from '../components/ui/SolidAnimatedButton'
 
 
 export default function UserProfile() {
@@ -54,7 +55,7 @@ export default function UserProfile() {
             phone_number : details.phone_number || '',
             date_of_birth : details.date_of_birth || '',
             student_id_number : details.student_id_number || '',
-            organisation_name : data.role === 'host' ? (details.name || data.first_name) : '',
+            organisation_name : ('host_type' in details) ? (details.name || data.first_name) : '',
 
             school_college_id : details.school_college?.id || '',
             school_college_name : details.school_college?.name || '',
@@ -181,8 +182,8 @@ export default function UserProfile() {
 
     const userDetails = profile.profile || {}
 
-    const isStudent = profile.role === 'student'
-    const isHost = profile.role === 'host'
+    const isHost = Boolean(profile.profile && 'host_type' in profile.profile)
+    const isStudent = !isHost
 
     const phone = userDetails.phone_number || "Not Provided"
     const dob = userDetails.date_of_birth || null
@@ -197,9 +198,9 @@ export default function UserProfile() {
 
     return (
 
-        <div className = "min-h-screen bg-[#09090b] text-white p-4 sm:p-6 lg:p-8 font-sans relative overflow-x-hidden selection:bg-pink-500 selection:text-white pb-24">
+        <div className = "min-h-[calc(100vh-72px)] text-white px-4 sm:px-6 lg:px-8 relative font-sans overflow-x-hidden selection:bg-pink-500 selection:text-white pb-24">
             {/* Background Texture */}
-            <div 
+            <div
                 className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0"
                 style = {{
                     backgroundImage : "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
@@ -209,7 +210,7 @@ export default function UserProfile() {
 
             <div className = "max-w-5xl mx-auto relative z-10">
                 {/* Header/Nav */}
-                <div className = "flex items-center justify-between mb-8 sticky top-0 z-50 bg-[#09090b]/80 backdrop-blur-md py-4 -mx-4 sm:mx-0 px-4 sm:px-0">
+                <div className = "flex items-center justify-between mb-4 sticky top-20 md:top-[2.5px] z-40 bg-[#09090b]/90 backdrop-blur-md py-4 -mx-4 sm:mx-0 px-4 sm:px-0">
                     <button
                         onClick = {() => navigate(-1)} // Go back to previous page
                         className = "group flex items-center text-zinc-400 hover:text-white transition-colors text-sm font-bold uppercase tracking-widest"
@@ -247,16 +248,15 @@ export default function UserProfile() {
                                     Cancel
                                 </button>
 
-                                <button
+                                <SolidAnimatedButton
                                     onClick = {handleSave}
-                                    disabled = {isSaving}
-                                    className = {`flex items-center gap-2 px-4 py-2 rounded-xl text-white font-bold uppercase tracking-wider text-xs shadow-lg ${festiveGradient}`}
+                                    isLoading = {isSaving}
+                                    className = "!px-4 !py-2 !text-xs min-w-[100px]"
                                 >
-                                    {isSaving
-                                        ? <LoadingSpinner size = 'sm' />
-                                        : <><Save className = "h-3.5 w-3.5" /> Save</>
-                                    }
-                                </button>
+                                    {!isSaving && <Save className = "h-3.5 w-3.5" />}
+
+                                    {isSaving ? 'Saving' : 'Save'}
+                                </SolidAnimatedButton>
                             </>
                         )}
 
@@ -273,7 +273,7 @@ export default function UserProfile() {
                 <div className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* Left side : Identity card */}
                     <div className = "md:col-span-2 relative overflow-hidden bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-10 shadow-2xl flex flex-col md:flex-row items-center md:items-start gap-8">
-                        {/* Ambient glow */}
+                        {/* Ambient Glow */}
                         <div className = {`absolute top-0 right-0 h-64 w-64 ${festiveGradient} blur-[120px] opacity-15 pointer-events-none rounded-full transform translate-x-1/3 -translate-y-1/3`} />
 
                         <div className = "relative shrink-0">
@@ -334,7 +334,7 @@ export default function UserProfile() {
                                 </div>
                             ) : (
                                 <div>
-                                    <h1 className = "text-3xl md:text-5xl font-black text-white tracking-tight mb-3">
+                                    <h1 className = "text-3xl md:text-5xl font-black text-white tracking-tight leading-normal pt-2 pb-1 mb-2">
                                         {profile.first_name} {profile.last_name}
                                     </h1>
                                     
@@ -389,7 +389,7 @@ export default function UserProfile() {
                     </div>
                         
                     {/* Personal Details Grid */}
-                    <div className = "bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-8 flex flex-col justify-center space-y-6">
+                    <div className = "bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-8 flex flex-col justify-center space-y-6 md:col-span-2 lg:col-span-1">
                         <div className = "flex items-center gap-3 text-zinc-500 mb-2">
                             <User className = "h-5 w-5" />
 
@@ -400,7 +400,7 @@ export default function UserProfile() {
                         
                         {/* Phone */}
                         <div className = 'space-y-1'>
-                            <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
+                            <label className = "mb-1.5 text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
                                 <Phone className = "h-3 w-3" />
 
                                 Phone Number
@@ -412,7 +412,6 @@ export default function UserProfile() {
                                     value = {formData.phone_number}
                                     onChange = {handleChange}
                                     className = {inputStyle}
-                                    placeholder = "+91..."
                                 />
                             ) : (
                                 <p className = "text-lg font-medium text-white font-mono">
@@ -460,7 +459,6 @@ export default function UserProfile() {
                                         value = {formData.student_id_number}
                                         onChange = {handleChange}
                                         className = {inputStyle}
-                                        placeholder = "Enter your Student ID or USN"
                                     />
                                 ) : (
                                     <p className = "text-lg font-medium text-white font-mono">
