@@ -3,16 +3,17 @@
 
 from cloudinary_storage.storage import RawMediaCloudinaryStorage
 
-from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator, URLValidator
 from django.db import models, transaction
 from django.db.models import Q, QuerySet
+from django.db.models.signals import post_delete, pre_save
+from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-import secrets, string, uuid
+import cloudinary.uploader, secrets, string, uuid
 
 # CONSTANTS
 MAX_BROCHURE_SIZE_MB = 10
@@ -34,6 +35,13 @@ def validate_image_size(value):
 
     return validate_file_size(value, MAX_IMAGE_SIZE_MB)
 
+
+# Generators
+def generate_ticket_code():
+    """Generates a unique 6-character alphanumeric code (uppercase)"""
+    characters = string.ascii_uppercase + string.digits
+
+    return ''.join(secrets.choice(characters) for _ in range(6))
 
 # --- Abstract Classes ---
 class TimeStampedModel(models.Model):
@@ -61,24 +69,28 @@ class UUIDModel(models.Model):
 class EventQuerySet(QuerySet):
     
     def visible_to(self, user):
-        if user.is_authenticated and hasattr(user, 'organisation_profile'):
+        q_objects = Q(restricted_to_schools_colleges__isnull = True)
 
-            return self.filter(
-                Q(restricted_to_schools_colleges__isnull = True) |
-                Q(organisation = user.organisation_profile)
-            )
+        if user.is_authenticated:
+            if user.host_profiles.exists():
+                q_objects |= Q(host__in = user.host_profiles.all())
 
-        if user.is_authenticated and hasattr(user, 'student_profile'):
-            student_college = user.student_profile.school_college
+            if hasattr(user, 'student_profile') and user.student_profile.school_college:
+                q_objects |= Q(restricted_to_schools_colleges = user.student_profile.school_college)
+                
+        return self.filter(q_objects).distinct()
+    
+    def with_ticket_counts(self):
 
-            if student_college:
-
-                return self.filter(
-                    Q(restricted_to_schools_colleges__isnull = True) |
-                    Q(restricted_to_schools_colleges = student_college)
+        return self.annotate(
+            annotated_tickets_sold = models.Count(
+                'registrations',
+                filter = models.Q(
+                    registrations__is_cancelled = False,
+                    registrations__payment_status__in = ['verified', 'pending']
                 )
-            
-        return self.filter(restricted_to_schools_colleges__isnull = True)
+            )
+        )
 
 
 # --- User Management ---
@@ -101,7 +113,6 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
-        extra_fields.setdefault('role', CustomUser.Role.ADMIN)
 
         if extra_fields.get('is_staff') is not True:
 
@@ -116,16 +127,9 @@ class CustomUserManager(BaseUserManager):
 
 # Defined a custom user model that uses email for login instead of username
 class CustomUser(AbstractUser):
-    
-    class Role(models.TextChoices):
-
-        STUDENT = 'student', _('Student')
-        ADMIN = 'admin', _('Admin')
-        HOST = 'host', _('Host')
 
     username = None
     email = models.EmailField(_('email address'), unique = True)
-    role = models.CharField(max_length = 10, choices = Role.choices, default = Role.STUDENT)
 
     is_email_verified = models.BooleanField(default = False)
     otp = models.CharField(max_length = 6, null = True, blank = True) # CharField because if OTP starts with 0, IntegerField would cutoff the 0.
@@ -208,11 +212,23 @@ class UnlistedSchoolCollege(TimeStampedModel):
 
 
 # --- Profiles ---
-class OrganisationProfile(TimeStampedModel):
+class HostProfile(TimeStampedModel):
 
-    user = models.OneToOneField(CustomUser, on_delete = models.CASCADE, primary_key = True, related_name = 'organisation_profile')
-    name = models.CharField(max_length = 255, null = True, blank = True)
-    phone_number = models.CharField(max_length = 20, unique = True, blank = True, null = True)
+    class HostType(models.TextChoices):
+
+        CLUB = 'club', _('Club')
+        INSTITUTION = 'institution', _('Institution')
+        PROMOTER = 'promoter', _("External Promoter")
+
+    owner = models.ForeignKey(CustomUser, on_delete = models.SET_NULL, null = True, related_name = 'owned_clubs')
+    users = models.ManyToManyField(CustomUser, related_name = 'host_profiles')
+
+    host_type = models.CharField(max_length = 20, choices = HostType.choices, default = HostType.CLUB)
+
+    is_verified = models.BooleanField(default = False)
+
+    name = models.CharField(max_length = 255)
+    contact_email = models.EmailField(blank = True, null = True, help_text = "Public-facing official email for the club/org")
 
     school_college = models.ForeignKey(
         SchoolCollege,
@@ -224,8 +240,9 @@ class OrganisationProfile(TimeStampedModel):
     )
 
     def __str__(self):
+        status = 'Verified' if self.is_verified else 'Unverified'
 
-        return self.name or f"Incomplete Host Profile ({self.user.email})"
+        return self.name or f"Incomplete Host Profile ({self.id})"
 
 
 class StudentProfile(TimeStampedModel):
@@ -279,6 +296,7 @@ class Event(UUIDModel, TimeStampedModel):
     # Checks & Assets
     is_native = models.BooleanField(default = False)
     is_featured = models.BooleanField(default = False)
+    is_cancelled = models.BooleanField(default = False)
     poster = models.ImageField(
         upload_to = 'event_posters/', 
         null = True, 
@@ -302,14 +320,17 @@ class Event(UUIDModel, TimeStampedModel):
     collect_student_id = models.BooleanField(default = False)
     
     # Foreign Keys
-    organisation = models.ForeignKey(OrganisationProfile, on_delete = models.CASCADE, related_name = 'events')
+    host = models.ForeignKey(HostProfile, on_delete = models.CASCADE, related_name = 'events')
     categories = models.ManyToManyField(Category, through = 'EventCategory', related_name = 'events')
     restricted_to_schools_colleges = models.ManyToManyField(
         SchoolCollege,
         blank = True,
         related_name = 'internal_events',
-        help_text = "If set, only students from this college can view & register." 
+        help_text = "If set, only students from this college can view & register."
     )
+
+    event_contacts = models.JSONField(default = list, blank = True, help_text = "Stores POCs as a list of dicts")
+    payout_settled = models.BooleanField(default = False, help_text = "Check this box once you have manually transferred funds to the host.")
 
     objects = EventQuerySet.as_manager()
 
@@ -322,7 +343,7 @@ class Event(UUIDModel, TimeStampedModel):
                 name = 'event_feed_idx'
             ),
             models.Index(
-                fields = ['organisation', '-start_date'],
+                fields = ['host', '-start_date'],
                 name = 'host_dashboard_idx'
             )
         ]
@@ -361,6 +382,10 @@ class Event(UUIDModel, TimeStampedModel):
         if self.is_paid_event and self.ticket_price <= 0:
 
             raise ValidationError({'ticket_price' : _("Paid events must have a ticket price greater than 0.")})
+        
+        if not self.is_native and not self.register_link:
+
+            raise ValidationError({'register_link' : _("External events must provide a valid registration link.")})
 
     @property
     def is_registration_open(self):
@@ -396,6 +421,21 @@ class Event(UUIDModel, TimeStampedModel):
 
         return self.name
     
+
+class EventClick(TimeStampedModel):
+
+    event = models.ForeignKey(Event, on_delete = models.CASCADE, related_name = 'outbound_clicks')
+    user = models.ForeignKey(CustomUser, on_delete = models.SET_NULL, null = True, blank = True)
+
+    class Meta:
+        
+        ordering = ['-created_at']
+        indexes = [models.Index(fields = ['event', '-created_at'])]
+
+    def __str__(self):
+
+        return f"Click on {self.event.name} at {self.created_at}"
+
 
 # Separate table for Event-Category many-to-many relationship
 class EventCategory(models.Model):
@@ -447,7 +487,7 @@ class Registration(UUIDModel, TimeStampedModel):
     guest_data = models.JSONField(default = dict, blank = True, null = True)
 
     # Manual Entry Ticket Code
-    ticket_code = models.CharField(max_length = 6, unique = True, db_index = True, blank = True)
+    ticket_code = models.CharField(max_length = 6, unique = True, db_index = True, default = generate_ticket_code)
 
     # Status flags
     is_cancelled = models.BooleanField(default = False)
@@ -456,7 +496,9 @@ class Registration(UUIDModel, TimeStampedModel):
 
     # Payment Tracking
     payment_status = models.CharField(max_length = 20, choices = PaymentStatus.choices, default = PaymentStatus.PENDING)
-    transaction_id = models.CharField(max_length = 100, blank = True, null = True, db_index = True)
+    razorpay_order_id = models.CharField(max_length = 100, blank = True, null = True, db_index = True)
+    razorpay_payment_id = models.CharField(max_length = 100, blank = True, null = True)
+    razorpay_signature = models.CharField(max_length = 255, blank = True, null = True)
 
     class Meta:
 
@@ -497,23 +539,9 @@ class Registration(UUIDModel, TimeStampedModel):
         if not self.last_name:
             self.last_name = self.student.user.last_name or ''
 
-        if not self.ticket_code:
-            self.ticket_code = self._generate_unique_code()
-
         self.clean()
         
         super().save(*args, **kwargs)
-
-    def _generate_unique_code(self):
-        """Generates a unique 6-character alphanumeric code (uppercase)"""
-        characters = string.ascii_uppercase + string.digits
-
-        while True:
-            code = ''.join(secrets.choice(characters) for _ in range(6))
-
-            if not Registration.objects.filter(ticket_code = code).exists():
-
-                return code
             
     @property
     def attendee_name(self):
@@ -523,3 +551,30 @@ class Registration(UUIDModel, TimeStampedModel):
     def __str__(self):
         
         return f"{self.student} - {self.event.name}"
+    
+
+# File handling
+@receiver(post_delete, sender = Event)
+def auto_delete_poster_on_delete(sender, instance, **kwargs):
+    if instance.poster:
+        cloudinary.uploader.destroy(instance.poster.name)
+
+@receiver(pre_save, sender = Event)
+def auto_delete_poster_on_change(sender, instance, **kwargs):
+    if not instance.pk:
+
+        return
+
+    try:
+        old_poster = Event.objects.get(pk = instance.pk).poster
+    except Event.DoesNotExist:
+
+        return
+    
+    if old_poster and old_poster != instance.poster:
+        cloudinary.uploader.destroy(old_poster.name)
+
+@receiver(post_delete, sender = EventDocument)
+def auto_fills_on_delete(sender, instance, **kwargs):
+    if instance.file:
+        cloudinary.uploader.destroy(instance.file.name)
