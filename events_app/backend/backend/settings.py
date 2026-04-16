@@ -1,15 +1,13 @@
 # settings.py
 
 
-from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
+from pathlib import Path
 
-import os, dj_database_url
+import dj_database_url, os, ssl
 
 
-load_dotenv() # Loads an enviroment file
- 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,7 +22,8 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') # Allows any different host to host our Django app
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') # Allows any different host to host our Django app
+# ALLOWED_HOSTS = ['*']
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES' : (
@@ -33,13 +32,21 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES' : (
         # 'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_THROTTLE_CLASSES' : [
+        'rest_framework.throttling.ScopedRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES' : {
+        'ticket_checkout' : '5/min'
+    },
     'DEFAULT_PAGINATION_CLASS' : 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE' : 10,
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME' : timedelta(minutes = 45),
-    'REFRESH_TOKEN_LIFETIME' : timedelta(days = 1),
+    'ACCESS_TOKEN_LIFETIME' : timedelta(minutes = 15),
+    'REFRESH_TOKEN_LIFETIME' : timedelta(days = 30),
+    'ROTATE_AFTER_REFRESH' : True,
+    'BLACKLIST_AFTER_ROTATION' : True
 }
 
 # Application definition
@@ -109,9 +116,10 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default = os.getenv('DATABASE_URL'),
-        conn_max_age = 600
+    'default': dj_database_url.parse(
+        os.getenv('DATABASE_URL'),
+        conn_max_age = 600,
+        conn_health_checks = True
     )
 }
 
@@ -140,7 +148,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
@@ -179,6 +187,10 @@ CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_TIMEZONE = 'UTC'
 
+if CELERY_BROKER_URL.startswith('rediss://'):
+    CELERY_BROKER_USE_SSL = {'ssl_cert_reqs' : ssl.CERT_NONE}
+    CELERY_REDIS_BACKEND_USE_SSL = {'ssl_cert_reqs' : ssl.CERT_NONE}
+
 # EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' # For development, emails will be printed to console
 # EMAIL_HOST = 'smtp.gmail.com'
 # EMAIL_PORT = 465
@@ -192,8 +204,44 @@ BREVO_API_KEY = os.getenv('BREVO_API_KEY')
 BREVO_FROM_EMAIL = os.getenv('BREVO_FROM_EMAIL')
 BREVO_FROM_NAME = os.getenv('BREVO_FROM_NAME')
 
-FRONTEND_URL = os.getenv('FRONTEND_URL')
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True').lower() == 'true'
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'True').lower() == 'true'
 
-if not FRONTEND_URL:
+if SECURE_SSL_REDIRECT:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_HSTS_SECONDS = 31536000 # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
- raise ValueError("Missing FRONTEND_URL in environment variables. Cannot construct email links.")
+RAZORPAY_KEY_ID = os.getenv('RAZORPAY_KEY_ID')
+RAZORPAY_KEY_SECRET = os.getenv('RAZORPAY_KEY_SECRET')
+RAZORPAY_WEBHOOK_SECRET = os.getenv('RAZORPAY_WEBHOOK_SECRET')
+
+LOGGING = {
+    'version' : 1,
+    'disable_existing_loggers' : False,
+    'formatters' : {
+        'verbose' : {
+            'format' : '{levelname} {asctime} {module} {message}',
+            'style' : '{',
+        }
+    },
+    'handlers' : {
+        'console' : {
+            'class' : 'logging.StreamHandler',
+            'formatter' : 'verbose',
+        }
+    },
+    'root' : {
+        'handlers' : ['console'],
+        'level' : 'WARNING',
+    },
+    'loggers' : {
+        'django' : {
+            'handlers' : ['console'],
+            'level' : 'INFO',
+            'propagate' : False,
+        }
+    }
+}
