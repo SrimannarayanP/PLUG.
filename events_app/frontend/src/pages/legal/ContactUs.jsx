@@ -46,7 +46,7 @@ export default function ContactUs() {
 
                 <div>
                     <h3 className = "text-white font-bold mb-1">
-                        Phone (Optional but recommended)
+                        Phone
                     </h3>
 
                     <p>[YOUR PHONE NUMBER]</p>
