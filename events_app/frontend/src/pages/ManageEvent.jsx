@@ -1,19 +1,19 @@
 // ManageEvent.jsx
 
 
-import {useState, useEffect, useCallback} from 'react'
-import {useParams, useNavigate} from 'react-router-dom'
-import {ScanLine, ArrowLeft, Users, UserCheck, Calendar, MapPin, Search, Loader2} from 'lucide-react'
+import {ArrowLeft, Calendar, MapPin, ScanLine, Search, UserCheck, Users} from 'lucide-react'
+import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useNavigate, useParams} from 'react-router-dom'
 
 import api from '../api/api'
 
-import LoadingSpinner from '../components/common/LoadingSpinner'
 import HostAttendeeTable from '../components/ui/HostAttendeeTable'
 import HostAttendeeTableSkeleton from '../components/ui/HostAttendeeTableSkeleton'
+import LoadingSpinner from '../components/common/LoadingSpinner'
 
 
 export default function ManageEvent() {
-    
+
     const {eventId} = useParams() // Get ID from URL
     const navigate = useNavigate()
 
@@ -53,6 +53,35 @@ export default function ManageEvent() {
 
         return () => clearTimeout(delayBounceFn)
     }, [searchQuery, fetchData])
+
+    const groupedOrders = useMemo(() => {
+        const attendees = data?.attendees || []
+
+        if (attendees.length === 0) return []
+
+        const groups = {}
+
+        attendees.forEach(ticket => {
+            const orderKey = `${ticket.buyer_email}_${ticket.created_at}` // Create a unique key for the order based on who bought & when
+
+            if (!groups[orderKey]) {
+                groups[orderKey] = {
+                    id : orderKey,
+                    buyer_name : `${ticket.buyer_first_name} ${ticket.buyer_last_name}`,
+                    buyer_email : ticket.buyer_email,
+                    created_at : ticket.created_at,
+                    payment_status : ticket.payment_status,
+                    razorpay_order_id : ticket.razorpay_order_id,
+                    tickets : [] // Array to hold the actual guests
+                }
+            }
+
+            groups[orderKey].tickets.push(ticket)
+        })
+
+        // Return as an array sorted by created_at in descending order
+        return Object.values(groups).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }, [data])
 
     if (loading) return <LoadingSpinner />
 
@@ -100,8 +129,6 @@ export default function ManageEvent() {
         stats : {total : 0, checked_in : 0}, 
         attendees : []
     }
-    
-    const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
 
     return (
 
@@ -248,8 +275,8 @@ export default function ManageEvent() {
                             {loading ? (
                                 <HostAttendeeTableSkeleton />
                             ) : (
-                                <HostAttendeeTable 
-                                    attendees = {attendees}
+                                <HostAttendeeTable
+                                    groupedOrders = {groupedOrders}
                                     onActionComplete = {() => fetchData(searchQuery)} // Pass the refresh function
                                 />
                             )}
