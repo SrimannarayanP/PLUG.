@@ -1,9 +1,11 @@
 // EventDetails.jsx
 
 
-import {useState, useEffect} from 'react'
 import DOMPurify from 'dompurify'
-import {X, Calendar, MapPin, FileText, Clock, ExternalLink, AlertCircle, Laptop, TicketIcon, Download} from 'lucide-react'
+import {AlertCircle, Calendar, Clock, Download, ExternalLink, FileText, Laptop, MapPin, Mail, Phone, TicketIcon, User, X} from 'lucide-react'
+import {useEffect, useState} from 'react'
+
+import apiPublic from '../../api/apiPublic'
 
 import {getImageUrl} from '../../utils/imageHelper'
 import {getScarcityState} from '../../utils/ticketHelper'
@@ -96,9 +98,9 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
         ? (event.virtual_location || "Online Event")
         : (event.physical_location || 'TBA')
 
-    const hostName = event.organisation?.name || "Unknown Host"
+    const hostName = event.host?.name || "Unknown Host"
 
-    const formattedData = event.start_date
+    const formattedDate = event.start_date
         ? new Date(event.start_date).toLocaleDateString('en-US', {
             weekday : 'short',
             month : 'short',
@@ -107,6 +109,30 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
             minute : '2-digit'
         })
         : 'TBA'
+    
+    const formattedRegDeadline = event.registration_deadline
+        ? new Date(event.registration_deadline).toLocaleDateString('en-US', {
+            weekday : 'short',
+            month : 'short',
+            day : 'numeric',
+            hour : '2-digit',
+            minute : '2-digit'
+        })
+        : null
+
+    const handleActionClick = async () => {
+        if (event.is_native) {
+            onRegisterClick(event)
+        } else {
+            window.open(event.register_link, '_blank', 'noopener,noreferrer')
+
+            try {
+                await apiPublic.post(`/api/events/${event.id}/track-click/`)
+            } catch (err) {
+                console.error("Failed to track click silently", err)
+            }
+        }
+    }
 
     if (!event) return null
 
@@ -211,17 +237,18 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                                         <Calendar className = "h-5 w-5" />
                                     </div>
 
-                                    <div className = "min-w-0">
+                                    <div className = 'min-w-0'>
                                         <p className = "text-[10px] font-bold uppercase tracking-wide text-zinc-500">
                                             Date & Time
                                         </p>
 
                                         <p className = "text-zinc-200 font-bold text-sm truncate">
-                                            {formattedData}
+                                            {formattedDate}
                                         </p>
                                     </div>
                                 </div>
-
+                                
+                                {/* Location */}
                                 <div className = "bg-zinc-900/50 p-3 md:p-4 rounded-2xl border border-zinc-800 flex items-center gap-3">
                                     <div className = "flex h-10 w-10 shrink-0 rounded-full bg-zinc-800 items-center justify-center text-pink-500">
                                         {event.location_type === 'online' ? (
@@ -256,6 +283,53 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                                         )}
                                     </div>
                                 </div>
+
+                                {event.event_contacts && event.event_contacts.map((contact, index) => (
+                                    <div
+                                        key = {`poc-${index}`}
+                                        className = "flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-3 sm:p-4"
+                                    >
+                                        <div className = "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-indigo-400">
+                                            <User className = "h-5 w-5" />
+                                        </div>
+
+                                        <div className = "min-w-0 flex-1 flex justify-between items-center">
+                                            <div className = "min-w-0 pr-2">
+                                                <p className = "text-[10px] font-bold uppercase tracking-wide text-zinc-500 truncate">
+                                                    {contact.role || 'Contact'}
+                                                </p>
+
+                                                <p className = "text-zinc-200 font-bold text-sm truncate">
+                                                    {contact.name}
+                                                </p>
+                                            </div>
+
+                                            {(contact.phone || contact.email) && (
+                                                <div className = "flex items-center gap-2 shrink-0 border-l border-zinc-800 pl-3">
+                                                    {contact.phone && (
+                                                        <a
+                                                            href = {`tel:${contact.phone}`}
+                                                            className = "flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white transition-colors"
+                                                            title = {`Call ${contact.phone}`}
+                                                        >
+                                                            <Phone className = "h-3.5 w-3.5" />
+                                                        </a>
+                                                    )}
+
+                                                    {contact.email && (
+                                                        <a
+                                                            href = {`mailto:${contact.email}`}
+                                                            className = "flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white transition-colors"
+                                                            title = {`Email ${contact.email}`}
+                                                        >
+                                                            <Mail className = "h-3.5 w-3.5" />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
 
                             {/* Description */}
@@ -294,7 +368,7 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
 
                                                 <div className = "flex-1 min-w-0">
                                                     <p className = "font-bold text-white text-sm group-hover:text-orange-500 transition-colors truncate">
-                                                        {doc.file || "Event Document"}
+                                                        {doc.name || (doc.file ? doc.file.split('/').pop() : "Event Document")}
                                                     </p>
 
                                                     <p className = "text-[10px] text-zinc-500">
@@ -308,6 +382,8 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                                     </div>
                                 </div>
                             )}
+
+
                         </div>
                     </div>
                 </div>
@@ -342,11 +418,15 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                         <div className = "flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
                             {/* Timer Display */}
                             {event.registration_deadline && (
-                                <div className = "flex flex-col gap-2">
+                                <div className = "flex flex-col gap-1.5">
                                     <CountdownTimer
                                         deadline = {event.registration_deadline}
                                         onExpire = {() => setIsRegistrationClosed(true)}
                                     />
+
+                                    <span className = "text-xs sm:text-sm text-zinc-400 font-semibold tracking-wide mt-1.5">
+                                        Closes: {formattedRegDeadline}
+                                    </span>
 
                                     {scarcity && (
                                         <span className = {`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${scarcityStyles[scarcity.status] || ''}`}>
@@ -358,7 +438,7 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
 
                             {/* Register Button */}
                             <button
-                                onClick = {() => onRegisterClick(event)}
+                                onClick = {handleActionClick}
                                 className = {`group relative flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl ${festiveGradient} px-8 py-3.5 text-sm font-black uppercase tracking-widest text-white shadow-lg transition-all active:scale-95 hover:shadow-[0_0_20px_rgba(236, 72, 153, 0.4)]`}
                             >
                                 {event.is_native ? "Register Now" : "External Link"}
