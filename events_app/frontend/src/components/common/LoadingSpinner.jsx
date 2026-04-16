@@ -1,7 +1,7 @@
 // LoadingSpinner.jsx
 
 
-export default const LoadingSpinner = () => {
+const LoadingSpinner = () => {
 
     return (
 
@@ -19,3 +19,6 @@ export default const LoadingSpinner = () => {
     )
 
 }
+
+
+export default LoadingSpinner
