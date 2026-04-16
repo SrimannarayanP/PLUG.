@@ -1,18 +1,21 @@
 // CreateEvent.jsx
 
 
-import React, {useState, useEffect, useCallback, Suspense} from 'react'
-import {useNavigate, useLocation} from 'react-router-dom'
-import {Upload, FileText, Layers, IndianRupee, Check, Calendar, MapPin, Clock, Tag, Trash2, Paperclip, X, AlertCircle, Users, Plus, Minus, Shield, Loader2} from 'lucide-react'
-import {toast} from 'react-hot-toast'
 import imageCompression from 'browser-image-compression'
+import {
+    AlertCircle, Calendar, Check, Clock, FileText, IndianRupee, Layers, Loader2, MapPin, Mail, Minus, Paperclip, Phone, Plus, Shield, Tag, Trash2, Upload, User, Users,
+    X
+} from 'lucide-react'
+import React, {Suspense, useCallback, useEffect, useState} from 'react'
+import {toast} from 'react-hot-toast'
+import {useLocation, useNavigate} from 'react-router-dom'
 
 import api from '../api/api'
 
 import {getImageUrl} from '../utils/imageHelper'
 
-import FormInput from '../components/common/FormInput'
 import BackButton from '../components/common/BackButton'
+import FormInput from '../components/common/FormInput'
 import Logo from '../components/common/Logo'
 import SolidAnimatedButton from '../components/ui/SolidAnimatedButton'
 
@@ -22,15 +25,17 @@ const RichTextEditor = React.lazy(() => import('../components/ui/RichTextEditor'
 const logError = (context, error) => {
     console.error(`[${context}]`, error)
 
-    if (error?.response?.data) return error.response.data
+    if (error?.response?.data) {
+        return error.response.data
+    }
 
     return {generic : error.message || "An unexpected error occurred."}
 }
 
-const ToggleSwitch = React.memo(({label, description, checked, onChange, icon : Icon, activeColor = 'bg-green-500'}) => (
+const ToggleSwitch = React.memo(({name, label, description, checked, onChange, icon : Icon, activeColor = 'bg-green-500'}) => (
     <div 
         className = {`
-            group flex items-center justify-between p-4 rounded-xl border transition-all duration-300
+            group flex items-center justify-between p-4 rounded-xl border transition-[background-color, border-color] duration-300
             ${checked
                 ? "bg-zinc-900/80 border-zinc-700"
                 : "bg-zinc-900/30 border-zinc-800 hover:border-zinc-700"
@@ -63,20 +68,21 @@ const ToggleSwitch = React.memo(({label, description, checked, onChange, icon : 
                     {label}
                 </h3>
 
-                {description && <p className = "text-xs text-zinc-600 mt-0.5">{description}</p>}
+                {description && (
+                    <p className = "text-xs text-zinc-600 mt-0.5">
+                        {description}
+                    </p>
+                )}
             </div>
         </div>
 
         <button
             type = 'button'
-            onClick = {() => onChange(!checked)}
+            onClick = {() => onChange({target : {name, type : 'checkbox', checked : !checked}})}
             className = {`
                 relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out
                 focus:outline-none
-                ${checked
-                    ? activeColor
-                    : 'bg-zinc-700'
-                }
+                ${checked ? activeColor : 'bg-zinc-700'}
             `}
         >
             <span className = 'sr-only'>
@@ -121,10 +127,15 @@ export default function CreateEvent() {
     // Documents state
     const [newDocuments, setNewDocuments] = useState([])
     const [existingDocuments, setExistingDocuments] = useState([])
+    const [documentToDelete, setDocumentToDelete] = useState(null)
     const [posterFile, setPosterFile] = useState(null)
 
     const [availableSchoolsColleges, setAvailableSchoolsColleges] = useState([])
     const [hostProfile, setHostProfile] = useState(null)
+
+    const [eventContacts, setEventContacts] = useState([
+        {name : '', role : '', phone : '', email : ''}
+    ])
 
     const [formData, setFormData] = useState({
         name : '',
@@ -176,9 +187,11 @@ export default function CreateEvent() {
                     api.get('/api/data/colleges/'),
                     api.get('/api/user/profile/')
                 ])
-                
+
+                const rawColleges = Array.isArray(colRes.data.results) ? colRes.data.results : colRes.data || []
+
                 setAvailableCategories(Array.isArray(catRes.data.results) ? catRes.data.results : catRes.data || [])
-                setAvailableSchoolsColleges(Array.isArray(colRes.data.results) ? colRes.data.results : colRes.data || [])
+                setAvailableSchoolsColleges(rawColleges.filter(college => college.id !== null))
                 setHostProfile(profileRes.data.profile)
             } catch (err) {
                 logError('DataFetch', err)
@@ -225,22 +238,69 @@ export default function CreateEvent() {
 
             // Pre-fill categories - What this means is that the API calls gives full objs to display but selectedCategories only accepts list of IDs. So we use map
             // to map over the full objs & extract only the IDs.
-            if (eventToEdit.categories) setSelectedCategories(eventToEdit.categories.map(c => c.id))
+            if (eventToEdit.categories) {
+                setSelectedCategories(eventToEdit.categories.map(c => c.id))
+            }
+
+            if (eventToEdit.event_contacts && Array.isArray(eventToEdit.event_contacts) && eventToEdit.event_contacts.length > 0) {
+                setEventContacts(eventToEdit.event_contacts)
+            }
 
             // Existing poster preview
-            if (eventToEdit.poster) setPosterPreview(getImageUrl(eventToEdit.poster))
+            if (eventToEdit.poster) {
+                setPosterPreview(getImageUrl(eventToEdit.poster))
+            }
 
-            if (eventToEdit.existingDocuments) setExistingDocuments(eventToEdit.documents)
+            if (eventToEdit.existingDocuments) {
+                setExistingDocuments(eventToEdit.documents)
+            }
 
-            if (eventToEdit?.age_restriction_cutoff) setHasAgeLimit(true)
+            if (eventToEdit?.age_restriction_cutoff) {
+                setHasAgeLimit(true)
+            }
 
-            if (eventToEdit.registration_deadline) setHasCustomDeadline(true)
+            if (eventToEdit.registration_deadline) {
+                setHasCustomDeadline(true)
+            }
 
             if (eventToEdit.capacity !== null && eventToEdit.capacity !== undefined) {
                 setHasCapacityLimit(true)
             }
         }
     }, [isEditMode, eventToEdit])
+
+    // Auto-adjust group ticket size
+    useEffect(() => {
+        if (hasCapacityLimit && formData.capacity) {
+            const cap = parseInt(formData.capacity)
+
+            if (formData.max_tickets_per_user > cap) {
+                setFormData(prev => ({...prev, max_tickets_per_user : Math.max(1, cap)}))
+            }
+        }
+    }, [hasCapacityLimit, formData.capacity, formData.max_tickets_per_user])
+    
+    const updateContact = (index, field, value) => {
+        const newContacts = [...eventContacts]
+
+        newContacts[index][field] = value
+
+        setEventContacts(newContacts)
+    }
+
+    const addContact = () => {
+        if (eventContacts.length >= 3) {
+            toast.error("Maximum 3 contacts allowed.")
+
+            return
+        }
+
+        setEventContacts([...eventContacts, {name : '', role : '', phone : '', email : ''}])
+    }
+
+    const removeContact = (index) => {
+        setEventContacts(eventContacts.filter((_, i) => i !== index))
+    }
 
     // Document handlers
     const handleDocumentChange = useCallback((e) => {
@@ -275,19 +335,21 @@ export default function CreateEvent() {
         setNewDocuments(prev => prev.filter((_, i) => i !== index))
     }
 
-    const deleteExistingDocument = async (docId) => {
-        if (!window.confirm("Delete this document?")) return
+    const executeDocumentDelete = async () => {
+        if (!documentToDelete) return
 
         try {
-            await api.delete(`/api/host/document/${docId}/delete/`)
+            await api.delete(`/api/host/document/${documentToDelete}/delete/`)
 
-            setExistingDocuments(prev => prev.filter(doc => doc.id !== docId))
+            setExistingDocuments(prev => prev.filter(doc => doc.id !== documentToDelete))
 
             toast.success("Document deleted")
-        } catch (err) {
+        } catch (err) { 
             console.error(err)
 
             toast.error("Failed to delete document")
+        } finally {
+            setDocumentToDelete(null)
         }
     }
 
@@ -358,11 +420,18 @@ export default function CreateEvent() {
     const handleTicketsChange = useCallback((delta) => {
         setFormData(prev => {
             const current = parseInt(prev.max_tickets_per_user || 1)
+
+            let currentMax = 10
+
+            if (hasCapacityLimit && prev.capacity) {
+                currentMax = Math.min(10, parseInt(prev.capacity))
+            }
+
             const newVal = Math.max(1, Math.min(10, current + delta))
 
             return {...prev, max_tickets_per_user : newVal}
         })
-    }, [])
+    }, [hasCapacityLimit])
 
     const handlePosterChange = async (e) => {
         const file = e.target.files[0]
@@ -433,7 +502,9 @@ export default function CreateEvent() {
 
             const firstErrorField = document.querySelector('[name="' + Object.keys(validationErrors)[0] + '"]')
 
-            if (firstErrorField) firstErrorField.scrollIntoView({behavior : 'smooth', block : 'center'})
+            if (firstErrorField) {
+                firstErrorField.scrollIntoView({behavior : 'smooth', block : 'center'})
+            }
 
             return
         }
@@ -473,6 +544,10 @@ export default function CreateEvent() {
         if (posterFile) data.append('poster', posterFile)
 
         newDocuments.forEach(file => data.append('uploaded_documents', file))
+
+        const validContacts = eventContacts.filter(c => c.name.trim() !== '')
+
+        data.append('event_contacts', JSON.stringify(validContacts))
 
         try {
             if (isEditMode) {
@@ -564,17 +639,36 @@ export default function CreateEvent() {
         return errors
     }
 
-    const toggleRegistrationDeadline = (checked) => {
+    const toggleRegistrationDeadline = useCallback((e) => {
+        const checked = e.target.checked
+
         setHasCustomDeadline(checked)
 
-        if (!checked) setFormData(prev => ({...prev, registration_deadline : ''}))
-    }
+        if (!checked) {
+            setFormData(prev => ({...prev, registration_deadline : ''}))
+        }
+    }, [])
 
-    const toggleAgeLimit = (checked) => {
+
+    const toggleAgeLimit = useCallback((e) => {
+        const checked = e.target.checked
+
         setHasAgeLimit(checked)
 
-        if (!checked) setFormData(prev => ({...prev, age_restriction_cutoff : ''}))
-    }
+        if (!checked) {
+            setFormData(prev => ({...prev, age_restriction_cutoff : ''}))
+        }
+    }, [])
+
+    const toggleCapacityLimit = useCallback((e) => {
+        const checked = e.target.checked
+
+        setHasCapacityLimit(checked)
+
+        if (!checked) {
+            setFormData(prev => ({...prev, capacity : ''}))
+        }
+    }, [])
 
     // Helper to format Django ISO dates to HTML Input format
     const formatDateForInput = (isoString) => {
@@ -592,10 +686,11 @@ export default function CreateEvent() {
         <div className = "min-h-screen bg-[#09090b] text-white font-sans relative overflow-x-hidden selection:bg-orange-500 selection:text-white">
             {/* Background Texture */}
             <div
-                className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0"
+                className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0 transform-gpu"
                 style = {{
                     backgroundImage : "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-                    backgroundSize : "40px 40px"
+                    backgroundSize : "40px 40px",
+                    contain : 'strict'
                 }}
             />
 
@@ -784,7 +879,7 @@ export default function CreateEvent() {
 
                                         <button
                                             type = 'button'
-                                            onClick = {() => deleteExistingDocument(doc.id)}
+                                            onClick = {() => setDocumentToDelete(doc.id)}
                                             className = "p-2 text-zinc-600 hover:text-red-500"
                                         >
                                             <Trash2 className = "h-4 w-4" />
@@ -833,11 +928,9 @@ export default function CreateEvent() {
                         <FormInput 
                             label = "Event Name"
                             name = 'name'
-                            placeholder = "Event Name"
                             value = {formData.name}
                             onChange = {handleChange}
                             error = {pageErrors.name}
-                            className = "py-3 md:py-2"
                         />
 
                         {/* Categories */}
@@ -931,7 +1024,7 @@ export default function CreateEvent() {
                                 Where is it happening?
                             </label>
 
-                            <div className = "grid grid-cols-2 gap-1 flex bg-black/40 p-1 rounded-xl border border-zinc-800">
+                            <div className = "grid grid-cols-2 gap-1 bg-black/40 p-1 rounded-xl border border-zinc-800">
                                 {['offline', 'online'].map(type => (
                                     <button
                                         key = {type}
@@ -1026,6 +1119,107 @@ export default function CreateEvent() {
                             </div>
                         </div>
                     </div>
+                    
+                    <div className = "space-y-4 pt-4 border-t border-zinc-800/50">
+                        <div className = "flex items-center justify-between ml-1">
+                            <div>
+                                <label className = "text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                                    Point of Contact (POC)
+                                </label>
+
+                                <p className = "text-[10px] text-zinc-600 font-mono mt-1">
+                                    Who should students contact for queries?
+                                </p>
+                            </div>
+
+                            <button
+                                type = 'button'
+                                onClick = {addContact}
+                                className = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-bold text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+                            >
+                                <Plus size = {14} />
+
+                                Add POC
+                            </button>
+                        </div>
+
+                        <div className = 'space-y-4'>
+                            {eventContacts.map((contact, index) => (
+                                <div
+                                    key = {index}
+                                    className = "p-4 bg-[#18181b] border border-zinc-800 rounded-2xl relative group animate-in fade-in slide-in-from-top-2"
+                                >
+                                    {eventContacts.length > 1 && (
+                                        <button
+                                            type = 'button'
+                                            onClick = {() => removeContact(index)}
+                                            className = "absolute -top-3 -right-3 bg-zinc-900 border border-zinc-700 text-zinc-500 hover:text-red-500 hover:border-red-500/50 p-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100 shadow-xl"
+                                        >
+                                            <X size = {14} />
+                                        </button>
+                                    )}
+
+                                    <div className = "grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className = 'relative'>
+                                            <div className = "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <User className = "h-4 w-4 text-zinc-600" />
+                                            </div>
+
+                                            <input
+                                                type = 'text'
+                                                placeholder = "Name (Required)"
+                                                value = {contact.name}
+                                                onChange = {(e) => updateContact(index, 'name', e.target.value)}
+                                                className = "w-full bg-black/50 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+                                            />
+                                        </div>
+
+                                        <div className = 'relative'>
+                                            <div className = "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Tag className = "h-4 w-4 text-zinc-600" />
+                                            </div>
+
+                                            <input
+                                                type = 'text'
+                                                placeholder = "Role (e.g. Club President)"
+                                                value = {contact.role}
+                                                onChange = {(e) => updateContact(index, 'role', e.target.value)}
+                                                className = "w-full bg-black/50 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+                                            />
+                                        </div>
+
+                                        <div className = 'relative'>
+                                            <div className = "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Phone className = "h-4 w-4 text-zinc-600" />
+                                            </div>
+
+                                            <input
+                                                type = 'tel'
+                                                placeholder = "Phone Number"
+                                                value = {contact.phone}
+                                                onChange = {(e) => updateContact(index, 'phone', e.target.value)}
+                                                className = "w-full bg-black/50 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+                                            />
+                                        </div>
+
+                                        <div className = 'relative'>
+                                            <div className = "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Mail className = "h-4 w-4 text-zinc-600" />
+                                            </div>
+
+                                            <input
+                                                type = 'email'
+                                                placeholder = "Email Address"
+                                                value = {contact.email}
+                                                onChange = {(e) => updateContact(index, 'email', e.target.value)}
+                                                className = "w-full bg-black/50 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500 transition-colors"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
 
                     <div className = "h-px bg-zinc-800 w-full" />
 
@@ -1042,11 +1236,12 @@ export default function CreateEvent() {
                         <div className = "grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className = 'space-y-4'>
                                 <ToggleSwitch
+                                    name = 'is_internal_event'
                                     label = "Internal Event"
                                     description = "Restrict this event exclusively to students of a specific college."
                                     icon = {Shield}
                                     checked = {formData.is_internal_event}
-                                    onChange = {(checked) => setFormData(prev => ({...prev, is_internal_event : checked}))}
+                                    onChange = {handleChange}
                                     activeColor = 'bg-indigo-500'
                                 />
 
@@ -1070,7 +1265,7 @@ export default function CreateEvent() {
                                                     Select Target Campuses
                                                 </label>
 
-                                                <div className = "max-h-60 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
+                                                <div className = "max-h-60 overflow-y-auto pr-2 space-y-2 custom-scrollbar transform-gpu overscroll-contain">
                                                     {availableSchoolsColleges.map(school_college => {
                                                         const isSelected = formData.restricted_to_school_college_ids.includes(school_college.id)
 
@@ -1122,12 +1317,13 @@ export default function CreateEvent() {
                                 )}
 
                                 <div className = 'space-y-4'>
-                                    <ToggleSwitch 
+                                    <ToggleSwitch
+                                        name = 'is_paid_event'
                                         label = "Paid Event"
                                         description = "Enable ticket pricing for this event."
                                         icon = {IndianRupee}
                                         checked = {formData.is_paid_event}
-                                        onChange = {(checked) => setFormData(prev => ({...prev, is_paid_event : checked}))}
+                                        onChange = {handleChange}
                                         activeColor = 'bg-orange-500'
                                     />
 
@@ -1154,11 +1350,7 @@ export default function CreateEvent() {
                                     description = "Cap the total number of tickets available for this event."
                                     icon = {Users}
                                     checked = {hasCapacityLimit}
-                                    onChange = {(checked) => {
-                                        setHasCapacityLimit(checked)
-
-                                        if (!checked) setFormData(prev => ({...prev, capacity : ''}))
-                                    }}
+                                    onChange = {toggleCapacityLimit}
                                     activeColor = 'bg-blue-500'
                                 />
 
@@ -1220,7 +1412,8 @@ export default function CreateEvent() {
                                             <button
                                                 type = 'button'
                                                 onClick = {() => handleTicketsChange(1)}
-                                                className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
+                                                disabled = {(hasCapacityLimit && formData.capacity && formData.max_tickets_per_user >= parseInt(formData.capacity)) || formData.max_tickets_per_user >= 10}
+                                                className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
                                                 <Plus className = "h-4 w-4" />
                                             </button>
