@@ -1,9 +1,9 @@
 // FeaturedEventHero.jsx
 
 
-import {useRef, useMemo} from 'react'
 import {motion, useScroll, useTransform} from 'framer-motion'
-import {Calendar, MapPin, ArrowRight} from 'lucide-react'
+import {ArrowRight, Calendar, MapPin} from 'lucide-react'
+import {useMemo, useRef} from 'react'
 
 import {getImageUrl} from '../../utils/imageHelper'
 import {stripHtml} from '../../utils/textHelper'
