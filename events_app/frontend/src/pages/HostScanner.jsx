@@ -1,11 +1,10 @@
 // HostScanner.jsx
 
 
-import {useState, useEffect} from 'react'
+import {AlertTriangle, ArrowLeft, CheckCircle, Keyboard, Loader2, X, XCircle, Zap, ZapOff} from 'lucide-react'
+import {useState} from 'react'
 import {useNavigate, useParams} from 'react-router-dom'
 import {Scanner} from '@yudiel/react-qr-scanner'
-import {ArrowLeft, Zap, ZapOff, Keyboard, X, CheckCircle, AlertTriangle, XCircle, Loader2} from 'lucide-react'
-import {toast} from 'react-hot-toast'
 
 import api from '../api/api'
 
@@ -41,7 +40,7 @@ export default function HostScanner() {
         triggerHaptic('tap')
 
         try {
-            const response = await api.post('/api/ticket/verify-ticket/', payload)
+            const response = await api.post('/api/scanner/verify/', payload)
             const data = response.data
 
             setAttendeeInfo(data.attendee || null)
@@ -109,84 +108,87 @@ export default function HostScanner() {
 
     return (
 
-        <div className = {`relative h-[100dvh] w-full overflow-hidden flex flex-col ${getThemeColor()} transition-colors duration-300`}>
-            {/* Header */}
-            <button
-                onClick = {() => navigate('/host/dashboard')}
-                className = "p-3 bg-white/10 backdrop-blur-md rounded-full text-white active:scale-95 transition-transform"
-            >
-                <ArrowLeft className = "h-6 w-6" />
-            </button>
-
-            <div className = "text-white font-mono text-sm font-bold tracking-widest opacity-80 uppercase">
-                {isScanning ? "Live Scanner" : 'Result'}
-            </div>
-
-            <button
-                onClick = {() => setTorchEnabled(!torchEnabled)}
-                className = {`
-                    p-3 rounded-full transition-all active:scale-95
-                    ${torchEnabled
-                        ? "bg-yellow-400 text-black"
-                        : "bg-white/10 text-white backdrop-blur-md"
-                    }
-                `}
-            >
-                {torchEnabled
-                    ? <ZapOff className = "h-6 w-6" />
-                    : <Zap className = "h-6 w-6" />
-                }
-            </button>
-
-            {/* Camera area */}
+        <div className = {`fixed inset-0 z-[9999] w-full overflow-hidden flex flex-col ${getThemeColor()} transition-colors duration-300`}>
             <div className = "flex-1 relative bg-black">
+                <div className = "absolute top-0 left-0 right-0 p-4 sm:p-6 pt-6 sm:pt-8 flex justify-between items-center z-30 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+                    {/* Header */}
+                    <button
+                        onClick = {() => navigate('/host/dashboard')}
+                        className = "pointer-events-auto p-3 bg-white/10 backdrop-blur-md rounded-full text-white active:scale-95 transition-transform border-white/20 hover:bg-white/20"
+                    >
+                        <ArrowLeft className = "h-5 w-5" />
+                    </button>
+
+                    <div className = "text-white font-mono text-xs md:text-sm font-bold tracking-widest opacity-80 uppercase bg-black/40 px-4 py-2 rounded-full backdrop-blur-md border border-white/10">
+                        {isScanning ? "Live Scanner" : 'Result'}
+                    </div>
+
+                    <button
+                        onClick = {() => setTorchEnabled(!torchEnabled)}
+                        className = {`
+                            pointer-events-auto p-3 rounded-full transition-all active:scale-95 border
+                            ${torchEnabled
+                                ? "bg-yellow-400 text-black border-yellow-400 shadow-[0_0_15px_rgba(250, 204, 21, 0.5)]"
+                                : "bg-white/10 text-white backdrop-blur-md border-white/20 hover:bg-white/20"
+                            }
+                        `}
+                    >
+                        {torchEnabled
+                            ? <ZapOff className = "h-5 w-5" />
+                            : <Zap className = "h-5 w-5" />
+                        }
+                    </button>
+                </div>
+
+                {/* Camera area */}
                 {isScanning && (
                     <>
-                        <Scanner 
-                            onScan = {handleScan}
-                            allowMultiple = {false}
-                            scanDelay = {2000}
-                            constraints = {{
-                                facingMode : 'environment',
-                                advanced : [{torch : torchEnabled}]
-                            }}
-                            styles = {{
-                                container : {
-                                    height : '100%',
-                                    width : '100%'
-                                },
-                                video : {
-                                    objectFit : 'cover'
-                                }
-                            }}
-                            components = {{
-                                audio : false, // Handle audio/haptics manually
-                                onOff : false,
-                                torch : false, // Own custom button
-                                finder : false, // Custom overlay
-                            }}
-                        />
+                        <div className = "absolute inset-0 z-0">
+                            <Scanner 
+                                onScan = {handleScan}
+                                allowMultiple = {false}
+                                scanDelay = {2000}
+                                constraints = {{
+                                    facingMode : 'environment',
+                                    advanced : [{torch : torchEnabled}]
+                                }}
+                                styles = {{
+                                    container : {
+                                        height : '100%', width : '100%'
+                                    },
+                                    video : {
+                                        objectFit : 'cover'
+                                    }
+                                }}
+                                components = {{
+                                    audio : false, // Handle audio/haptics manually
+                                    onOff : false,
+                                    torch : false, // Own custom button
+                                    finder : false, // Custom overlay
+                                }}
+                            />
+                        </div>
 
                         <div className = "absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-                            <div className = "h-64 w-64 border-2 border-white/50 rounded-xl relative">
-                                <div className = "absolute top-0 left-0 h-6 w-6 border-t-4 border-l-4 border-orange-500 -mt-1 -ml-1 rounded-tl-lg" />
-                                <div className = "absolute top-0 right-0 h-6 w-6 border-t-4 border-r-4 border-orange-500 -mt-1 -mr-1 rounded-tr-lg" />
-                                <div className = "absolute bottom-0 left-0 h-6 w-6 border-t-4 border-l-4 border-orange-500 -mb-1 -ml-1 rounded-bl-lg" />
-                                <div className = "absolute bottom-0 right-0 h-6 w-6 border-b-4 border-r-4 border-orange-500 -mb-1 -mr-1 rounded-br-lg" />
+                            <div className = "absolute inset-0 shadow-[0_0_0_9999px_rgba(0, 0, 0, 0.6)]" />
 
-                                <div className = "absolute inset-0 flex items-center justify-center">
-                                    <div className = "h-0.5 w-full bg-red-500/50 animate-pulse" />
-                                </div>
+                            <div className = "h-64 w-64 border-2 border-white/20 rounded-xl relative overflow-hidden">
+                                <div className = "absolute top-0 left-0 h-8 w-8 border-t-4 border-l-4 border-orange-500 rounded-tl-lg" />
+                                <div className = "absolute top-0 right-0 h-8 w-8 border-t-4 border-r-4 border-orange-500 rounded-tr-lg" />
+                                <div className = "absolute bottom-0 left-0 h-8 w-8 border-t-4 border-l-4 border-orange-500 rounded-bl-lg" />
+                                <div className = "absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-orange-500 rounded-br-lg" />
+
+                                <div className = "absolute top-0 left-0 h-0.5 w-full bg-orange-500 shadow-[0_0_8px_2px_rgba(249, 115, 22, 0.8)] animate-[scan_2s_ease-in-out_infinite]" />
                             </div>
                         </div>
 
                         {/* Manual Entry Trigger */}
-                        <div className = "absolute bottom-0 left-0 right-0 flex justify-center z-20">
+                        <div className = "absolute bottom-0 left-0 right-0 p-8 pb-12 flex justify-center z-20 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none">
                             <button
                                 onClick = {() => setManualEntryOpen(true)}
-                                className = "flex items-center gap-2 px-6 py-3 bg-zinc-800/80 backdrop-blur-md border border-zinc-700 rounded-full text-white font-bold text-sm uppercase tracking-wide shadow-lg hover:bg-zinc-700 active:scale-95 transition-all"
+                                className = "pointer-events-auto flex items-center gap-3 px-8 py-4 bg-zinc-900/90 backdrop-blur-md border border-zinc-700/50 rounded-full text-white font-bold text-sm uppercase tracking-widest shadow-[0_8px_30px_rgba(0, 0, 0, 0.5)] hover:bg-zinc-800 active:scale-95 transition-all"
                             >
-                                <Keyboard className = "h-4 w-4 text-orange-500" />
+                                <Keyboard className = "h-5 w-5 text-orange-500" />
 
                                 Enter Code Manually
                             </button>
@@ -195,7 +197,7 @@ export default function HostScanner() {
                 )}
 
                 {!isScanning && (
-                    <div className = "absolute inset-0 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in duration-200">
+                    <div className = "absolute inset-0 z-30 bg-black/40 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in duration-200">
                         {scanStatus === 'loading' && <Loader2 className = "h-16 w-16 text-white animate-spin mb-4" />}
                         {scanStatus === 'success' && <CheckCircle className = "h-24 w-24 text-white drop-shadow-lg mb-4" />}
                         {scanStatus === 'warning' && <AlertTriangle className = "h-24 w-24 text-white drop-shadow-lg mb-4" />}
