@@ -4,15 +4,7 @@
 import {Loader2} from 'lucide-react'
 
 
-const SolidAnimatedButton = ({
-    type = 'submit',
-    children,
-    disabled = false,
-    isLoading = false,
-    className = '',
-    onClick,
-    ...props
-}) => {
+const SolidAnimatedButton = ({type = 'submit', children, disabled = false, isLoading = false, className = '', onClick, ...props}) => {
     const isLocked = disabled || isLoading
 
     return (
