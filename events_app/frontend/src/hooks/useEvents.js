@@ -1,6 +1,12 @@
-import {useState, useCallback} from 'react'
+// useEvents.js
 
+
+import {useCallback, useState} from 'react'
+
+import api from '../api/api'
 import apiPublic from '../api/apiPublic'
+
+import {ACCESS_TOKEN} from '../constants'
 
 
 export function useEvents() {
@@ -14,15 +20,20 @@ export function useEvents() {
     // Pagination State
     const [nextPage, setNextPage] = useState(null)
     const [loadingMore, setLoadingMore] = useState(false)
+    const [totalEvents, setTotalEvents] = useState(0)
 
     const fetchInitial = useCallback(async () => {
         setLoading(true)
         setError(null)
 
+        const token = localStorage.getItem(ACCESS_TOKEN)
+        
+        const apiClient = token ? api : apiPublic
+
         try {
             const [featuredRes, upcomingRes] = await Promise.allSettled([
-                apiPublic.get('/api/events/featured/'),   
-                apiPublic.get('/api/events/upcoming/')
+                apiClient.get('api/events/featured'),   
+                apiClient.get('api/events/upcoming')
             ])
             
             // Featured events
@@ -40,6 +51,7 @@ export function useEvents() {
 
                 setUpcomingEvents(data.results || data)
                 setNextPage(data.next || null)
+                setTotalEvents(data.count || 0)
             } else {
                 console.error("Upcoming events failed:", upcomingRes.reason)
                 
@@ -82,6 +94,6 @@ export function useEvents() {
     }, [nextPage, loadingMore])
 
     // nextPage is also in return block so that the UI knows if it has to show the spinner or not.
-    return {featuredEvents, upcomingEvents, loading, error, loadingMore, nextPage, fetchInitial, fetchMoreUpcomingEvents}
+    return {featuredEvents, upcomingEvents, loading, error, loadingMore, nextPage, fetchInitial, fetchMoreUpcomingEvents, totalEvents}
 
 }
