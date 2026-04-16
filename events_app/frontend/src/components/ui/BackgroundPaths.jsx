@@ -5,7 +5,7 @@
 "use client" // Renders the component on the client side
 
 import {motion} from 'framer-motion'
-import {useMemo, useState, useEffect} from 'react'
+import {useEffect, useMemo, useState} from 'react'
 
 
 function useFloatingPaths() {
