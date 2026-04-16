@@ -1,8 +1,8 @@
 // TicketCard.jsx
 
 
+import {Archive, Calendar, CheckCircle, Clock, ImageOff, Laptop, Layers, MapPin, QrCode, RefreshCcw, Ticket, User, XCircle} from 'lucide-react'
 import {useState} from 'react'
-import {Calendar, MapPin, Clock, CheckCircle, XCircle, Ticket, User, QrCode, ImageOff, Laptop, Layers, Archive, RefreshCcw} from 'lucide-react'
 
 import TicketModal from './TicketModal'
 
@@ -10,7 +10,7 @@ import {getImageUrl} from '../../utils/imageHelper'
 import {checkEventExpiry} from '../../utils/ticketHelper'
 
 
-export default function TicketCard({tickets}) {
+export default function TicketCard({tickets, onTicketChange}) {
 
     // const {payment_status, checked_in} = ticket
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -266,7 +266,7 @@ export default function TicketCard({tickets}) {
                         />
 
                         <p className = 'truncate'>
-                            Hosted by <span className = "text-zinc-300 font-medium">{event.organisation?.name || 'Unknown'}</span>
+                            Hosted by <span className = "text-zinc-300 font-medium">{event.host?.name || 'Unknown'}</span>
                         </p>
                     </div>
 
@@ -330,6 +330,7 @@ export default function TicketCard({tickets}) {
                 <TicketModal 
                     tickets = {tickets}
                     closeModal = {() => setIsModalOpen(false)}
+                    onTicketChange = {onTicketChange}
                 />
             )}
         </>
