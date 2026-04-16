@@ -6,6 +6,8 @@ import {useNavigate} from 'react-router-dom'
 
 import Logo from '../components/common/Logo'
 
+import BackButton from '../components/common/BackButton'
+
 
 export default function NotFound() {
 
@@ -30,8 +32,10 @@ export default function NotFound() {
             
             {/* Header / Logo */}
             <div className = "relative z-10 p-6 md:p-10 flex justify-between items-center w-full max-w-7xl mx-auto">
-                <Logo 
-                    className = "h-8 w-8" 
+                <BackButton />
+                
+                <Logo
+                    className = "h-8 w-8"
                     textSize = 'text-2xl'
                 />
             </div>
@@ -56,23 +60,14 @@ export default function NotFound() {
                     The event or page you're looking for doesn't exist, has been moved or you took a wrong turn at the main stage.
                 </p>
 
-                <div className = "flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto max-w-xs sm:max-w-none mx-auto">
-                    <button
-                        onClick = {() => navigate(-1)}
-                        className = "flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-3.5 rounded-xl bg-white text-black font-bold uppercase tracking-wider text-sm shadow-[0_0_20px_rgba(255, 255, 255, 0.1)] hover:bg-zinc-200 hover:scale-[0.98] transition-all"
-                    >
-                        <ArrowLeft className = "h-4 w-4" />
-
-                        Go Back
-                    </button>
-
+                <div className = "flex justify-center w-full">
                     <button
                         onClick = {() => navigate('/')}
-                        className = "flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-3.5 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-bold uppercase tracking-wider text-sm hover:bg-zinc-800 hover:border-zinc-700 hover:scale-[0.98] transition-all"
+                        className = "flex items-center justify-center gap-2 w-full sm:w-auto px-10 py-4 rounded-xl bg-white hover:bg-zinc-200 text-black font-black uppercase tracking-widest text-sm shadow-[0_0_20px_rgba(255, 255, 255, 0.1)] hover:scale-[0.98] transition-all"
                     >
-                        <Home className = "h-4 w-4 text-zinc-400" />
+                        <Home className = "h-5 w-5" />
 
-                        Main Page
+                        Return to Main Page
                     </button>
                 </div>
             </div>
