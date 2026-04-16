@@ -1,10 +1,11 @@
 // VerifyEmail.jsx
 
 
-import {useState, useEffect, useRef} from 'react'
+
+import {AlertCircle, ArrowRight, Loader2, Mail} from 'lucide-react'
+import {useEffect, useRef, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {toast} from 'react-hot-toast'
-import {Mail, ArrowRight, AlertCircle, Loader2} from 'lucide-react'
 
 import api from '../api/api'
 
