@@ -236,7 +236,7 @@ class UpcomingEventListView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = Event.objects.visible_to(self.request.user).filter(
-            is_featured = False, start_date__gte = timezone.now(), is_cancelled = False
+            start_date__gte = timezone.now(), is_cancelled = False
         ).select_related(
             'host', 'host__school_college'
         ).prefetch_related('restricted_to_schools_colleges').order_by('start_date')
