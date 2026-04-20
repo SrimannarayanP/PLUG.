@@ -25,12 +25,10 @@ from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from api.views import (
-    CancelTicketView, CancelPendingOrderView, CategoryListView, ClubTeamManagementView, CreateEventView, CreateUserView, CustomTokenObtainPairView, EventDetailsView,
-    EventListView, FeaturedEventListView, HostEventDetailView, HostEventListView, HostEventUpdateView, ProcessPaymentView, RazorpayWebhookView, RegisteredEventsView,
-    RegisterForEventView, RequestPasswordResetView, ResendTicketView, SchoolCollegeListView, SetNewPasswordView, TrackEventClickView, UpcomingEventListView,
-    UserProfileView, VerifyTicketView, VerifyEmailOTPView, VerifyRazorpayPaymentView, ResendOTPView,
-
-    delete_event_document
+    CancelTicketView, CancelPendingOrderView, CategoryListView, ClubTeamManagementView, CreateEventView, CreateUserView, CustomTokenObtainPairView,
+    DeleteEventDocumentView, EventDetailsView, EventListView, FeaturedEventListView, HostEventDetailView, HostEventListView, HostEventUpdateView, ProcessPaymentView,
+    RazorpayWebhookView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView, ResendTicketView, SchoolCollegeListView, SetNewPasswordView,
+    TrackEventClickView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, VerifyRazorpayPaymentView, ResendOTPView
 )
 
 urlpatterns = [
@@ -80,7 +78,7 @@ urlpatterns = [
     path('api/events/<uuid:id>/track-click/', TrackEventClickView.as_view(), name = 'track-event-click'),
     
     # --- Document Deletion ---
-    path('api/host/document/<int:doc_id>/delete/', delete_event_document, name = 'delete-doc'),
+    path('api/host/document/<int:doc_id>/delete/', DeleteEventDocumentView.as_view(), name = 'delete-doc'),
     
     # --- Scanner App ---
     path('api/scanner/verify/', VerifyTicketView.as_view(), name = 'verify-ticket'),
