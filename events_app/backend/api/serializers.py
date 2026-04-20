@@ -8,22 +8,14 @@
 # We're only getting data that we want to send to the frontend
 
 from django.contrib.auth import authenticate, get_user_model
-from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth.tokens import default_token_generator
-from django.db import transaction
-from django.utils import timezone
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
 
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import Category, CustomUser, Event, EventDocument, HostProfile, Registration, SchoolCollege, StudentProfile
-from .tasks import send_verification_email
-from .utils import generate_otp, generate_qr_code_base64, generate_ticket_token, track_unlisted_school_college_request
+from .utils import generate_qr_code_base64
 
-import json
 
 User = get_user_model()
 
@@ -93,36 +85,6 @@ class SetNewPasswordSerializer(serializers.Serializer):
     uid = serializers.CharField(write_only = True)
     token = serializers.CharField(write_only = True)
     password = serializers.CharField(write_only = True, style = {'input_type' : 'password'})
-
-    def validate(self, attrs):
-        # Decode the UID for this user.
-        try:
-            uid = force_str(urlsafe_base64_decode(attrs.get('uid')))
-
-            self.user = User.objects.get(pk = uid)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-
-            raise ValidationError({'uid' : "Invalid user link."})
-        
-        # Check if the token is valid for this user.
-        if not default_token_generator.check_token(self.user, attrs.get('token')):
-
-            raise ValidationError({'token' : "Link has expired or is invalid."})
-
-        try:
-            validate_password(attrs.get('password'), self.user)
-        except Exception as e:
-
-            raise ValidationError({'password' : list(e.messages)})
-        
-        return attrs
-
-    # Set the new password & save
-    def save(self):
-        self.user.set_password(self.validated_data['password'])
-        self.user.save()
-
-        return self.user
  
 
 # --- Lookup Serializers ---
@@ -219,62 +181,6 @@ class UserSerializer(serializers.ModelSerializer):
                                                 # password when we return info. about the user
             'id' : {'read_only' : True}
         }
-
-    # Really, what's happening here is that the serializer will look at this model, look at all the fields on that model & the ones we've defined, validate them & if the
-    # data is valid, it'll pass it as validated_data in the function
-    @transaction.atomic
-    def create(self, validated_data):
-        # Pop the profile data off from the dictionary.
-        # We don't want to pass 'organisation_name' to the User model, it would crash   
-        organisation_name = validated_data.pop('organisation_name', None) # Returns None if not provided
-        phone_number = validated_data.pop('phone_number', None)
-        date_of_birth = validated_data.pop('date_of_birth', None)
-        student_id_number = validated_data.pop('student_id_number', None)
-        school_college = validated_data.pop('school_college', None)
-        unlisted_school_college_data = validated_data.pop('unlisted_school_college_data', None)
-        register_as_host = validated_data.pop('register_as_host', False)
-        host_type = validated_data.pop('host_type', HostProfile.HostType.CLUB)
-
-        user = User.objects.create_user(**validated_data)
-
-        otp = generate_otp()
-
-        user.otp = otp
-        user.otp_created_at = timezone.now()
-        user.save()
-
-        # Everyone gets a StudentProfile so they can buy tickets
-        StudentProfile.objects.create(
-            user = user,
-            phone_number = phone_number,
-            date_of_birth = date_of_birth,
-            student_id_number = student_id_number,
-            school_college = school_college,
-            unlisted_school_college_data = unlisted_school_college_data if not school_college else {}
-        )
-
-        if unlisted_school_college_data and not school_college:
-            track_unlisted_school_college_request(
-                name = unlisted_school_college_data.get('name'),
-                campus = unlisted_school_college_data.get('campus'),
-                city = unlisted_school_college_data.get('city'),
-                state = unlisted_school_college_data.get('state')
-            )
-
-        if register_as_host and organisation_name:
-            host_profile = HostProfile.objects.create(
-                name = organisation_name,
-                host_type = host_type,
-                school_college = school_college,
-                owner = user
-            )
-
-            host_profile.users.add(user)
-
-        # We use on_commit to ensure the user exists in DB before Celery tries to find them.
-        transaction.on_commit(lambda: send_verification_email.delay(str(user.id), otp))
-
-        return user
     
     # Checks who the user & gets the right data.
     def get_profile(self, obj):
@@ -287,82 +193,6 @@ class UserSerializer(serializers.ModelSerializer):
             return StudentProfileSerializer(obj.student_profile).data
         
         return None
-    
-    @transaction.atomic
-    def update(self, instance, validated_data):
-        phone_number = validated_data.pop('phone_number', None)
-        organisation_name = validated_data.pop('organisation_name', None)
-        host_type = validated_data.pop('host_type', None)
-        date_of_birth = validated_data.pop('date_of_birth', None)
-        student_id_number = validated_data.pop('student_id_number', None) 
-
-        update_school_college = 'school_college' in validated_data
-        school_college = validated_data.pop('school_college', None)
-        unlisted_school_college_data = validated_data.pop('unlisted_school_college_data', None)
-
-        # Updated standard user fields like first_name, last_name, etc.
-        for attr, value in validated_data.items():
-            if attr == 'password':
-                instance.set_password(value)
-            else:
-                setattr(instance, attr, value)
-
-        instance.save()
-
-        # Update host profile
-        if instance.owned_clubs.exists():
-            profile = instance.owned_clubs.first()
-
-            if organisation_name is not None:
-                profile.name = organisation_name
-
-            if host_type is not None:
-                profile.host_type = host_type
-
-            if update_school_college:
-                profile.school_college = school_college
-
-            profile.save()
-
-        if hasattr(instance, 'student_profile'):
-            profile = instance.student_profile
-
-            if phone_number is not None:
-                profile.phone_number = phone_number
-
-            if date_of_birth is not None:
-                profile.date_of_birth = date_of_birth
-
-            if student_id_number is not None:
-                profile.student_id_number = student_id_number
-
-            if update_school_college:
-                profile.school_college = school_college
-
-                if school_college is not None:
-                    profile.unlisted_school_college_data = {}
-                elif unlisted_school_college_data:
-                    profile.unlisted_school_college_data = unlisted_school_college_data
-
-                    track_unlisted_school_college_request(
-                        name = unlisted_school_college_data.get('name'),
-                        campus = unlisted_school_college_data.get('campus'),
-                        city = unlisted_school_college_data.get('city'),
-                        state = unlisted_school_college_data.get('state')
-                    )
-            elif unlisted_school_college_data is not None:
-                profile.unlisted_school_college_data = unlisted_school_college_data
-
-                track_unlisted_school_college_request(
-                    name = unlisted_school_college_data.get('name'),
-                    campus = unlisted_school_college_data.get('campus'),
-                    city = unlisted_school_college_data.get('city'),
-                    state = unlisted_school_college_data.get('state')
-                )
-
-            profile.save()
-
-        return instance
 
 
 # --- Event Serializers ---
@@ -420,11 +250,11 @@ class EventSerializer(serializers.ModelSerializer):
 
         model = Event
         fields = [
-            'id', 'name', 'description', 'start_date', 'start_date_formatted', 'end_date', 'location_type', 'physical_location', 'google_maps_link',
-            'virtual_location', 'register_link', 'registration_deadline', 'is_native', 'is_featured', 'poster', 'is_paid_event', 'payment_qr_image',
-            'ticket_price', 'max_tickets_per_user', 'host', 'categories', 'category_ids', 'is_registration_open', 'age_restriction_cutoff', 'collect_phone',
-            'collect_college_school', 'collect_student_id', 'documents', 'uploaded_documents', 'restricted_to_school_college_ids', 'is_internal_event', 'capacity',
-            'remaining_capacity', 'is_sold_out', 'event_contacts', 'is_cancelled', 'has_pending_refunds'
+            'age_restriction_cutoff', 'capacity', 'categories', 'category_ids', 'collect_college_school', 'collect_student_id', 'description', 'documents', 'end_date',
+            'event_contacts', 'google_maps_link', 'has_pending_refunds', 'host', 'id', 'is_cancelled', 'is_featured', 'is_internal_event', 'is_native', 'is_paid_event',
+            'is_registration_open', 'is_sold_out', 'location_type', 'max_tickets_per_user', 'name', 'physical_location', 'poster', 'register_link',
+            'registration_deadline', 'remaining_capacity', 'restricted_to_school_college_ids', 'start_date', 'start_date_formatted', 'ticket_price', 'uploaded_documents',
+            'virtual_location'
         ]
 
     def get_is_internal_event(self, obj):
@@ -482,49 +312,6 @@ class EventSerializer(serializers.ModelSerializer):
             raise ValidationError({'registration_deadline' : "Registration deadline cannot be after the event starts."})
 
         return attrs
-
-    def create(self, validated_data):
-        documents_data = validated_data.pop('uploaded_documents', [])
-        categories = validated_data.pop('categories', [])
-        restricted_schools_colleges = validated_data.pop('restricted_to_schools_colleges', [])
-
-        event = Event.objects.create(**validated_data)
-
-        event.categories.set(categories)
-
-        if restricted_schools_colleges:
-            event.restricted_to_schools_colleges.set(restricted_schools_colleges)
-
-        for file in documents_data[:5]:
-            EventDocument.objects.create(event = event, file = file, name = file.name)
-
-        return event
-    
-    def update(self, instance, validated_data):
-        documents_data = validated_data.pop('uploaded_documents', [])
-        categories = validated_data.pop('categories', None) # If no categories provided, don't update
-        restricted_schools_colleges = validated_data.pop('restricted_to_schools_colleges', [])
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        if categories is not None:
-            instance.categories.set(categories)
-
-        if restricted_schools_colleges is not None:
-            instance.restricted_to_schools_colleges.set(restricted_schools_colleges)
-
-        current_count = instance.documents.count()
-
-        for file in documents_data:
-            if current_count < 5:
-                EventDocument.objects.create(event = instance, file = file, name = file.name)
-
-                current_count += 1
-
-        instance.save()
-
-        return instance
     
     def get_has_pending_refunds(self, obj):
         if not obj.is_paid_event or not obj.is_cancelled:
@@ -556,9 +343,8 @@ class RegistrationSerializer(serializers.ModelSerializer):
         ]
 
     def get_qr_code(self, obj):
-        token = generate_ticket_token(str(obj.id), str(obj.event.id), obj.event.end_date)
 
-        return generate_qr_code_base64(token)
+        return generate_qr_code_base64(obj.ticket_code)
     
 
 class TicketAttendeeSerializer(serializers.Serializer):
@@ -586,191 +372,13 @@ class BulkRegistrationSerializer(serializers.Serializer):
     attendees = TicketAttendeeSerializer(many = True, allow_empty = False)
 
     def validate(self, data):
-        event_id = data.get('event_id')
-        event = self.context.get('locked_event')
-
-        if not event:
-
-            raise serializers.ValidationError("System error: Event context missing.")
-        
         attendees = data.get('attendees')
-        user = self.context['request'].user
-
-        try:
-            event = Event.objects.get(id = event_id)
-        except Event.DoesNotExist:
-
-            raise serializers.ValidationError({'event_id' : "Event not found."})
-        
-        internal_colleges = event.restricted_to_schools_colleges.all()
-        is_internal_event = internal_colleges.exists()
-
-        if is_internal_event:
-            if not user.is_authenticated or not hasattr(user, 'student_profile'):
-
-                raise serializers.ValidationError("You must be a verified student of the restricted schools/colleges to book tickets.")
-            
-            if user.student_profile.school_college not in internal_colleges:
-                allowed_schools_colleges = ", ".join([f"{sc.name} - {sc.campus}" if sc.campus else sc.name for sc in internal_colleges])
-
-                raise serializers.ValidationError(f"This event is strictly internal to: {allowed_schools_colleges}.")
-            
-        if event.capacity is not None:
-            if len(attendees) > event.remaining_capacity:
-
-                raise serializers.ValidationError(f"Only {event.remaining_capacity} tickets remaining.")
-        
-        user_existing_tickets = Registration.objects.filter(student = user.student_profile, event = event, is_cancelled = False).count()
-
-        if user_existing_tickets + len(attendees) > event.max_tickets_per_user:
-            remaining = event.max_tickets_per_user - user_existing_tickets
-
-            if remaining == 0:
-
-                raise serializers.ValidationError(f"You have already reached the limit of {event.max_tickets_per_user} ticket(s) for this event.")
-            
-            else:
-
-                raise serializers.ValidationError(f"You already hold {user_existing_tickets} ticket(s). You can only book {remaining} more.")
-
-        attendee_emails = []
-        attendee_student_ids = []
-
-        for i, att in enumerate(attendees):
-            email = att.get('email')
-
-            if not email and i == 0:
-                email = user.email
-            
-            if email:
-                attendee_emails.append(email.lower().strip())
-
-            if event.collect_student_id:
-                student_id = att.get('student_id_number')
-
-                if not student_id and i == 0:
-                    student_id = user.student_profile.student_id_number
-
-                if student_id:
-                    attendee_student_ids.append(str(student_id).strip())
+        attendee_emails = [a.get('email').strip().lower() for a in attendees if a.get('email')]
 
         if len(attendee_emails) != len(set(attendee_emails)):
 
-            raise serializers.ValidationError("Duplicate emails found in your attendee list. Each ticket must belong to a unique person.")
+            raise serializers.ValidationError("Duplicate emails found in your attendee list.")
         
-        if event.collect_student_id and len(attendee_student_ids) != len(set(attendee_student_ids)):
-
-            raise serializers.ValidationError("Duplicate student IDs found in your attendee list. Each ticket must belong to a unique person.")
-        
-        existing_active_regs = Registration.objects.filter(event = event, is_cancelled = False)
-
-        db_emails = existing_active_regs.values_list('email', flat = True)
-        email_overlap = set(attendee_emails).intersection(set([e.lower().strip() for e in db_emails if e]))
-
-        if email_overlap:
-            duplicates = ', '.join(email_overlap)
-
-            raise serializers.ValidationError(f"Tickets are already registered for these emails: {duplicates}")
-        
-        if event.collect_student_id and attendee_student_ids:
-            db_student_ids = []
-
-            for reg in existing_active_regs:
-                if reg.student and reg.student.student_id_number:
-                    db_student_ids.append(str(reg.student.student_id_number).strip())
-
-                if reg.guest_data and reg.guest_data.get('student_id_number'):
-                    db_student_ids.append(str(reg.guest_data.get('student_id_number')).strip())
-        
-            id_overlap = set(attendee_student_ids).intersection(set(db_student_ids))
-
-            if id_overlap:
-                duplicates = ', '.join(id_overlap)
-
-                raise serializers.ValidationError(f"Tickets are already registered for these Student IDs: {duplicates}")
-
-        internal_college_ids = [sc.id for sc in internal_colleges] if is_internal_event else []
-        
-        for index, attendee in enumerate(attendees):
-            is_buyer = (index == 0)
-
-            if not is_buyer:
-                if not attendee.get('first_name'):
-
-                    raise serializers.ValidationError({f"attendees[{index}].first_name" : "Guest's first name is required."})
-                
-                if not attendee.get('last_name'):
-
-                    raise serializers.ValidationError({f"attendees[{index}].last_name" : "Guest's last name is required."})
-                
-            if is_internal_event and not is_buyer:
-                guest_college_id = attendee.get('school_college_id')
-
-                if not guest_college_id or guest_college_id not in internal_college_ids:
-                    allowed_schools_colleges = ", ".join([f"{sc.name} - {sc.campus}" if sc.campus else sc.name for sc in internal_colleges])
-
-                    raise serializers.ValidationError({f"attendees[{index}].school_college" : f"All guests must explicitly belong to one of: {allowed_schools_colleges}"})
-
-            # Phone Check
-            if event.collect_phone:
-                phone_number = attendee.get('phone_number')
-
-                if is_buyer:
-                    # phone for guest, phone_number for buyer.
-                    if not user.student_profile.phone_number and not phone_number:
-
-                        raise serializers.ValidationError({f"attendees[{index}].phone_number" : "Phone number is required."})
-                elif not phone_number:
-                    
-                    raise serializers.ValidationError({f"attendees[{index}].phone_number" : "Phone number is required."})
-                
-            # Student ID Check
-            if event.collect_student_id:
-                student_id_number = attendee.get('student_id_number')
-
-                if is_buyer:
-                    if not user.student_profile.student_id_number and not student_id_number:
-
-                        raise serializers.ValidationError({f"attendees[{index}].student_id_number" : "Student ID number is required."})
-                elif not student_id_number:
-                    
-                    raise serializers.ValidationError({f"attendees[{index}].student_id_number" : "Student ID number is required."})
-                    
-            # School/College Check
-            if event.collect_college_school and not is_internal_event:
-                if attendee.get('school_college_id'):
-                    pass
-                elif attendee.get('school_college_name'):
-                    raw_city = attendee.get('school_college_city', '').strip()
-                    raw_state = attendee.get('school_college_state', '').strip()
-
-                    if not raw_city or not raw_state:
-                        
-                        raise serializers.ValidationError({f"attendees[{index}].school_college" : "To add a new college, you MUST provide its City & State."})
-                elif is_buyer and user.student_profile.school_college:
-                    pass
-                else:
-                    
-                    raise serializers.ValidationError({f"attendees[{index}].school_college" : "School/College is required."})
-                
-            # Age Check
-            if event.age_restriction_cutoff:
-                dob = attendee.get('date_of_birth')
-
-                if is_buyer and not dob:
-                    dob = user.student_profile.date_of_birth
-
-                if not dob:
-
-                    raise serializers.ValidationError({f"attendees[{index}].date_of_birth" : "Date of Birth is required."})
-
-                if dob > event.age_restriction_cutoff:
-                    name = attendee.get('first_name', f"Attendee #{index + 1}")
-
-                    raise serializers.ValidationError(f"Sorry, {name} does not meet the age requirement.")
-
-        data['event'] = event
-
         return data
 
 
