@@ -11,17 +11,19 @@ from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from .email_service import send_email
 from .models import Registration
-from .utils import generate_qr_bytes, generate_ticket_token
+from .services.email_service import send_email
+from .utils import generate_qr_bytes
 
 import cloudinary.uploader, io, logging, razorpay
+
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
 razorpay_client = razorpay.Client(auth = (settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+
 
 @shared_task(bind = True)
 def send_ticket_email(self, registration_id):
@@ -31,9 +33,7 @@ def send_ticket_email(self, registration_id):
         event = registration.event
         user = registration.student.user
 
-        token = generate_ticket_token(registration.id, event.id, event.end_date) # Generate token
-        qr_bytes = generate_qr_bytes(token) # Get raw bytes
-
+        qr_bytes = generate_qr_bytes(registration.ticket_code) # Get raw bytes directly from the DB's 6-char ticket code
         qr_file = io.BytesIO(qr_bytes)
 
         upload_result = cloudinary.uploader.upload(
