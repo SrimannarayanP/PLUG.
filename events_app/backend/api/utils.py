@@ -1,28 +1,9 @@
 # utils.py
 
 
-from datetime import timedelta
-
-from django.conf import settings
 from django.db.models import F
-from django.utils import timezone
 
-import base64, io, jwt, qrcode, random, string
-
-
-# Generates a secure, signed JWT containing the registration details. This token is the ticket.
-def generate_ticket_token(registration_id, event_id, event_end_date):
-    expiration_date = event_end_date + timedelta(hours = 12)
-
-    payload = {
-        'rid' : str(registration_id), # Registration ID
-        'eid' : str(event_id), # Event ID
-        'iat' : timezone.now(), # Issued At
-        'exp' : expiration_date # Expiration date
-    }
-
-    # Sign the token using HS256 algorithm & my secret key
-    return jwt.encode(payload, settings.TICKET_SIGNING_KEY, algorithm = 'HS256')
+import base64, io, qrcode, random, string
 
 
 # Generates the PIL (Pillow) image object. Encapsulates all the data & the metadata associated with an image.
