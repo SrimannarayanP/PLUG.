@@ -6,7 +6,7 @@ from cloudinary_storage.storage import RawMediaCloudinaryStorage
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator, URLValidator
-from django.db import models, transaction
+from django.db import models
 from django.db.models import Q, QuerySet
 from django.db.models.signals import post_delete, pre_save
 from django.dispatch import receiver
@@ -202,7 +202,8 @@ class UnlistedSchoolCollege(TimeStampedModel):
         constraints = [
             models.UniqueConstraint(
                 fields = ['name', 'campus', 'city'],
-                name = 'unique_unlisted_school_college_request'
+                name = 'unique_unlisted_school_college_request',
+                nulls_distinct = False
             )
         ]
     
@@ -310,7 +311,6 @@ class Event(UUIDModel, TimeStampedModel):
 
     # Payment
     is_paid_event = models.BooleanField(default = False)
-    payment_qr_image = models.ImageField(upload_to = 'payment_qr_img/', null = True, blank = True)
     ticket_price = models.DecimalField(max_digits = 10, decimal_places = 2, default = 0.00)
 
     # Optional Data Collection (Smart Fields)
@@ -552,6 +552,21 @@ class Registration(UUIDModel, TimeStampedModel):
         
         return f"{self.student} - {self.event.name}"
     
+
+# --- System Models ---
+class ProcessedWebhook(TimeStampedModel):
+
+    """Permanently records every Razorpay event ID that hits the server"""
+    razorpay_event_id = models.CharField(max_length = 255, unique = True, db_index = True, help_text = "The unique X-Razorpay-Event-Id header value")
+
+    class Meta:
+
+        verbose_name_plural = "Processed Webhooks"
+
+    def __str__(self):
+        
+        return self.razorpay_event_id
+
 
 # File handling
 @receiver(post_delete, sender = Event)
