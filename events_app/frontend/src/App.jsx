@@ -24,7 +24,6 @@ const HostScanner = lazy(() => import('./pages/HostScanner'))
 const LandingPage = lazy(() => import('./pages/LandingPage'))
 const LoginSignup = lazy(() => import('./pages/LoginSignup'))
 const ManageEvent = lazy(() => import('./pages/ManageEvent'))
-const MockCheckout = lazy(() => import('./pages/MockCheckout'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const RequestPasswordLink = lazy(() => import('./pages/RequestPasswordLink'))
@@ -231,16 +230,6 @@ export default function App() {
                                         element = {
                                             <ProtectedRoute allowedRoles = {['host', 'admin']}>
                                                 <HostScanner />
-                                            </ProtectedRoute>
-                                        }
-                                    />
-                                    
-                                    {/* Checkout route */}
-                                    <Route 
-                                        path = '/checkout'
-                                        element = {
-                                            <ProtectedRoute>
-                                                <MockCheckout />
                                             </ProtectedRoute>
                                         }
                                     />
