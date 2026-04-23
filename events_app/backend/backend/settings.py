@@ -158,7 +158,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = '/static/'
+STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
@@ -192,18 +192,18 @@ if CELERY_BROKER_URL.startswith('rediss://'):
     CELERY_BROKER_USE_SSL = {'ssl_cert_reqs' : ssl.CERT_NONE}
     CELERY_REDIS_BACKEND_USE_SSL = {'ssl_cert_reqs' : ssl.CERT_NONE}
 
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' # For development, emails will be printed to console
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 465
-# EMAIL_USE_TLS = False # TLS (Transport Layer Security): Ensures encryption when sent over the internet
-# EMAIL_USE_SSL = True
-# EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-# EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-# DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' # For development, emails will be printed to console
+EMAIL_HOST = 'smtp.zoho.in'
+EMAIL_PORT = 465
+EMAIL_USE_TLS = False # TLS (Transport Layer Security): Ensures encryption when sent over the internet
+EMAIL_USE_SSL = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = "PLUG. <tickets@pluglive.in>"
 
-BREVO_API_KEY = os.getenv('BREVO_API_KEY')
-BREVO_FROM_EMAIL = os.getenv('BREVO_FROM_EMAIL')
-BREVO_FROM_NAME = os.getenv('BREVO_FROM_NAME')
+# BREVO_API_KEY = os.getenv('BREVO_API_KEY')
+# BREVO_FROM_EMAIL = os.getenv('BREVO_FROM_EMAIL')
+# BREVO_FROM_NAME = os.getenv('BREVO_FROM_NAME')
 
 SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
 SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True').lower() == 'true'
