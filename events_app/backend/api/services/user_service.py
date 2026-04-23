@@ -5,11 +5,11 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
-from api.models import StudentProfile, HostProfile
+from api.models import Event, StudentProfile, HostProfile, Registration
 from api.tasks import send_verification_email
 from api.utils import generate_otp, track_unlisted_school_college_request
 
-import logging
+import logging, uuid
 
 
 User = get_user_model()
@@ -140,3 +140,55 @@ class UserService:
             profile.save()
 
         return user
+    
+    @staticmethod
+    @transaction.atomic
+    def delete_account(user):
+        # Checks if the user owns any host profiles
+        owned_hosts = user.owned_clubs.all()
+
+        if owned_hosts.exists():
+            active_events = Event.objects.filter(host__in = owned_hosts, start_date__gte = timezone.now(), is_cancelled = False).exists()
+
+            if active_events:
+
+                raise ValueError("You cannot delete your account while hosting active upcoming events. Cancel them 1st.")
+            
+            pending_finances = Registration.objects.filter(
+                event__host__in = owned_hosts,
+                payment_status__in = [Registration.PaymentStatus.REFUND_PENDING, Registration.PaymentStatus.PENDING]
+            ).exists()
+
+            if pending_finances:
+
+                raise ValueError("You cannot delete your account with pending financial transactions. Process all refunds first.")
+
+            for host in owned_hosts:
+                host.name = f"Archived host {uuid.uuid4().hex[:8]}"
+
+                host.save()
+
+        active_tickets = Registration.objects.filter(student__user = user, event__start_date__gte = timezone.now(), is_cancelled = False).exists()
+
+        if active_tickets:
+
+            raise ValueError("You hold active tickets for upcoming events. You must cancel them before deleting your account.")
+        
+        dummy_hash = uuid.uuid4().hex[:16]
+
+        user.email = f'deleted_{dummy_hash}@anonymized.local'
+        user.first_name = 'Deleted'
+        user.last_name = 'User'
+        user.is_active = False
+        user.set_unusable_password()
+        user.save()
+
+        if hasattr(user, 'student_profile'):
+            profile = user.student_profile
+            profile.phone_number = None
+            profile.student_id_number = None
+            profile.date_of_birth = None
+
+            profile.save()
+
+        return True
