@@ -1,7 +1,7 @@
 // ConfirmDialog.jsx
 
 
-import {AlertTriangle, X} from 'lucide-react'
+import {AlertTriangle, X, Loader2, Loader} from 'lucide-react'
 import {useEffect} from 'react'
 import {createPortal} from 'react-dom'
 
@@ -14,7 +14,8 @@ export default function ConfirmDialog({
     message = "This action cannot be undone.",
     confirmText = 'Confirm',
     cancelText = 'Cancel',
-    isDestructive = false // Set true for deletes to make the button Red
+    isDestructive = false, // Set true for deletes to make the button Red
+    isLoading = false
 }) {
 
     // Prevent the background from scrolling while open
@@ -47,22 +48,25 @@ export default function ConfirmDialog({
     return createPortal(
 
         <div
-            className = "fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
+            className = "fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6"
             role = 'alertdialog'
             aria-model = 'true'
-        >
+        >   
+            {/* Disable background click while loading */}
             <div
                 className = "absolute inset-0 bg-[#09090b]/80 backdrop-blur-sm animate-in fade-in duration-200"
-                onClick = {onClose}
+                onClick = {!isLoading ? onClose : undefined}
             />
 
             <div className = "relative w-full max-w-md bg-[#18181b] border border-zinc-800 rounded-3xl shadow-2xl p-6 sm:p-8 animate-in zoom-in-95 duration-200">
-                <button
-                    onClick = {onClose}
-                    className = "absolute top-4 right-4 p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
-                >
-                    <X size = {20} />
-                </button>
+                {!isLoading && (
+                    <button
+                        onClick = {onClose}
+                        className = "absolute top-4 right-4 p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
+                    >
+                        <X size = {20} />
+                    </button>
+                )}
 
                 <div className = "flex flex-col items-center text-center">
                     <div
@@ -89,16 +93,15 @@ export default function ConfirmDialog({
                 <div className = "flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
                     <button
                         onClick = {onClose}
+                        disabled = {isLoading}
                         className = "flex-1 px-4 py-3 rounded-xl font-bold uppercase tracking-widest text-xs border border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         {cancelText}
                     </button>
 
                     <button
-                        onClick = {() => {
-                            onConfirm()
-                            onClose()
-                        }}
+                        onClick = {onConfirm}
+                        disabled = {isLoading}
                         className = {`
                             flex-1 px-4 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all shadow-lg active:scale-95
                             ${isDestructive
@@ -108,7 +111,8 @@ export default function ConfirmDialog({
                             ${!isDestructive && 'text-white'}
                         `}
                     >
-                        {confirmText}
+                        {isLoading && <Loader2 className = "h-4 w-4 animate-spin" />}
+                        {isLoading ? 'Processing...' : confirmText}
                     </button>
                 </div>
             </div>
