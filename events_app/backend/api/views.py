@@ -53,7 +53,7 @@ class DeleteEventDocumentView(APIView):
 
             return Response({'error' : str(e)}, status = 403)
 
-# --- Auth Views ---
+# --- Auth & User Views ---
 class CustomTokenObtainPairView(TokenObtainPairView):
 
     serializer_class = CustomTokenObtainPairSerializer
@@ -125,6 +125,20 @@ class UserProfileView(APIView):
             logger.error(f"Profile update failed: {str(e)}")
 
             return Response({'error' : "An error occurred updating the profile."}, status = 500)
+
+
+class DeleteUserView(APIView):
+
+    permission_classes = [IsAuthenticated]
+    
+    def delete(self, request):
+        try:
+            UserService.delete_account(request.user)
+
+            return Response(status = 204)
+        except ValueError as e:
+
+            return Response({'error' : str(e)}, status = 400)
 
 
 class RequestPasswordResetView(APIView):
