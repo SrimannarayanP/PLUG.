@@ -26,9 +26,9 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from api.views import (
     CancelTicketView, CancelPendingOrderView, CategoryListView, ClubTeamManagementView, CreateEventView, CreateUserView, CustomTokenObtainPairView,
-    DeleteEventDocumentView, EventDetailsView, EventListView, FeaturedEventListView, HostEventDetailView, HostEventListView, HostEventUpdateView, ProcessPaymentView,
-    RazorpayWebhookView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView, ResendTicketView, SchoolCollegeListView, SetNewPasswordView,
-    TrackEventClickView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, VerifyRazorpayPaymentView, ResendOTPView
+    DeleteEventDocumentView, DeleteUserView, EventDetailsView, EventListView, FeaturedEventListView, HostEventDetailView, HostEventListView, HostEventUpdateView,
+    ProcessPaymentView, RazorpayWebhookView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView, ResendTicketView, SchoolCollegeListView,
+    SetNewPasswordView, TrackEventClickView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, VerifyRazorpayPaymentView, ResendOTPView
 )
 
 urlpatterns = [
@@ -49,6 +49,7 @@ urlpatterns = [
     
     # --- User Profile ---
     path('api/user/profile/', UserProfileView.as_view(), name = 'user-profile'),
+    path('api/user/delete/', DeleteUserView.as_view(), name = 'delete-user'),
     
     # --- Public Data ---
     path('api/data/categories/', CategoryListView.as_view(), name = 'category-list'),
