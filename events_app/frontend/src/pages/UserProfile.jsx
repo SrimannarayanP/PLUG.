@@ -1,7 +1,7 @@
 // UserProfile.jsx
 
 
-import {AlertTriangle, ArrowLeft, Building2, Calendar, CheckCircle2, Edit2, GraduationCap, LogOut, Mail, MapPin, Phone, Save, Shield, User, X} from 'lucide-react'
+import {AlertTriangle, ArrowLeft, Building2, Calendar, CheckCircle2, Edit2, GraduationCap, LogOut, Mail, MapPin, Phone, Save, Shield, Trash2, User, X} from 'lucide-react'
 import {useEffect, useState} from 'react'
 import {toast} from 'react-hot-toast'
 import {useNavigate} from 'react-router-dom'
@@ -10,6 +10,7 @@ import api from '../api/api'
 
 import {getImageUrl} from '../utils/imageHelper'
 
+import ConfirmDialog from '../components/common/ConfirmDialog'
 import FormInput from '../components/common/FormInput'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SearchableSelect from '../components/common/SearchableSelect'
@@ -26,6 +27,9 @@ export default function UserProfile() {
     const [isEditing, setIsEditing] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [formData, setFormData] = useState([])
+
+    const [showDeleteModal, setShowDeleteModal] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     useEffect(() => {
         fetchProfile()
@@ -156,6 +160,28 @@ export default function UserProfile() {
                 school_college_city : '',
                 school_college_state : ''
             }))
+        }
+    }
+
+    const handleDeleteAccount = async () => {
+        setIsDeleting(true)
+
+        try {
+            await api.delete('/api/user/delete/')
+
+            localStorage.clear()
+
+            toast.success("Account deleted & data anonymized successfully.")
+            
+            navigate('/login')
+        } catch (err) {
+            const errorMessage = err.response?.data?.error || "An unexpected error occurred."
+
+            toast.error(errorMessage, {duration : 5000})
+
+            setShowDeleteModal(false)
+        } finally {
+            setIsDeleting(false)
         }
     }
 
@@ -584,7 +610,44 @@ export default function UserProfile() {
                         </div>
                     </div>
                 </div>
+
+                <div className = "mt-12 border border-red-500/20 bg-red-500/5 rounded-3xl p-6 md:p-8">
+                    <div className = "flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                        <div>
+                            <h3 className = "text-red-500 font-bold text-lg flex items-center gap-2 mb-2">
+                                <AlertTriangle className = "h-5 w-5" />
+
+                                Danger Zone
+                            </h3>
+
+                            <p className = "text-zinc-400 text-sm max-w-2xl">
+                                Permanently delete your account & anonymize your personal data.
+                                If you have active tickets, upcoming events or pending financial transactions, this action will be blocked until those are resolved.
+                            </p>
+                        </div>
+
+                        <button
+                            onClick = {() => setShowDeleteModal(true)}
+                            className = "shrink-0 flex items-center gap-2 px-6 py-3 rounded-xl bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 border border-red-500/20 hover:border-red-500 transition-all font-bold uppercase tracking-wider text-xs"
+                        >
+                            <Trash2 className = "h-4 w-4" />
+
+                            Delete Account
+                        </button>
+                    </div>
+                </div>
             </div>
+
+            <ConfirmDialog
+                isOpen = {showDeleteModal}
+                onClose = {() => setShowDeleteModal(false)}
+                onConfirm = {handleDeleteAccount}
+                title = "Delete Account?"
+                message = "This action is irreversible. Your profile will be permanently anonymized. Are you absolutely certain you wish to proceed?"
+                confirmText = "Yes, Delete"
+                isDestructive = {true}
+                isLoading = {isDeleting}
+            />
         </div>
 
     )
