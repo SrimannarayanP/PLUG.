@@ -96,7 +96,7 @@ class PaymentService:
                 pending_valid_registrations = registrations.filter(is_cancelled = False, payment_status = Registration.PaymentStatus.PENDING)
 
                 if cancelled_registrations.exists():
-                    refund_amount_rupees = sum([reg.event.ticket_price for reg in cancelled_registrations])
+                    refund_amount_rupees = sum([reg.amount_paid for reg in cancelled_registrations])
                     refund_amount_paise = int(refund_amount_rupees * 100)
 
                     logger.info(f"Late payment detected for cancelled order {razorpay_order_id}. Initiating auto-refund.")
