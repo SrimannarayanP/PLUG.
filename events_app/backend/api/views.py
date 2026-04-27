@@ -3,6 +3,7 @@
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
@@ -26,6 +27,7 @@ from .services.event_management_service import EventManagementService
 from .services.host_service import HostService
 from .services.payment_service import PaymentService
 from .services.registration_service import EventRegistrationService
+from .services.stats_service import EventStatsService
 from .services.ticket_service import TicketService
 from .services.user_service import UserService
 from .tasks import send_ticket_email
@@ -307,7 +309,13 @@ class CreateEventView(APIView):
             return Response(serializer.errors, status = 400)
         
         is_internal_event = str(request.data.get('is_internal_event', '')).lower() == 'true'
-        requested_ids = request.data.getlist('restricted_to_school_college_ids')
+
+        if hasattr(request.data, 'getlist'):
+            requested_ids = request.data.getlist('restricted_to_school_college_ids')
+        else:
+            raw_ids = request.data.get('restricted_to_school_college_ids', [])
+
+            requested_ids = raw_ids if isinstance(raw_ids, list) else [raw_ids] if raw_ids else []
 
         try:
             event = EventManagementService.create_event(
@@ -333,9 +341,14 @@ class HostEventListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
 
-        return Event.objects.filter(host__in = user.host_profiles.all()).select_related(
-            'host', 'host__school_college'
-        ).prefetch_related('restricted_to_schools_colleges', 'registrations').order_by('-start_date')
+        queryset = Event.objects.filter(host__in = user.host_profiles.all())
+
+        host_id = self.request.query_params.get('host_id')
+
+        if host_id:
+            queryset = queryset.filter(host_id = host_id)
+
+        return queryset.select_related('host', 'host__school_college').prefetch_related('restricted_to_schools_colleges', 'registrations').order_by('-start_date')
 
 
 class HostEventDetailView(APIView):
@@ -412,7 +425,12 @@ class HostEventUpdateView(generics.RetrieveUpdateDestroyAPIView):
         if 'is_internal_event' in request.data:
             is_internal_event = str(request.data.get('is_internal_event', '')).lower() == 'true'
 
-        requested_ids = request.data.getlist('restricted_to_school_college_ids')
+        if hasattr(request.data, 'getlist'):
+            requested_ids = request.data.getlist('restricted_to_school_college_ids')
+        else:
+            raw_ids = request.data.get('restricted_to_school_college_ids', [])
+
+            requested_ids = raw_ids if isinstance(raw_ids, list) else [raw_ids] if raw_ids else []
 
         try:
             event = EventManagementService.update_event(
@@ -462,6 +480,28 @@ class TrackEventClickView(APIView):
         EventClick.objects.create(event = event, user = user)
 
         return Response({'status' : 'tracked'}, status = 200)
+    
+
+class HostEventStatsView(APIView):
+
+    permission_classes = [IsAuthenticated, IsHostUser, IsEventOwner]
+
+    def get(self, request, id):
+        event = get_object_or_404(Event, id = id)
+
+        # Check cache first to avoid expensive DB operations on every request.
+        cache_key = f"event_stats_{id}"
+        cached_stats = cache.get(cache_key)
+
+        if cached_stats:
+
+            return Response(cached_stats, status = 200)
+
+        stats_data = EventStatsService.get_event_metrics(event)
+
+        cache.set(cache_key, stats_data, timeout = 300) # Cache for 5 minutes
+
+        return Response(stats_data, status = 200)
 
 
 # --- Team Management Views ---
