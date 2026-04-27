@@ -6,7 +6,6 @@ import {Link} from 'react-router-dom'
 import AnimatedBorderButton from '../ui/AnimatedBorderButton'
 
 import {useAuth} from '../../context/AuthContext'
-import { isAxiosError } from 'axios'
 
 
 const Footer = () => {
@@ -32,9 +31,14 @@ const Footer = () => {
                         </p>
                         {/* Text with a bottom margin of 6 units */}
 
-                        <AnimatedBorderButton className = "h-14 w-64 text-lg">
-                            Sign Up Now - It's Free!
-                        </AnimatedBorderButton>
+                        <Link
+                            to = '/login'
+                            className = 'inline-block'
+                        >
+                            <AnimatedBorderButton className = "h-14 w-64 text-lg">
+                                Sign Up Now - It's Free!
+                            </AnimatedBorderButton>
+                        </Link>
                     </div>
                 )}
 
