@@ -20,13 +20,18 @@ const Header = () => {
     const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
     const [isScrolled, setIsScrolled] = useState(false)
 
-    const managesHost = Boolean(user?.profile?.host_type)
+    const managesHost = Boolean(user && Array.isArray(user?.profile) && user.profile.length > 0)
+    const isVerifiedHost = Boolean(user && Array.isArray(user?.profile) && user.profile.some(club => club.is_verified))
 
     const navigate = useNavigate()
     const location = useLocation()
     const dropdownRef = useRef(null)
 
     const isHostRoute = location.pathname.startsWith('/host')
+
+    const currentPath = location.pathname
+    const isDashboardActive = currentPath === '/student/dashboard' || currentPath === '/host/dashboard'
+    const isProfileActive = currentPath === '/profile'
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
     
@@ -69,7 +74,11 @@ const Header = () => {
         setIsOpen(false)
 
         if (isHostRoute) {
-            navigate('/host/dashboard')
+            if (isVerifiedHost) {
+                navigate('/host/dashboard')
+            } else {
+                navigate('/host/pending-verification')
+            }
         } else {
             navigate('/student/dashboard')
         }
@@ -263,7 +272,13 @@ const Header = () => {
                                     <div className = "flex flex-col gap-3">
                                         <button
                                             onClick = {handleDashboardClick} 
-                                            className = "w-full py-3.5 rounded-xl bg-white text-black font-bold uppercase text-sm shadow-lg active:scale-95 transition-transform"
+                                            className = {`
+                                                w-full py-3.5 rounded-xl font-bold uppercase text-sm shadow-lg active:scale-95 transition-all duration-200
+                                                ${isDashboardActive
+                                                    ? "bg-white text-black"
+                                                    : "bg-zinc-800/50 text-zinc-300 hover:text-white border border-zinc-700/50 hover:bg-zinc-800"
+                                                }
+                                            `}
                                         >
                                             {isHostRoute ? "Host Dashboard" : "My Tickets"}
                                         </button>
@@ -293,7 +308,13 @@ const Header = () => {
                                         <Link
                                             to = '/profile'
                                             onClick = {() => setIsOpen(false)}
-                                            className = "py-2 text-zinc-400 text-sm hover:text-white font-bold uppercase tracking-widest mt-2"
+                                            className = {`
+                                                py-2 text-sm font-bold uppercase tracking-widest mt-2 transition-colors duration-200
+                                                ${isProfileActive
+                                                    ? 'text-white'
+                                                    : "text-zinc-400 hover:text-white"
+                                                }
+                                            `}
                                         >
                                             My Profile
                                         </Link>
