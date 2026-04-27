@@ -2,40 +2,41 @@
 
 
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
+from django.utils.html import strip_tags
 
-import requests
+import logging
 
 
-BREVO_URL = 'https://api.brevo.com/v3/smtp/email'
+# BREVO_URL = 'https://api.brevo.com/v3/smtp/email'
+
+
+logger = logging.getLogger(__name__)
 
 
 def send_email(to_email, to_name, subject, html_content, attachment = None):
-    payload = {
-        'sender' : {
-            'name' : settings.BREVO_FROM_NAME,
-            'email' : settings.BREVO_FROM_EMAIL,
-        },
-        'to' : [
-            {
-                'email' : to_email,
-                'name' : to_name or 'User'
-            }
-        ],
-        'subject' : subject,
-        'htmlContent' : html_content
-    }
+    try:
+        text_content = strip_tags(html_content)
 
-    if attachment:
-        payload['attachment'] = attachment
+        to_address = f"{to_name} <{to_email}>" if to_name else to_email
 
-    headers = {
-        'accept' : 'application/json',
-        'api-key' : settings.BREVO_API_KEY,
-        'content-type' : 'application/json'
-    }
+        email = EmailMultiAlternatives(
+            subject = subject,
+            body = text_content,
+            from_email = settings.DEFAULT_FROM_EMAIL,
+            to = [to_address],
+            reply_to = ['support@pluglive.in']
+        )
 
-    response = requests.post(BREVO_URL, json = payload, headers = headers, timeout = 10)
+        email.attach_alternative(html_content, 'text/html')
 
-    response.raise_for_status()
+        if attachment:
+            email.attach(*attachment)
 
-    return response.json()
+        email.send(fail_silently = False)
+
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email to {to_email} via SMTP: {str(e)}")
+
+        raise e # Explicitly re-raise the exception for Celery to trigger the retry.
