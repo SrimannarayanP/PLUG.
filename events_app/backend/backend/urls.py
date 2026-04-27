@@ -26,9 +26,10 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from api.views import (
     CancelTicketView, CancelPendingOrderView, CategoryListView, ClubTeamManagementView, CreateEventView, CreateUserView, CustomTokenObtainPairView,
-    DeleteEventDocumentView, DeleteUserView, EventDetailsView, EventListView, FeaturedEventListView, HostEventDetailView, HostEventListView, HostEventUpdateView,
-    ProcessPaymentView, RazorpayWebhookView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView, ResendTicketView, SchoolCollegeListView,
-    SetNewPasswordView, TrackEventClickView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView, VerifyRazorpayPaymentView, ResendOTPView
+    DeleteEventDocumentView, DeleteUserView, EventDetailsView, EventListView, FeaturedEventListView, HostEventDetailView, HostEventListView, HostEventStatsView,
+    HostEventUpdateView, ProcessPaymentView, RazorpayWebhookView, RegisteredEventsView, RegisterForEventView, RequestPasswordResetView, ResendTicketView,
+    SchoolCollegeListView, SetNewPasswordView, TrackEventClickView, UpcomingEventListView, UserProfileView, VerifyTicketView, VerifyEmailOTPView,
+    VerifyRazorpayPaymentView, ResendOTPView
 )
 
 urlpatterns = [
@@ -71,6 +72,7 @@ urlpatterns = [
     path('api/host/events/', HostEventListView.as_view(), name = 'host-event-list'),    
     path('api/host/create-event/', CreateEventView.as_view(), name = 'create-event'),
     path('api/host/club/<int:club_id>/team/', ClubTeamManagementView.as_view(), name = 'club-team-manage'),
+    path('api/host/event/<uuid:id>/stats/', HostEventStatsView.as_view(), name = 'host-event-stats'),
     
     # --- Management Endpoints ---
     path('api/host/event/<uuid:id>/', HostEventDetailView.as_view(), name = 'host-event-detail'),
