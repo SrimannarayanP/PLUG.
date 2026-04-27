@@ -496,6 +496,7 @@ class Registration(UUIDModel, TimeStampedModel):
 
     # Payment Tracking
     payment_status = models.CharField(max_length = 20, choices = PaymentStatus.choices, default = PaymentStatus.PENDING)
+    amount_paid = models.DecimalField(max_digits = 10, decimal_places = 2, default = 0.00, help_text = "Snapshot of the ticket price at the time of purchase.")
     razorpay_order_id = models.CharField(max_length = 100, blank = True, null = True, db_index = True)
     razorpay_payment_id = models.CharField(max_length = 100, blank = True, null = True)
     razorpay_signature = models.CharField(max_length = 255, blank = True, null = True)
