@@ -5,22 +5,28 @@ from rest_framework import permissions
 
 
 class IsHostUser(permissions.BasePermission):
-    """Allows access to users who have an organisation profile."""
+    """Allows access to users who manage at least 1 host profile."""
 
+    message = "Your host profile is pending admin verification."
+    
     def has_permission(self, request, view):
 
-        return bool(request.user and request.user.is_authenticated and hasattr(request.user, 'organisation_profile'))
+        if not request.user or not request.user.is_authenticated:
+            
+            return False
+
+        return request.user.host_profiles.filter(is_verified = True).exists()
 
 
 class IsEventOwner(permissions.BasePermission):
-    """Allows only the owners of the event to edit it."""
+    """Allows only the managers of the host entity to edit the event."""
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request, obj):
         if request.method in permissions.SAFE_METHODS:
 
             return True
 
-        return obj.organisation == request.user.organisation_profile
+        return obj.host.users.filter(id = request.user.id).exists()
 
 
 class IsEmailVerified(permissions.BasePermission):
