@@ -186,7 +186,7 @@ class UserSerializer(serializers.ModelSerializer):
     def get_profile(self, obj):
         if obj.host_profiles.exists():
 
-            return HostProfileSerializer(obj.host_profiles.first()).data
+            return HostProfileSerializer(obj.host_profiles.all(), many = True).data
         
         if hasattr(obj, 'student_profile'):
 
