@@ -164,7 +164,7 @@ def process_transaction_refund(self, razorpay_payment_id):
 
                 return f"No pending tickets for payment {razorpay_payment_id}"
             
-            total_refund_rupees = sum([t.event.ticket_price for t in pending_tickets])
+            total_refund_rupees = sum([t.amount_paid for t in pending_tickets])
             total_refund_paise = int(total_refund_rupees * 100)
 
             razorpay_client.payment.refund(razorpay_payment_id, {'amount' : total_refund_paise})
