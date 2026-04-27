@@ -1,7 +1,8 @@
 // HostAttendeeTable.jsx
 
 
-import React, {useState} from 'react'
+import {useVirtualizer} from '@tanstack/react-virtual'
+import React, {useRef, useState} from 'react'
 import {CheckCircle, ChevronDown, ChevronRight, Clock, IdCard, Loader2, Phone, Receipt, XCircle} from 'lucide-react'
 
 import api from '../../api/api'
@@ -9,8 +10,17 @@ import api from '../../api/api'
 
 export default function HostAttendeeTable({groupedOrders = [], onActionComplete}) {
 
+    const parentRef = useRef()
+
     const [processingId, setProcessingId] = useState(null)
     const [expandedOrders, setExpandedOrders] = useState({})
+
+    const rowVirtualizer = useVirtualizer({
+        count : groupedOrders.length,
+        getScrollElement : () => parentRef.current,
+        estimateSize : () => 80, // Estimate row height (in px)
+        overscan : 5 // Number of extra rows to render beyond the visible area for smoother scrolling
+    })
 
     const toggleOrder = (orderId) => {
         setExpandedOrders(prev => ({
@@ -240,126 +250,142 @@ export default function HostAttendeeTable({groupedOrders = [], onActionComplete}
         <div className = 'w-full'>
             {/* Mobile View */}
             <div className = "flex flex-col gap-4 md:hidden">
-                {groupedOrders.map((order) => {
-                    const isExpanded = expandedOrders[order.id]
-
-                    return (
-
-                        <div
-                            key = {order.id}
-                            className = "bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-sm"
-                        >
-                            <div
-                                onClick = {() => toggleOrder(order.id)}
-                                className = "p-4 flex justify-between items-start bg-zinc-950 cursor-pointer active:bg-zinc-900 transition-colors"
-                            >
-                                <div>
-                                    <h3 className = "font-bold text-white text-base">
-                                        {order.buyer_name}
-                                    </h3>
-
-                                    <p className = "text-xs text-zinc-400">
-                                        {order.buyer_email}
-                                    </p>
-
-                                    <p className = "text-[10px] text-zinc-500 mt-1">
-                                        {new Date(order.created_at).toLocaleDateString('en-GB', {day : 'numeric', month : 'short', hour : '2-digit', minute : '2-digit'})}
-                                    </p>
-                                </div>
-
-                                <div className = "flex flex-col items-end gap-2">
-                                    <span className = "text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                                        {order.payment_status}
-                                    </span>
-
-                                    <div className = "flex items-center gap-1.5 bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
-                                        <span className = "text-xs font-bold text-orange-500">
-                                            {order.tickets.length}
-                                        </span>
-
-                                        {isExpanded
-                                            ? <ChevronDown
-                                                size = {14}
-                                                className = 'text-zinc-500'
-                                            />
-                                            : <ChevronRight
-                                                size = {14}
-                                                className = 'text-zinc-500'
-                                            />
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {isExpanded && (
-                                <div className = "divide-y divide-zinc-800/50 border-t border-zinc-800">
-                                    {order.tickets.map(ticket => (
-                                        <div
-                                            key = {ticket.id}
-                                            className = "p-4 bg-zinc-900/40"
-                                        >
-                                            <div className = "flex justify-between items-start mb-3">
-                                                <div>
-                                                    <p className = "font-bold text-zinc-200 text-sm flex items-center gap-2">
-                                                        <div className = "h-1 w-1 rounded-full bg-orange-500" />
-
-                                                        {ticket.first_name} {ticket.last_name}
-                                                    </p>
-
-                                                    <p className = "text-xs text-zinc-500 ml-3">
-                                                        {ticket.email}
-                                                    </p>
-                                                </div>
-
-                                                <StatusBadge person = {ticket} />
-                                            </div>
-
-                                            <div className = "space-y-2 mb-2 ml-3">
-                                                <p className = "text-xs text-zinc-400 truncate">
-                                                    {ticket.school_college || '-'}
-                                                </p>
-
-                                                <div className = "flex items-center gap-3 text-[10px] text-zinc-500">
-                                                    {ticket.phone_number && (
-                                                        <span className = "flex items-center gap-1">
-                                                            <Phone size = {10} />
-
-                                                            {ticket.phone_number}
-                                                        </span>
-                                                    )}
-
-                                                    {ticket.student_id_number && (
-                                                        <span className = "flex items-center gap-1">
-                                                            <IdCard size = {10} />
-
-                                                            {ticket.student_id_number}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {ticket.payment_status === 'pending' ? (
-                                                <ActionButtons
-                                                    person = {ticket}
-                                                    isMobile = {true}
-                                                />
-                                            ) : ticket.payment_status === 'verified' ? (
-                                                <div className = "w-full mt-3 py-2 bg-zinc-800/50 rounded border border-zinc-800 text-center text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
-                                                    Ticket Sent
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                    )
-                })}
-
-                {groupedOrders.length === 0 && (
+                {groupedOrders.length === 0 ? (
                     <div className = "p-8 text-center text-zinc-600 text-sm font-medium border border-zinc-800 rounded-xl border-dashed">
                         No orders found.
+                    </div>
+                ) : (
+                    <div
+                        ref = {parentRef}
+                        className = "h-[65vh] w-full overflow-y-auto no-scrollbar scroll-smooth"
+                    >
+                        <div
+                            className = "w-full relative"
+                            style = {{height : `${rowVirtualizer.getTotalSize()}px`}}
+                        >
+                            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                const order = groupedOrders[virtualRow.index]
+                                const isExpanded = expandedOrders[order.id]
+
+                                return (
+
+                                    <div
+                                        key = {order.id}
+                                        data-index = {virtualRow.index}
+                                        ref = {rowVirtualizer.measureElement}
+                                        className = "absolute top-0 left-0 w-full pb-4"
+                                        style = {{transform : `translateY(${virtualRow.start}px)`}}
+                                    >
+                                        <div className = "bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-sm">
+                                            <div
+                                                onClick = {() => toggleOrder(order.id)}
+                                                className = "p-4 flex justify-between items-start bg-zinc-950 cursor-pointer active:bg-zinc-900 transition-colors"
+                                            >
+                                                <div>
+                                                    <h3 className = "font-bold text-white text-base">
+                                                        {order.buyer_name}
+                                                    </h3>
+
+                                                    <p className = "text-xs text-zinc-400">
+                                                        {order.buyer_email}
+                                                    </p>
+
+                                                    <p className = "text-[10px] text-zinc-500 mt-1">
+                                                        {new Date(order.created_at).toLocaleDateString('en-GB', {day : 'numeric', month : 'short', hour : '2-digit', minute : '2-digit'})}
+                                                    </p>
+                                                </div>
+
+                                                <div className = "flex flex-col items-end gap-2">
+                                                    <span className = "text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                                                        {order.payment_status}
+                                                    </span>
+
+                                                    <div className = "flex items-center gap-1.5 bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
+                                                        <span className = "text-xs font-bold text-orange-500">
+                                                            {order.tickets.length}
+                                                        </span>
+
+                                                        {isExpanded
+                                                            ? <ChevronDown
+                                                                size = {14}
+                                                                className = 'text-zinc-500'
+                                                            />
+                                                            : <ChevronRight
+                                                                size = {14}
+                                                                className = 'text-zinc-500'
+                                                            />
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            {isExpanded && (
+                                                <div className = "divide-y divide-zinc-800/50 border-t border-zinc-800">
+                                                    {order.tickets.map(ticket => (
+                                                        <div
+                                                            key = {ticket.id}
+                                                            className = "p-4 bg-zinc-900/40"
+                                                        >
+                                                            <div className = "flex justify-between items-start mb-3">
+                                                                <div>
+                                                                    <p className = "font-bold text-zinc-200 text-sm flex items-center gap-2">
+                                                                        <div className = "h-1 w-1 rounded-full bg-orange-500" />
+
+                                                                        {ticket.first_name} {ticket.last_name}
+                                                                    </p>
+
+                                                                    <p className = "text-xs text-zinc-500 ml-3">
+                                                                        {ticket.email}
+                                                                    </p>
+                                                                </div>
+
+                                                                <StatusBadge person = {ticket} />
+                                                            </div>
+
+                                                            <div className = "space-y-2 mb-2 ml-3">
+                                                                <p className = "text-xs text-zinc-400 truncate">
+                                                                    {ticket.school_college || '-'}
+                                                                </p>
+
+                                                                <div className = "flex items-center gap-3 text-[10px] text-zinc-500">
+                                                                    {ticket.phone_number && (
+                                                                        <span className = "flex items-center gap-1">
+                                                                            <Phone size = {10} />
+
+                                                                            {ticket.phone_number}
+                                                                        </span>
+                                                                    )}
+
+                                                                    {ticket.student_id_number && (
+                                                                        <span className = "flex items-center gap-1">
+                                                                            <IdCard size = {10} />
+
+                                                                            {ticket.student_id_number}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            {ticket.payment_status === 'pending' ? (
+                                                                <ActionButtons
+                                                                    person = {ticket}
+                                                                    isMobile = {true}
+                                                                />
+                                                            ) : ticket.payment_status === 'verified' ? (
+                                                                <div className = "w-full mt-3 py-2 bg-zinc-800/50 rounded border border-zinc-800 text-center text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
+                                                                    Ticket Sent
+                                                                </div>
+                                                            ) : null}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                )
+                            })}
+                        </div>
                     </div>
                 )}
             </div>
@@ -369,10 +395,21 @@ export default function HostAttendeeTable({groupedOrders = [], onActionComplete}
                 <table className = "w-full text-left border-collapse">
                     <thead className = "bg-zinc-900/80 text-zinc-500 border-b border-zinc-800">
                         <tr>
-                            <th className = "p-4 font-bold text-xs uppercase tracking-widest w-[40%]">Buyer / Guests</th>
-                            <th className = "p-4 font-bold text-xs uppercase tracking-widest">Order Status</th>
-                            <th className = "p-4 font-bold text-xs uppercase tracking-widest">Date</th>
-                            <th className = "p-4 font-bold text-xs uppercase tracking-widest text-right">Tickets</th>
+                            <th className = "p-4 font-bold text-xs uppercase tracking-widest w-[40%]">
+                                Buyer / Guests
+                            </th>
+
+                            <th className = "p-4 font-bold text-xs uppercase tracking-widest">
+                                Order Status
+                            </th>
+
+                            <th className = "p-4 font-bold text-xs uppercase tracking-widest">
+                                Date
+                            </th>
+                            
+                            <th className = "p-4 font-bold text-xs uppercase tracking-widest text-right">
+                                Tickets
+                            </th>
                         </tr>
                     </thead>
 
