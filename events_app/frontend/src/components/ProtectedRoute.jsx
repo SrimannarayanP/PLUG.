@@ -29,7 +29,7 @@ export default function ProtectedRoute({children, allowedRoles = []}) {
 
     if (allowedRoles.length > 0) {
         const hasRequiredRole = allowedRoles.some(role => {
-            const isHost = Boolean(user?.profile?.host_type)
+            const isHost = Boolean(user && Array.isArray(user?.profile) && user.profile.length > 0)
 
             if (role === 'host') return isHost === true
             if (role === 'student') return true
