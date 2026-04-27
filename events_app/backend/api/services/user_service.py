@@ -152,7 +152,7 @@ class UserService:
 
             if active_events:
 
-                raise ValueError("You cannot delete your account while hosting active upcoming events. Cancel them 1st.")
+                raise ValueError("You cannot delete your account while hosting active upcoming events. Cancel them first.")
             
             pending_finances = Registration.objects.filter(
                 event__host__in = owned_hosts,
