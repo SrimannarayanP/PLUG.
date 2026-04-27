@@ -201,7 +201,8 @@ class EventRegistrationService:
                     guest_data = guest_extra_info,
                     is_cancelled = False,
                     payment_status = Registration.PaymentStatus.PENDING if locked_event.is_paid_event else Registration.PaymentStatus.VERIFIED,
-                    razorpay_order_id = razorpay_order['id'] if locked_event.is_paid_event else None
+                    razorpay_order_id = razorpay_order['id'] if locked_event.is_paid_event else None,
+                    amount_paid = event.ticket_price if locked_event.is_paid_event else 0.00
                 )
 
                 created_registrations.append(registration)
