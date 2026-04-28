@@ -1,7 +1,7 @@
 // SetPassword.jsx
 
 
-import {ArrowRight, CheckCircle, Eye, EyeOff, KeyRound, Loader2} from 'lucide-react'
+import {AlertCircle, ArrowRight, CheckCircle, Eye, EyeOff, KeyRound, Loader2} from 'lucide-react'
 import {useState} from 'react'
 import {toast} from 'react-hot-toast'
 import {Link, useParams, useNavigate} from 'react-router-dom'
