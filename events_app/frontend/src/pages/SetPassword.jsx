@@ -153,7 +153,7 @@ export default function SetPassword() {
                                 <div className = "bg-red-950/30 border border-red-900/50 text-red-400 p-3 mb-6 text-xs md:text-sm font-medium flex items-center gap-3 rounded-lg animate-in slide-in-from-top-2">
                                     <AlertCircle className = "w-5 h-5 shrink-0" />
 
-                                    {error}
+                                    {errorMessage}
                                 </div>
                             )}
 
