@@ -2,9 +2,10 @@
 
 
 import {AlertCircle} from 'lucide-react'
+import {forwardRef} from 'react'
 
 
-const FormInput = ({id, name, type = 'text', placeholder, label, value, onChange, required = true, className = '', icon : Icon, error, ...props}) => {
+const FormInput = forwardRef(({id, name, type = 'text', placeholder, label, required = false, className = '', icon : Icon, error, ...rest}, ref) => {
 
     return (
 
@@ -28,12 +29,11 @@ const FormInput = ({id, name, type = 'text', placeholder, label, value, onChange
                     id = {id || name}
                     name = {name}
                     type = {type}
-                    value = {value}
-                    onChange =  {onChange}
                     required = {required}
                     placeholder = ' ' // Required for floating label
                     autoComplete = 'off'
-                    {...props}
+                    ref = {ref}
+                    {...rest}
                     className = {`
                         peer block w-full rounded-xl bg-transparent font-medium px-4 py-3.5 transition-all duration-300 ease-out focus:outline-none
                         
@@ -94,7 +94,7 @@ const FormInput = ({id, name, type = 'text', placeholder, label, value, onChange
 
     )
 
-}
+})
 
 
 export default FormInput
