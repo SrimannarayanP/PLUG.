@@ -20,10 +20,10 @@ export default function ContactUs() {
                     <p>For payment issues, ticket retrieval or technical support, please email us at SUPPORT_EMAIL</p>
 
                     <a
-                        href = "mailto:[SUPPORT EMAIL ADDRESS]"
+                        href = "mailto:support@pluglive.in"
                         className = "text-orange-500 font-bold"
                     >
-                        [SUPPORT EMAIL ADDRESS]
+                        support@pluglive.in
                     </a>
 
                     <p className = "text-sm mt-2">
@@ -38,9 +38,9 @@ export default function ContactUs() {
 
                     <p>
                         PLUG. <br />
-                        [PHYSICAL_ADDRESS - LINE 1]<br />
-                        [CITY, STATE, ZIP CODE] <br />
-                        [COUNTRY]
+                        8/204, Mantri Residency Apartments <br />
+                        Bangalore, Karnataka - 560076 <br />
+                        India   
                     </p>
                 </div>
 
@@ -49,7 +49,7 @@ export default function ContactUs() {
                         Phone
                     </h3>
 
-                    <p>[YOUR PHONE NUMBER]</p>
+                    <p>+91 74839 42671</p>
                 </div>
             </div>
         </LegalLayout>
