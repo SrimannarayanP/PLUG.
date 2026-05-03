@@ -401,7 +401,7 @@ class AttendeeListSerializer(serializers.ModelSerializer):
         model = Registration
         fields = [
             'id', 'first_name', 'last_name', 'email', 'phone_number', 'school_college', 'student_id_number', 'is_checked_in', 'created_at', 'payment_status', 
-            'razorpay_order_id', 'razorpay_payment_id', 'buyer_email', 'buyer_first_name', 'buyer_last_name'
+            'razorpay_order_id', 'razorpay_payment_id', 'buyer_email', 'buyer_first_name', 'buyer_last_name', 'booking_id'
         ]
 
     def get_phone_number(self, obj):
