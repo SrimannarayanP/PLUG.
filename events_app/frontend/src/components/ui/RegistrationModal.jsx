@@ -3,8 +3,9 @@
 
 import {Check, Loader2, MapPin, Minus, Plus, User, Users, X} from 'lucide-react'
 import {useEffect, useState} from 'react'
+import {useForm, useFieldArray, Form} from 'react-hook-form'
 import {toast} from 'react-hot-toast'
-import {ServerRouter, useNavigate} from 'react-router-dom'
+import {useNavigate} from 'react-router-dom'
 
 import api from '../../api/api'
 
@@ -32,14 +33,18 @@ export default function RegistrationModal({event, closeModal}) {
         student_id_number : '',
         date_of_birth : '',
     }
-    const [attendees, setAttendees] = useState([attendeeTemplate])
+
+    const {register, control, handleSubmit, setValue, watch, formState : {errors}} = useForm({defaultValues : {attendees : [attendeeTemplate]}})
+
+    // useFieldArray is a custom hook provided by react-hook-form to manage dynamic fields (attendees). It dynamically adds/removes fields without re-rendering the entire
+    // form.
+    const {fields, append, remove} = useArray({control, name : 'attendees'})
 
     const [loading, setLoading] = useState(false)
-    const [error, setError] = useState(null)
+    const [serverError, setServerError] = useState(null)
     const [success, setSuccess] = useState(false)
 
     const MAX_TICKETS = event.max_tickets_per_user || 1
-    const [ticketCount, setTicketCount] = useState(1)
 
     // Lock body scroll when modal is open
     useEffect(() => {
@@ -49,86 +54,41 @@ export default function RegistrationModal({event, closeModal}) {
     }, [])
 
     const updateTicketCount = (increment) => {
-        const newCount = ticketCount + increment
+        const currentCount = fields.length
+        const newCount = currentCount + increment
 
         if (newCount < 1 || newCount > MAX_TICKETS) return
 
-        setTicketCount(newCount)
-
-        setAttendees(prev => {
-            if (increment > 0) {
-
-                // Add new guest template
-                return [...prev, {...attendeeTemplate}]
-            
-            } else {
-                
-                // Remove last guest
-                return prev.slice(0, -1)
-            
-            }
-        })
-    }
-
-    // This is a handler that handles any changes in the form. Instead of manually writing a separate handle function for each field, we write 1 general handler function.
-    const handleAttendeeChange = (index, field, value) => { // Receives the event object from the form input
-        const updatedAttendees = [...attendees] // This extracts the 'name' attribute along with the value that was inputted by the user. # if 'name' = 'email', then e.target
-                                                // would be 'email' : value. Essentially asks the input field, "Which field are you?".
-
-        updatedAttendees[index] = {...updatedAttendees[index], [field] : value}
-
-        setAttendees(updatedAttendees) // Instead of passing a new object directly, we use a callback here to call the prev state (in short for
-                                        // (previous state). If multiple updates are happening, then prev is much more efficient as it prevents data
-                                        // loss.
-                                        // ...prev because React state is immutable. Change agar hoga to pura input form hi change hoga. ...prev
-                                        // ensures that other fields are unchanged when 1 field is being changed.
-                                        // [name] : value is what makes this handler dynamic. It says look at the variable 'name' & see what it's 
-                                        // holding & update with that value.
-        
-        if (error?.[`attendee_${index}_${field}`]) {
-            setError(prev => ({...prev, [`attendee_${index}_${field}`] : null}))
+        if (increment > 0) {
+            append({...attendeeTemplate})
+        } else {
+            remove(currentCount - 1)
         }
     }
 
     const handleCollegeChange = (index, selection) => {
-        const updatedAttendees = [...attendees]
-        const attendee = updatedAttendees[index]
-
         if (selection.isNew) {
-            attendee.school_college_id = '' // Clear ID
-            attendee.school_college_name = selection.name
+            setValue(`attendees.${index}.school_college_id`, '') // Clear ID
+            setValue(`attendees.${index}.school_college_name`, selection.name)
         } else {
-            attendee.school_college_id = selection.id
-            attendee.school_college_name = selection.name
-            attendee.school_college_city = ''
-            attendee.school_college_state = ''
+            setValue(`attendees.${index}.school_college_id`, selection.id)
+            setValue(`attendees.${index}.school_college_name`, selection.name)
+            setValue(`attendees.${index}.school_college_city`, '')
+            setValue(`attendees.${index}.school_college_state`, '')
         }
-
-        setAttendees(updatedAttendees)
     }
 
     // The logic is if we are on step 1 & it is a paid event, then go to step 2
-    const handleFormAction = async (e) => {
-        e.preventDefault()
-
+    const onSubmit = async (data) => {
         // Start loading & clear all old errors
         setLoading(true)
-        setError(null)
+        setServerError(null)
 
         const payload = {
             event_id : event.id,
-            attendees : attendees.map(att => ({
-                first_name : att.first_name,
-                last_name : att.last_name,
-                email : att.email,
-                phone_number : att.phone_number || '',
+            attendees : data.attendees.map(att => ({
+                ...att,
                 school_college_id : att.school_college_id === '' ? null : att.school_college_id,
-                school_college_name : att.school_college_name || '',
-                school_college_campus : att.school_college_campus || '',
-                school_college_city : att.school_college_city || '',
-                school_college_state : att.school_college_state || '',
-                student_id_number : att.student_id_number || '',
-                date_of_birth : att.date_of_birth || null,
             }))
         }
 
@@ -137,18 +97,11 @@ export default function RegistrationModal({event, closeModal}) {
             
             if (response.status === 201) {
                 setSuccess(true)
-                setLoading(false)
-
-                return
-            }
-
-            if (response.status === 200 && response.data.razorpay_order_id) {
+            } else if (response.status === 200 && response.data.razorpay_order_id) {
                 // For paid event, mount Razorpay
                 await initiateRazorpayCheckout(response.data)
             }
         } catch (err) {
-            setLoading(false)
-
             console.error("Registration Error:", err)
 
             const serverErrors = err.response?.data?.errors || err.response?.data || {}
@@ -176,7 +129,9 @@ export default function RegistrationModal({event, closeModal}) {
                 safeErrorState.general = "Registration failed. Please try again."
             }
 
-            setError(safeErrorState)
+            setServerError(safeErrorState)
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -271,11 +226,11 @@ export default function RegistrationModal({event, closeModal}) {
         // 'z-50' places it on top of all the other content
         <div
             role = 'dialog'
-            className = "fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            className = "fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transform-gpu"
         >
             {/* Backdrop */}
             <div 
-                className = "absolute inset-0 bg-black/80 backdrop-blur-sm"
+                className = "absolute inset-0 bg-black/90 md:bg-black/80 md:backdrop-blur-sm"
                 onClick = {!loading ? closeModal : undefined}
             />
 
@@ -316,7 +271,7 @@ export default function RegistrationModal({event, closeModal}) {
                     ) : (
                         // Form view
                         <form 
-                            onSubmit = {handleFormAction}
+                            onSubmit = {handleSubmit(onSubmit)}
                             className = "flex flex-col h-full"
                         >
                             <div className = 'mb-6'>
@@ -325,7 +280,7 @@ export default function RegistrationModal({event, closeModal}) {
                                 </h2>
 
                                 <p className = "text-zinc-500 text-sm font-medium">
-                                    {event.name} • ₹{event.ticket_price * ticketCount}
+                                    {event.name} • ₹{event.ticket_price * fields.length}
                                 </p>
                             </div>
 
@@ -351,7 +306,7 @@ export default function RegistrationModal({event, closeModal}) {
                                     </button>
 
                                     <span className = "text-white font-mono font-bold w-4 text-center">
-                                        {ticketCount}
+                                        {fields.length}
                                     </span>
 
                                     <button
@@ -366,150 +321,150 @@ export default function RegistrationModal({event, closeModal}) {
                             </div>
 
                             {/* Generic error message */}
-                            {error?.general && (
-                                <div className = "mb-6 rounded-xl border border-red-500/20 bg-red-950/30 p-4 text-sm text-red-400 flex gap-3">
-                                    <div className = "h-1.5 w-1.5 mt-1.5 rounded-full bg-red-500 shrink-0" />
-
-                                    {error.general}
+                            {serverError?.general && (
+                                <div className = "mb-6 text-red-500">
+                                    {serverError.general}
                                 </div>
                             )}
 
                             <div className = 'space-y-6'>
-                                {attendees.map((att, index) => (
-                                    <div
-                                        key = {index}
-                                        className = "animate-in slide-in-from-left-4 duration-300"
-                                    >
-                                        <div className = "flex items-center gap-2 mb-3">
-                                            {index === 0
-                                                ? <User className = "h-4 w-4 text-orange-500" />
-                                                : <Users className = "h-4 w-4 text-zinc-500" />
-                                            }
+                                {fields.map((field, index) => {
+                                    const selectedCollegeId = watch(`attendees.${index}.school_college_id`)
+                                    const selectedCollegeName = watch(`attendees.${index}.school_college_name`)
+                                    const isUnlistedCollege = selectedCollegeName && !selectedCollegeId
 
-                                            <span className = "text-xs text-zinc-500 font-bold uppercase tracking-wider">
-                                                {index === 0 ? "Primary Attendee (You)" : `Guest #${index}`}
-                                            </span>
-                                        </div>
+                                    return (
 
-                                        <div className = "grid grid-cols-1 gap-3 p-4 rounded-2xl border border-zinc-800/50 bg-zinc-900/20">
-                                            <div className = "grid grid-cols-2 gap-3">
-                                                <FormInput
-                                                    placeholder = "First Name"
-                                                    value = {att.first_name}
-                                                    onChange = {(e) => handleAttendeeChange(index, 'first_name', e.target.value)}
-                                                    className = {inputStyle}
-                                                    required
-                                                    disabled = {loading}
-                                                />
+                                        <div
+                                            key = {field.id}
+                                            className = "animate-in slide-in-from-left-4 duration-300"
+                                        >
+                                            <div className = "flex items-center gap-2 mb-3">
+                                                {index === 0
+                                                    ? <User className = "h-4 w-4 text-orange-500" />
+                                                    : <Users className = "h-4 w-4 text-zinc-500" />
+                                                }
 
-                                                <FormInput
-                                                    placeholder = "Last Name"
-                                                    value = {att.last_name}
-                                                    onChange = {(e) => handleAttendeeChange(index, 'last_name', e.target.value)}
-                                                    className = {inputStyle}
-                                                    required
-                                                    disabled = {loading}
-                                                />
+                                                <span className = "text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                                                    {index === 0 ? "Primary Attendee (You)" : `Guest #${index}`}
+                                                </span>
                                             </div>
 
-                                            <FormInput 
-                                                type = 'email'
-                                                placeholder = 'Email'
-                                                value = {att.email}
-                                                onChange = {(e) => handleAttendeeChange(index, 'email', e.target.value)}
-                                                className = {inputStyle}
-                                                required
-                                                disabled = {loading}
-                                            />
-
-                                            {/* Smart Fields (Renders on condition) */}
-                                            {event.collect_phone && (
-                                                <FormInput
-                                                    type = 'tel'
-                                                    placeholder = "Phone Number"
-                                                    value = {att.phone_number}
-                                                    onChange = {(e) => handleAttendeeChange(index, 'phone_number', e.target.value)}
-                                                    className = {inputStyle}
-                                                    required
-                                                    disabled = {loading}
-                                                />
-                                            )}
-
-                                            {event.collect_student_id && (
-                                                <FormInput
-                                                    placeholder = "Student ID / USN"
-                                                    value = {att.student_id_number}
-                                                    onChange = {(e) => handleAttendeeChange(index, 'student_id_number', e.target.value)}
-                                                    className = {inputStyle}
-                                                    required
-                                                    disabled = {loading}
-                                                />
-                                            )}
-
-                                            {event.collect_college_school && (
-                                                <div className = "space-y-3 p-3 bg-black/20 rounded-xl border border-zinc-800/50">
-                                                    <SearchableSelect 
-                                                        value = {{
-                                                            id : att.school_college_id,
-                                                            name : att.school_college_name // For display
-                                                        }}
-                                                        onChange = {(selection) => handleCollegeChange(index, selection)}
-                                                        placeholder = "Search School/College..."
-                                                        endpoint = '/api/data/colleges/'
+                                            <div className = "grid grid-cols-1 gap-3 p-4 rounded-2xl border border-zinc-800/50 bg-zinc-900/20">
+                                                <div className = "grid grid-cols-2 gap-3 mb-3">
+                                                    <FormInput
+                                                        {...register(`attendees.${index}.first_name`, {required : true})}
+                                                        placeholder = "First Name"
+                                                        className = {inputStyle}
                                                         disabled = {loading}
                                                     />
 
-                                                    {!att.school_college_id && att.school_college_name && (
-                                                        <div className = "grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2">
-                                                            <FormInput 
-                                                                placeholder = "City (Required)"
-                                                                value = {att.school_college_city}
-                                                                onChange = {(e) => handleAttendeeChange(index, 'school_college_city', e.target.value)}
-                                                                className = {`${inputStyle} text-xs`}
-                                                                required
-                                                                disabled = {loading}
-                                                            />
-
-                                                            <FormInput 
-                                                                placeholder = "State (Required)"
-                                                                value = {att.school_college_state}
-                                                                onChange = {(e) => handleAttendeeChange(index, 'school_college_state', e.target.value)}
-                                                                className = {`${inputStyle} text-xs`}
-                                                                required
-                                                                disabled = {loading}
-                                                            />
-                                                        </div>
-                                                    )}
-
-                                                    {!att.school_college_id && att.school_college_name && (
-                                                        <p className = "text-[10px] text-orange-400 flex items-center gap-1">
-                                                            <MapPin className = "h-3 w-3" />
-
-                                                            Adding new college. Please verify location.
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {event.age_restriction_cutoff && (
-                                                <div>
-                                                    <label className = "text-[10px] text-zinc-500 uppercase font-bold ml-1 mb-1 block">
-                                                        Date of Birth
-                                                    </label>
-
-                                                    <FormInput 
-                                                        type = 'date'
-                                                        value = {att.date_of_birth}
-                                                        onChange = {(e) => handleAttendeeChange(index, 'date_of_birth', e.target.value)}
-                                                        className = {`${inputStyle} [color-scheme:dark]`}
-                                                        required
+                                                    <FormInput
+                                                        {...register(`attendees.${index}.last_name`, {required : true})}
+                                                        placeholder = "Last Name"
+                                                        className = {inputStyle}
                                                         disabled = {loading}
                                                     />
                                                 </div>
-                                            )}
+
+                                                <FormInput
+                                                    {...register(`attendees.${index}.email`, {required : true})}
+                                                    type = 'email'
+                                                    placeholder = 'Email'
+                                                    className = {inputStyle}
+                                                    disabled = {loading}
+                                                />
+
+                                                {/* Smart Fields (Renders on condition) */}
+                                                {event.collect_phone && (
+                                                    <FormInput
+                                                        {...register(`attendees.${index}.phone_number`, {required : true})}
+                                                        type = 'tel'
+                                                        placeholder = "Phone Number"
+                                                        className = {inputStyle}
+                                                        disabled = {loading}
+                                                    />
+                                                )}
+
+                                                {event.collect_student_id && (
+                                                    <FormInput
+                                                        {...register(`attendees.${index}.student_id_number`, {required : true})}
+                                                        placeholder = "Student ID / USN"
+                                                        className = {inputStyle}
+                                                        disabled = {loading}
+                                                    />
+                                                )}
+
+                                                {event.collect_college_school && (
+                                                    <div className = "space-y-3 p-3 bg-black/20 rounded-xl border border-zinc-800/50">
+                                                        <SearchableSelect 
+                                                            value = {{
+                                                                id : selectedCollegeId, // For selection
+                                                                name : selectedCollegeName // For display
+                                                            }}
+                                                            onChange = {(selection) => handleCollegeChange(index, selection)}
+                                                            placeholder = "Search School/College..."
+                                                            endpoint = '/api/data/colleges/'
+                                                            disabled = {loading}
+                                                        />
+
+                                                        {isUnlistedCollege && (
+                                                            <div className = "space-y-3 animate-in fade-in slide-in-from-top-2">
+                                                                <FormInput
+                                                                    {...register(`attendees.${index}.school_college_campus`, {required : false})}
+                                                                    placeholder = "Campus (Optional)"
+                                                                    className = {`${inputStyle} text-xs`}
+                                                                    disabled = {loading}
+                                                                />
+                                                                
+                                                                <div className = "grid grid-cols-2 gap-3">
+                                                                    <FormInput
+                                                                        {...register(`attendees.${index}.school_college_city`, {required : true})}
+                                                                        placeholder = "City (Required)"
+                                                                        className = {`${inputStyle} text-xs`}
+                                                                        disabled = {loading}
+                                                                    />
+
+                                                                    <FormInput
+                                                                        {...register(`attendees.${index}.school_college_state`, {required : true})}
+                                                                        placeholder = "State (Required)"
+                                                                        className = {`${inputStyle} text-xs`}
+                                                                        disabled = {loading}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {isUnlistedCollege && (
+                                                            <p className = "text-[10px] text-orange-400 flex items-center gap-1">
+                                                                <MapPin className = "h-3 w-3" />
+
+                                                                Adding new college. Please verify location.
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {event.age_restriction_cutoff && (
+                                                    <div>
+                                                        <label className = "text-[10px] text-zinc-500 uppercase font-bold ml-1 mb-1 block">
+                                                            Date of Birth
+                                                        </label>
+
+                                                        <FormInput
+                                                            {...register(`attendees.${index}.date_of_birth`, {required : true})}
+                                                            type = 'date'
+                                                            className = {`${inputStyle} [color-scheme:dark]`}
+                                                            disabled = {loading}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+
+                                    )
+
+                                })}
                             </div>
 
                             <div className = "mt-8 pt-4 border-t border-zinc-900">
@@ -526,7 +481,7 @@ export default function RegistrationModal({event, closeModal}) {
                                         </span>
                                     ) : (
                                         <span className = "flex w-full items-center justify-center gap-2 uppercase tracking-widest">
-                                            {event.is_paid_event ? `Pay ₹${event.ticket_price * ticketCount}` : "Get Tickets"}
+                                            {event.is_paid_event ? `Pay ₹${event.ticket_price * fields.length}` : "Get Tickets"}
                                         </span>
                                     )}
 
