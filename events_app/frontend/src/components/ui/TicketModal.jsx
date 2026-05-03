@@ -180,19 +180,23 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
 
         <>
             <div
-                className = "fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+                className = "fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/95 md:bg-black/90 md:backdrop-blur-sm transform-gpu"
                 onClick = {closeModal}
             >   
                 {/* Glow effect behind the card */}
-                <div className = {`absolute w-full max-w-sm aspect-[3/4] ${festiveGradient} opacity-20 blur-[60px] rounded-full pointer-events-none`} />
+                <div
+                    className = "absolute w-full max-w-sm aspect-[3/4] opacity-20 rounded-full pointer-events-none"
+                    style = {{background : 'radial-gradient(circle, rgba(236, 72, 153, 0.15) 0%, transparent 60%)'}}
+                />
 
                 <div
                     className = "relative w-full max-w-xs sm:max-w-sm h-[650px] sm:h-[700px] perspective-1000"
                     onClick = {(e) => e.stopPropagation()}
                 >
-                    <div 
+                    <div
+                        // will-change-transform tells the GPU to pre-calculation the 3D rotation
                         className = {`
-                            relative h-full w-full transition-transform duration-700 transform-style-3d
+                            relative h-full w-full transition-transform duration-700 transform-style-3d will-change-transform transform-gpu
                             ${isFlipped
                                 ? 'rotate-y-180'
                                 : ''
@@ -202,7 +206,7 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                         {/* Front Face */}
                         <div 
                             className = {`
-                                absolute inset-0 backface-hidden bg-zinc-950 rounded-3xl p-[1px] shadow-2xl flex flex-col overflow-hidden
+                                absolute inset-0 backface-hidden bg-zinc-950 rounded-3xl p-[1px] shadow-2xl flex flex-col overflow-hidden transform-gpu
                                 ${isFlipped
                                     ? 'pointer-events-none'
                                     : ''
@@ -217,17 +221,20 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                     {/* Header/Close */}
                                     <button
                                         onClick = {closeModal}
-                                        className = "absolute top-4 right-4 z-20 bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10"
+                                        className = "absolute top-4 right-4 z-20 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors border border-white/10"
                                     >
                                         <X size = {18} />
                                     </button>
 
                                     {/* Subtle background blurs */}
-                                    <div className = {`absolute top-0 right-0 h-24 w-24 ${festiveGradient} opacity-20 blur-2xl -translate-x-1/2 -translate-y-1/2 pointer-events-none`} />
+                                    <div
+                                        className = "absolute top-0 right-0 h-24 w-24 opacity-20 -translate-x-1/2 -translate-y-1/2 pointer-events-none transform-gpu"
+                                        style = {{background : 'radial-gradient(circle, rgba(249, 115, 22, 0.2) 0%, transparent 70%)'}}
+                                    />
 
                                     {tickets.length > 1 && (
                                         <div className = "flex justify-center mb-4">
-                                            <div className = "flex items-center bg-black/40 backdrop-blur-md rounded-full p-1 border border-white/10">
+                                            <div className = "flex items-center bg-black/80 md:bg-black/40 md:backdrop-blur-md rounded-full p-1 border border-white/10 transform-gpu">
                                                 <button
                                                     onClick = {prevTicket}
                                                     className = "p-1 hover:bg-white/10 rounded-full transition-colors"
@@ -249,11 +256,11 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                         </div>
                                     )}
 
-                                    <h2 className = {`relative text-2xl font-black mb-1 font-outfit leading-tight tracking-tight ${textGradient} break-words`}>
+                                    <h2 className = {`relative text-2xl font-black mb-1 font-outfit leading-tight tracking-tight ${textGradient} break-words z-20`}>
                                         {event.name}
                                     </h2>
 
-                                    <div className = "mt-3 flex items-center justify-center gap-2 text-sm font-medium text-white bg-white/5 px-4 py-1.5 rounded-lg mx-auto w-fit border border-white/5">
+                                    <div className = "mt-3 flex items-center justify-center gap-2 text-sm font-medium text-white bg-white/5 px-4 py-1.5 rounded-lg mx-auto w-fit border border-white/5 relative z-20">
                                         <User
                                             size = {14}
                                             className = 'text-orange-500'
@@ -314,10 +321,10 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                         )}
                                     </div>
 
-                                    <div className = "relative group mb-6 shrink-0 transition-all duration-300">
+                                    <div className = "relative group mb-6 shrink-0 transition-all duration-300 transform-gpu">
                                         {!isCancelled && !isRefundPending && !isRefundProcessed && !isExpired && (
                                             // Gradient frame around QR
-                                            <div className = {`absolute -inset-1 ${festiveGradient} rounded-2xl opacity-75 blur-sm transition duration-500`} />
+                                            <div className = {`absolute -inset-1 ${festiveGradient} rounded-2xl opacity-50 shadow-[0_0_15px_rgba(236, 72, 153, 0.4)] transition duration-500`} />
                                         )}
                                         
                                         <div 
@@ -335,7 +342,7 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
 
                                     {/* Manual code fallback */}
                                     {(isVerified && !isCancelled && !isRefundPending && !isRefundProcessed && !isExpired) && (
-                                        <div className = "flex flex-col items-center gap-1.5 animate-in fade-in duration-500">
+                                        <div className = "flex flex-col items-center gap-1.5 animate-in fade-in duration-500 transform-gpu">
                                             <span className = "text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
                                                 Manual Entry Code
                                             </span>
@@ -352,7 +359,7 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                 <div className = 'mt-auto'>
                                     <button
                                         onClick = {() => setIsFlipped(true)}
-                                        className = "w-full py-4 bg-zinc-900 hover:bg-zinc-800 border-t border-zinc-800 flex items-center justify-center gap-2 text-zinc-400 hover:text-white uppercase tracking-widest text-xs font-bold transition-colors"
+                                        className = "w-full py-4 bg-zinc-900 hover:bg-zinc-800 border-t border-zinc-800 flex items-center justify-center gap-2 text-zinc-400 hover:text-white uppercase tracking-widest text-xs font-bold transition-colors transform-gpu"
                                     >
                                         <RefreshCw size = {14} />
                                     
@@ -365,7 +372,7 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                         {/* Back Face */}
                         <div 
                             className = {`
-                                absolute inset-0 backface-hidden rotate-y-180 bg-zinc-950 rounded-3xl p-[1px] shadow-2xl flex flex-col overflow-hidden
+                                absolute inset-0 backface-hidden rotate-y-180 bg-zinc-950 rounded-3xl p-[1px] shadow-2xl flex flex-col overflow-hidden transform-gpu
                                 ${!isFlipped
                                     ? 'pointer-events-none'
                                     : ''
@@ -466,8 +473,8 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                                 onClick = {handleCancelTicket}
                                                 disabled = {cancelling || !canCancel}
                                                 className = {`
-                                                    w-full py-3 rounded-xl font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 border
-                                                    border-red-500/20 text-xs uppercase tracking-widest transition-colors flex items-center justify-center gap-2
+                                                    w-full py-3 rounded-xl font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs
+                                                    uppercase tracking-widest transition-colors flex items-center justify-center gap-2 transform-gpu
                                                     ${canCancel
                                                         ? "text-red-500 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20"
                                                         : "text-zinc-600 bg-zinc-900/50 border border-zinc-800/50 cursor-not-allowed"
@@ -475,7 +482,7 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                                 `}
                                             >
                                                 {cancelling
-                                                    ? <Loader2 className = "h-4 w-4 animate-spin" />
+                                                    ? <Loader2 className = "h-4 w-4 animate-spin transform-gpu" />
                                                     : <Ban size = {16} />
                                                 }
 
@@ -496,11 +503,11 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                         <button
                                             onClick = {handleResendTicket}
                                             disabled = {resending}
-                                            className = "w-full py-3 rounded-xl font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-xs upppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                                            className = "w-full py-3 rounded-xl font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-xs upppercase tracking-widest transition-colors flex items-center justify-center gap-2 transform-gpu"
                                         >
                                             {resending ? (
                                                 <>
-                                                    <Loader2 className = "h-4 w-4 animate-spin" />
+                                                    <Loader2 className = "h-4 w-4 animate-spin transform-gpu" />
 
                                                     Sending...
                                                 </>
@@ -516,7 +523,7 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
 
                                     <button
                                         onClick = {() => setIsFlipped(false)}
-                                        className = "w-full py-3 mt-2 flex items-center justify-center gap-2 text-zinc-400 hover:text-white uppercase tracking-widest text-xs font-bold transition-colors"
+                                        className = "w-full py-3 mt-2 flex items-center justify-center gap-2 text-zinc-400 hover:text-white uppercase tracking-widest text-xs font-bold transition-colors transform-gpu"
                                     >
                                         <RefreshCw size = {14} />
 
