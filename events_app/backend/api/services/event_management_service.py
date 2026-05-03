@@ -27,6 +27,8 @@ class EventManagementService:
         documents_data = validated_data.pop('uploaded_documents', [])
         categories = validated_data.pop('categories', [])
 
+        validated_data.pop('restricted_to_schools_colleges', None)
+
         validated_data['host'] = host_profile
 
         event = Event.objects.create(**validated_data)
@@ -68,6 +70,8 @@ class EventManagementService:
         
         documents_data = validated_data.pop('uploaded_documents', [])
         categories = validated_data.pop('categories', None)
+
+        validated_data.pop('restricted_to_schools_colleges', None)
 
         for attr, value in validated_data.items():
             setattr(event, attr, value)
