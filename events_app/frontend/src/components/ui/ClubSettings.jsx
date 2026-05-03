@@ -106,7 +106,7 @@ export default function ClubSettings({currentUser, clubProfile, refreshProfile})
                     <button
                         type = 'submit'
                         disabled = {isAdding || !newEmail}
-                        className = "bg-white text-black font-bold uppercase tracking-wider text-xs px-6 py-3 rounded-xl hover:bg-zinc-200 transition-colors disabled:opacity-50 flex items-center justify-center min-w-[120px]"
+                        className = "bg-white text-black font-bold uppercase tracking-wider text-xs px-6 py-3 rounded-xl hover:bg-zinc-200 transition-colors disabled:opacity-50 flex items-center justify-center min-w-[120px] transform-gpu"
                     >
                         {isAdding ? (
                             <Loader2 className = "h-4 w-4 animate-spin"/>
@@ -133,7 +133,7 @@ export default function ClubSettings({currentUser, clubProfile, refreshProfile})
 
                             <div
                                 key = {member.id}
-                                className = "flex items-center justify-between px-6 py-4 hover:bg-zinc-800/20 transition-colors"
+                                className = "flex items-center justify-between px-6 py-4 hover:bg-zinc-800/20 transition-colors transform-gpu"
                             >
                                 <div className = "flex items-center gap-4">
                                     <div
@@ -173,7 +173,7 @@ export default function ClubSettings({currentUser, clubProfile, refreshProfile})
                                     <button
                                         onClick = {() => initiateRemoveMember(member)}
                                         disabled = {isRemoving}
-                                        className = "text-zinc-500 hover:text-red-500 p-2 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                        className = "text-zinc-500 hover:text-red-500 p-2 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50 transform-gpu"
                                         title = "Remove from club"
                                     >
                                         {isRemoving ? (
