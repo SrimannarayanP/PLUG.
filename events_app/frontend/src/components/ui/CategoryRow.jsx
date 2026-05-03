@@ -53,22 +53,22 @@ export default function CategoryRow({category, onRegisterClick, onDetailsClick})
 
                 <button
                     onClick = {() => navigate(`/events/category/${category.id}`, {state : {categoryName : category.name}})}
-                    className = "text-[10px] sm:text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors flex items-center gap-1 group"
+                    className = "text-[10px] sm:text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors flex items-center gap-1 group transform-gpu"
                 >
                     View All
 
-                    <ArrowRight className = "h-3 w-3 transition-transform group-hover:translate-x-1" />
+                    <ArrowRight className = "h-3 w-3 transition-transform group-hover:translate-x-1 transform-gpu" />
                 </button>
             </div>
 
-            <div className = "flex overflow-x-auto gap-4 pb-4 -ml-4 pl-4 sm:ml-0 sm:pl-0 scrollbar-hide snap-x">
+            <div className = "flex overflow-x-auto gap-4 pb-4 -ml-4 pl-4 sm:ml-0 sm:pl-0 scrollbar-hide snap-x transform-gpu will-change-scroll">
                 {loading ? (
-                    [...Array(4).map((_, i) => (
+                    [...Array(4)].map((_, i) => (
                         <div
                             key = {i}
                             className = "w-[220px] sm:w-[260px] h-[380px] sm:h-[420px] shrink-0 bg-zinc-900/50 rounded-[20px] animate-pulse border border-zinc-800"
                         />
-                    ))]
+                    ))
                 ) : (
                     events.map((event) => (
                         <div
