@@ -2,11 +2,12 @@
 
 
 import {Bold, Italic, List, ListOrdered, Redo2, Underline, Undo2} from 'lucide-react'
-import {useEffect, useState} from 'react'
+import {useEffect, useRef} from 'react'
 import Placeholder from '@tiptap/extension-placeholder'
 import UnderlineExtension from '@tiptap/extension-underline'
 import {EditorContent, useEditor} from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { time } from 'framer-motion'
 
 
 const editorStyles = `
@@ -96,9 +97,7 @@ const editorStyles = `
     }
 `
 
-const Divider = () => (
-    <div className = "h-5 w-px bg-zinc-700/60 mx-1 shrink-0 self-center" />
-)
+const Divider = () => <div className = "h-5 w-px bg-zinc-700/60 mx-1 shrink-0 self-center" />
 
 const ToolbarBtn = ({icon : Icon, title, action, isActive, disabled}) => (
     <button
@@ -108,7 +107,7 @@ const ToolbarBtn = ({icon : Icon, title, action, isActive, disabled}) => (
         disabled = {disabled}
         title = {title}
         className = {`
-            p-2.5 rounded-md transition-all duration-150 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed
+            p-2.5 rounded-md transition-all duration-150 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed transform-gpu
             ${isActive
                 ? "bg-pink-500/20 text-pink-400 ring-1 ring-pink-500/40"
                 : "text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100"
@@ -181,7 +180,7 @@ const MenuBar = ({editor}) => {
 
     return (
 
-        <div className = "flex items-center gap-1 p-2 border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm overflow-x-auto no-scrollbar touch-pan-x">
+        <div className = "flex items-center gap-1 p-2 border-b border-zinc-800 bg-zinc-900 md:bg-zinc-900/50 md:backdrop-blur-sm overflow-x-auto no-scrollbar touch-pan-x transform-gpu">
             {buttons.map((btn, index) =>
                 btn.type === 'divider'
                     ? <Divider key = {index} />
@@ -198,7 +197,7 @@ const MenuBar = ({editor}) => {
 
 export default function RichTextEditor({value, onChange}) {
 
-    const [, setTick] = useState(0)
+    const timeoutRef = useRef(null)
 
     const editor = useEditor({
         extensions : [
@@ -206,7 +205,7 @@ export default function RichTextEditor({value, onChange}) {
             UnderlineExtension,
             Placeholder.configure({
                 placeholder : "Write something epic about your event...",
-                emptyEditorClass : 'is-editor-empty',
+                emptyEditorClass : 'is-editor-empty'
             })
         ],
         editorProps : {
@@ -214,22 +213,28 @@ export default function RichTextEditor({value, onChange}) {
                 class : "min-h-[180px] p-4 text-sm sm:text-base",
             }
         },
-        // Fires on every keystroke, cursor move & formatting toggle
-        onTransaction : () => {
-            setTick((t) => t + 1)
-        },
         // When the user types, send the HTML back to the parent form.
         onUpdate : ({editor}) => {
-            onChange(editor.getHTML())
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+
+            timeoutRef.current = setTimeout(() => {
+                onChange(editor.getHTML())
+            })
         }
     })
 
     useEffect(() => {
+
+        return () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        }
+
+    }, [])
+
+    useEffect(() => {
         if (!editor) return
 
-        if (value && editor.isEmpty) {
-            editor.commands.setContent(value)
-        }
+        if (value && editor.isEmpty) editor.commands.setContent(value)
     }, [editor, value])
 
     return (
@@ -237,7 +242,7 @@ export default function RichTextEditor({value, onChange}) {
         <>
             <style>{editorStyles}</style>
 
-            <div className = "bg-zinc-900 rounded-xl overflow-hidden border-2 border-zinc-800 focus-within:border-pink-500/70 focus-within:shadow-[0_0_20px_rgba(236, 72, 153, 0.08)] transition-all duration-300 w-full">
+            <div className = "bg-zinc-900 rounded-xl overflow-hidden border-2 border-zinc-800 focus-within:border-pink-500/70 focus-within:shadow-[0_0_20px_rgba(236, 72, 153, 0.08)] transition-all duration-300 w-full transform-gpu">
                 <MenuBar editor = {editor} />
 
                 <EditorContent editor = {editor} />
