@@ -1,6 +1,7 @@
 // LandingPage.jsx
 
 
+import {useWindowVirtualizer} from '@tanstack/react-virtual'
 import {CalendarX, Zap, Loader2} from 'lucide-react'
 import React, {Suspense, useEffect, useState} from 'react' // useState holds data. useEffect runs code when the component is loaded
 import {useInView} from 'react-intersection-observer'
@@ -35,10 +36,7 @@ export default function LandingPage() {
     const [margin, setMargin] = useState(window.innerWidth > 768 ? '800px' : '200px')
 
     // Infinite scroll trigger
-    const {ref, inView} = useInView({
-        threshold : 0,
-        rootMargin : margin
-    })
+    const {ref, inView} = useInView({threshold : 0, rootMargin : margin})
 
     // If registeringEvent is not null, modal will open.
     const [registeringEvent, setRegisteringEvent] = useState(null)
@@ -124,23 +122,27 @@ export default function LandingPage() {
                 className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0 transform-gpu"
                 style = {{
                     backgroundImage : "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-                    backgroundSize : "40px 40px"
+                    backgroundSize : "40px 40px",
+                    contain : 'strict' // Isolates the element from the DOM, making sure its internal changes doesn't affect the page layout.
                 }}
             />
 
             {/* Subtle ambient glow at the top */}
-            <div className = "absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-64 sm:h-96 bg-orange-500/10 blur-[80px] sm:blur-[120px] rounded-full pointer-events-none z-0 transform-gpu will-change-transform" />
+            <div
+                className = "absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-64 sm:h-96 pointer-events-none z-0 transform-gpu"
+                style = {{background : "radial-gradient(ellipse at top, rgba(249, 115, 22, 0.15) 0%, transparent 70%)"}}
+            />
 
             <div className = "relative z-10 max-w-7xl w-full mx-auto p-4 sm:px-6 lg:px-8 pb-32">
                 {/* --- Featured Events --- */}
                 {/* This section is rendered if 'featuredEvents' has 1 or more items */}
                 {loading && featuredEvents.length === 0 ? (
                     // Placeholder to prevent layout distortion while it loads
-                    <div className = "lg:h-[600px] w-full aspect-[4/5] sm:aspect-video bg-zinc-900/50 animate-pulse rounded-3xl mb-12 border border-zinc-800/50" />
+                    <div className = "lg:h-[600px] w-full aspect-[4/5] sm:aspect-video bg-zinc-900/50 animate-pulse rounded-3xl mb-12 border border-zinc-800/50 transform-gpu" />
                 ) : featuredEvents.length > 0 && (
-                    <div className = "mb-12 sm:mb-20 animate-in fade-in slide-in-from-bottom-6 duration-1000 ease-out">
+                    <div className = "mb-12 sm:mb-20 animate-in fade-in slide-in-from-bottom-6 duration-1000 ease-out transform-gpu">
                         {/* First featured event is passed into here */}
-                        <FeaturedEventHero 
+                        <FeaturedEventHero
                             event = {featuredEvents[0]}
                             onRegisterClick = {handleRegisterClick}
                             onDetailsClick = {setViewingEvent}    
@@ -150,7 +152,7 @@ export default function LandingPage() {
 
                 {/* --- Upcoming Events --- */}
                 {/* Header for upcoming events */}
-                <div className = "flex flex-col sm:flex-row sm:items-end justify-between mb-6 sm:mb-10 border-b border-zinc-800 pb-6 gap-4">
+                <div className = "flex flex-col sm:flex-row sm:items-end justify-between mb-6 sm:mb-10 border-b border-zinc-800 pb-6 gap-4 transform-gpu">
                     <div className = 'space-y-2'>
                         <h2 className = "text-3xl sm:text-4xl md:text-5xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
                             <span className = {`h-8 sm:h-10 w-8 sm:w-10 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20 ${festiveGradient}`}>
@@ -161,7 +163,7 @@ export default function LandingPage() {
                         </h2>
 
                         <p className = "text-zinc-500 text-[10px] sm:text-xs font-mono uppercase tracking-widest pl-1 flex items-center gap-2">
-                            <span className = "h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                            <span className = "h-2 w-2 rounded-full bg-green-500 animate-pulse transform-gpu" />
 
                             Live Feed | Discover & Connect
                         </p>
@@ -187,7 +189,7 @@ export default function LandingPage() {
                     </h3>
 
                     {totalEvents > 0 && (
-                        <div className = "flex items-center gap-2.5 bg-zinc-900/50 border border-zinc-800 px-4 py-2 sm:py-2.5 rounded-2xl shadow-inner backdrop-blur-sm animate-in fade-in duration-500">
+                        <div className = "flex items-center gap-2.5 bg-zinc-900 md:bg-zinc-900/50 border border-zinc-800 px-4 py-2 sm:py-2.5 rounded-2xl shadow-inner md:backdrop-blur-sm animate-in fade-in duration-500 transform-gpu">
                             <span className = "text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-500 font-black text-lg sm:text-xl leading-none">
                                 {totalEvents}
                             </span>
@@ -205,7 +207,7 @@ export default function LandingPage() {
                         {[...Array(6)].map((_, i) => <EventCardSkeleton key = {i} />)}
                     </div>
                 ) : upcomingEvents.length === 0 ? (
-                    <div className = "flex flex-col items-center justify-center py-24 sm:py-32 bg-[#18181b]/30 border-2 border-dashed border-zinc-800 rounded-3xl backdrop-blur-sm mx-auto max-w-2xl animate-in zoom-in duration-500">
+                    <div className = "flex flex-col items-center justify-center py-24 sm:py-32 bg-[#18181b]/30 border-2 border-dashed border-zinc-800 rounded-3xl md:backdrop-blur-sm mx-auto max-w-2xl animate-in zoom-in duration-500 transform-gpu">
                         <div className = "h-16 sm:h-20 w-16 sm:w-20 bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-6 rounded-full shadow-inner">
                             <CalendarX className = "h-8 sm:h-10 w-8 sm:w-10 text-zinc-700" />
                         </div>
@@ -226,7 +228,7 @@ export default function LandingPage() {
                             {upcomingEvents.map((event, index) => (
                                 <div
                                     key = {event.id}
-                                    className = "animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-backwards"
+                                    className = "animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-backwards transform-gpu"
                                 >
                                     <EventCard
                                         event = {event}
@@ -241,7 +243,7 @@ export default function LandingPage() {
                         {nextPage && (
                             <div
                                 ref = {ref}
-                                className = "flex justify-center py-16 w-full"
+                                className = "flex justify-center py-16 w-full transform-gpu"
                             >
                                 <Loader2 className = "h-8 w-8 text-orange-500 animate-spin opacity-80" />
                             </div>
@@ -249,7 +251,7 @@ export default function LandingPage() {
 
                         {/* End of list indicator */}
                         {!nextPage && upcomingEvents.length > 0 && (
-                            <div className = "flex items-center justify-center gap-4 py-20 opacity-40">
+                            <div className = "flex items-center justify-center gap-4 py-20 opacity-40 transform-gpu">
                                 <div className = "h-px w-12 bg-zinc-700" />
                                 
                                 <span className = "text-zinc-500 text-[10px] font-mono uppercase tracking-widest">
@@ -273,16 +275,16 @@ export default function LandingPage() {
 
             {/* Bottom sheet brochure */}
             {viewingEvent && (
-                <Suspense 
+                <Suspense
                     fallback = {
-                        <div className = "fixed inset-0 z-[60] bg-[#09090b]"> {/* EventDetails launches a full-screen overlay that sits on top of everything. z-60 will ensure that
-                                                                the skeleton immediately covers the screen just like the real one will, so while EventDetails loads, it'll
-                                                                ensure a seamless transition */}
+                        <div className = "fixed inset-0 z-[60] bg-[#09090b] transform-gpu"> {/* EventDetails launches a full-screen overlay that sits on top of
+                                                                everything. z-60 will ensure that the skeleton immediately covers the screen just like the real one will,
+                                                                so while EventDetails loads, it'll ensure a seamless transition */}
                             <EventDetailSkeleton />
                         </div>
                     }
                 >
-                    <EventDetails 
+                    <EventDetails
                         event = {viewingEvent}
                         onClose = {() => setViewingEvent(null)}
                         onRegisterClick = {handleRegisterClick}
