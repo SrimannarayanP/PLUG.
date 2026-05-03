@@ -8,6 +8,7 @@ import {BrowserRouter, Navigate, Route, Routes, Outlet} from 'react-router-dom'
 import AxiosInterceptor from './components/AxiosInterceptor'
 import ProtectedRoute from './components/ProtectedRoute'
 
+import HostProtectedRoute from './components/auth/HostProtectedRoute'
 import LoadingSpinner from './components/common/LoadingSpinner'
 import Footer from './components/layout/Footer'
 import Header from './components/layout/Header'
@@ -26,6 +27,7 @@ const LoginSignup = lazy(() => import('./pages/LoginSignup'))
 const ManageEvent = lazy(() => import('./pages/ManageEvent'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
+const PendingVerification = lazy(() => import('./pages/PendingVerification'))
 const RequestPasswordLink = lazy(() => import('./pages/RequestPasswordLink'))
 const SetPassword = lazy(() => import('./pages/SetPassword'))
 const SessionExpired = lazy(() => import('./pages/SessionExpired'))
@@ -100,7 +102,7 @@ export default function App() {
                                 />
 
                                 {/* Password reset links */}
-                                <Route 
+                                <Route
                                     path = '/set-password/:uid/:token'
                                     element = {<SetPassword />}
                                 />
@@ -197,42 +199,53 @@ export default function App() {
                                         }
                                     />
                                     
-                                    {/* Host routes */}
-                                    <Route 
-                                        path = '/host/dashboard'
+                                    {/* Host Routes */}
+                                    <Route
+                                        path = '/host/pending-verification'
                                         element = {
                                             <ProtectedRoute allowedRoles = {['host', 'admin']}>
-                                                <HostDashboard />
+                                                <PendingVerification />
                                             </ProtectedRoute>
                                         }
                                     />
 
-                                    <Route 
-                                        path = '/host/create-event'
-                                        element = {
-                                            <ProtectedRoute allowedRoles = {['host', 'admin']}>
-                                                <CreateEvent />
-                                            </ProtectedRoute>
-                                        }
-                                    />
+                                    <Route element = {<HostProtectedRoute />}>
+                                        <Route
+                                            path = '/host/dashboard'
+                                            element = {
+                                                <ProtectedRoute>
+                                                    <HostDashboard />
+                                                </ProtectedRoute>
+                                            }
+                                        />
 
-                                    <Route 
-                                        path = '/host/event/:eventId'
-                                        element = {
-                                            <ProtectedRoute allowedRoles = {['host', 'admin']}>
-                                                <ManageEvent />
-                                            </ProtectedRoute>
-                                        }
-                                    />
+                                        <Route 
+                                            path = '/host/create-event'
+                                            element = {
+                                                <ProtectedRoute>
+                                                    <CreateEvent />
+                                                </ProtectedRoute>
+                                            }
+                                        />
 
-                                    <Route 
-                                        path = '/host/scan'
-                                        element = {
-                                            <ProtectedRoute allowedRoles = {['host', 'admin']}>
-                                                <HostScanner />
-                                            </ProtectedRoute>
-                                        }
-                                    />
+                                        <Route 
+                                            path = '/host/event/:eventId'
+                                            element = {
+                                                <ProtectedRoute>
+                                                    <ManageEvent />
+                                                </ProtectedRoute>
+                                            }
+                                        />
+
+                                        <Route 
+                                            path = '/host/scan'
+                                            element = {
+                                                <ProtectedRoute>
+                                                    <HostScanner />
+                                                </ProtectedRoute>
+                                            }
+                                        />
+                                    </Route>
                                 </Route>
                             </Routes>
                         </Suspense>
