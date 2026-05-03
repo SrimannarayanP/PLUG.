@@ -19,7 +19,7 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
         offset : ["start start", "end start"]
     })
 
-    // Moves the background down at 50% speed of scroll
+    // Moves the background down at 30% speed of scroll
     const y = useTransform(scrollYProgress, [0, 1], ['0%', '30%'])
     // Reduces the opacity as you scroll more
     const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
@@ -41,20 +41,20 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
         // 'overflow-hidden' : So that the image's rounded corners can be clipped.
         <div
             ref = {ref}
-            className = "group relative w-full h-[85svh] min-h-[600px] overflow-hidden rounded-2xl md:rounded-[2rem] border border-zinc-800 bg-[#050505] cursor-pointer"
+            className = "group relative w-full h-[85svh] min-h-[600px] overflow-hidden rounded-2xl md:rounded-[2rem] border border-zinc-800 bg-[#050505] cursor-pointer transform-gpu"
             onClick = {() => onDetailsClick(event)}
         >
             {/* Background Image */}
             {/* "w-full h-96" sets a fixed height for the hero-section */}
             {/* 'object-cover' ensures that the image fills the container without stretching */}
             {/* 'opacity-50' makes the image semi-transparent so that the text can be placed on top of it */}
-            <motion.div 
+            <motion.div
                 style = {{
-                    y, 
+                    y,
                     opacity,
                     scale
                 }}
-                className = "absolute inset-0 z-0"
+                className = "absolute inset-0 z-0 will-change-transform will-change-opacity"
             >
                 {posterUrl ? (
                     <motion.img
@@ -62,7 +62,7 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
                         alt = {event.name}
                         loading = 'eager'
                         fetchPriority = 'high'
-                        className = "h-full w-full object-cover transition-transform duration-700"
+                        className = "h-full w-full object-cover transition-transform duration-700 transform-gpu"
                     />
                 ) : (
                     // Fallback for no image
@@ -92,7 +92,7 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
                 }}
                 className = "absolute top-6 left-6 md:top-10 md:left-10 z-20"
             >
-                <div className = "inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl">
+                <div className = "inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/10 bg-black/80 md:bg-black/40 md:backdrop-blur-md shadow-2xl">
                     <span className = "relative flex h-2 w-2">
                         <span className = "absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75" />
 
@@ -199,16 +199,16 @@ export default function FeaturedEventHero({event, onRegisterClick, onDetailsClic
 
                                         onRegisterClick(event)
                                     }}
-                                    className = "group relative w-full md:w-auto overflow-hidden bg-white px-8 md:px-10 py-5 md:py-6 transition-transform active:scale-[0.98]"
+                                    className = "group relative w-full md:w-auto overflow-hidden bg-white px-8 md:px-10 py-5 md:py-6 transition-transform active:scale-[0.98] transform-gpu"
                                 >
                                     <div className = "relative z-10 flex items-center justify-center gap-3 font-bold uppercase tracking-[0.2em] text-black transition-colors duration-300 group-hover:text-white">
                                         <span>Secure Ticket</span>
 
-                                        <ArrowRight className = "h-4 w-4" />
+                                        <ArrowRight className = "h-4 w-4 transform-gpu" />
                                     </div>
 
                                     {/* Diagonal slide effect */}
-                                    <div className = "absolute inset-0 bg-orange-600 transform translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-[0.22, 1, 0.36, 1]" />
+                                    <div className = "absolute inset-0 bg-orange-600 transform translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-[0.22, 1, 0.36, 1] transform-gpu" />
                                 </button>
                             </motion.div>
                         </div>
