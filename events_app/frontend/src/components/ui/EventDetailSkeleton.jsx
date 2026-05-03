@@ -6,7 +6,7 @@ export default function EventDetailSkeleton() {
 
     return (
 
-        <div className = "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-6 backdrop-blur-sm">
+        <div className = "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/95 md:bg-black/60 p-0 sm:p-6 md:backdrop-blur-sm transform-gpu">
             {/* Banner image skeleton */}
             <div className = "relative flex h-[85vh] sm:h-auto w-full max-w-3xl sm:max-w-[90vh] flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl border border-zinc-800 bg-zinc-950 shadow-2xl">
                 {/* Close button placeholder */}
