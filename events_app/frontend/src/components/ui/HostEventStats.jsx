@@ -53,7 +53,7 @@ export default function HostEventStats() {
 
         return (
 
-            <div className = "space-y-8 animate-in fade-in duration-500">
+            <div className = "space-y-8 animate-in fade-in duration-500 transform-gpu">
                 <div className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Scoreboard Skeleton */}
                     {[1, 2, 3, 4].map(i => (
@@ -120,7 +120,7 @@ export default function HostEventStats() {
 
     return (
 
-        <div className = "space-y-8 animate-in fade-in duration-500">
+        <div className = "space-y-8 animate-in fade-in duration-500 transform-gpu">
             {/* Scoreboard */}
             <div className = "grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg relative overflow-hidden">
@@ -131,7 +131,7 @@ export default function HostEventStats() {
                             Total Tickets
                         </span>
 
-                        <Ticket className = "h-5 w-5 text-zinc-400 group-hover:text-white transition-colors" />
+                        <Ticket className = "h-5 w-5 text-zinc-400" />
                     </div>
 
                     <div className = "text-4xl font-black text-white">
@@ -202,7 +202,7 @@ export default function HostEventStats() {
 
             <div className = "grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Velocity Chart */}
-                <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg flex flex-col h-[400px] min-w-0">
+                <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg flex flex-col h-[400px] min-w-0 transform-gpu">
                     <h3 className = "text-sm font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
                         <Activity className = "h-4 w-4 bg-orange-500" />
                         
@@ -223,7 +223,12 @@ export default function HostEventStats() {
                             >
                                 <AreaChart
                                     data = {velocityData}
-                                    margin = {{top : 10, right : 10, left : -20, bottom : 0}}
+                                    margin = {{
+                                        top : 10,
+                                        right : 10,
+                                        left : -20,
+                                        bottom : 0
+                                    }}
                                 >
                                     <defs>
                                         <linearGradient
@@ -289,7 +294,7 @@ export default function HostEventStats() {
                 </div>
                 
                 {/* Door Traffic */}
-                <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg flex flex-col h-[400px] min-w-0">
+                <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg flex flex-col h-[400px] min-w-0 transform-gpu">
                     <h3 className = "text-sm font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
                         <Users className = "h-4 w-4 text-blue-500" />
 
@@ -318,9 +323,7 @@ export default function HostEventStats() {
                                         fontSize = {10}
                                         tickLine = {false}
                                         axisLine = {false}
-                                        tickFormatter = {(str) => (
-                                            new Date(str).toLocaleDateString([], {hour : '2-digit', minute : '2-digit'})
-                                        )}
+                                        tickFormatter = {(str) => (new Date(str).toLocaleDateString([], {hour : '2-digit', minute : '2-digit'}))}
                                     />
 
                                     <YAxis
@@ -335,9 +338,7 @@ export default function HostEventStats() {
                                         cursor = {{fill : '#27272a', opacity : 0.4}}
                                         contentStyle = {{backgroundColor : '#09090b', borderColor : '#27272a', borderRadius : '12px'}}
                                         itemStyle = {{color : '#fff', fontSize : '12px', fontWeight : 'bold'}}
-                                        labelFormatter = {(label) => (
-                                            new Date(label).toLocaleDateString([], {hour : '2-digit', minute : '2-digit'})
-                                        )}
+                                        labelFormatter = {(label) => (new Date(label).toLocaleDateString([], {hour : '2-digit', minute : '2-digit'}))}
                                     />
 
                                     <Bar
@@ -352,7 +353,7 @@ export default function HostEventStats() {
                 </div>
 
                 {/* Payment Funnel */}
-                <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg flex flex-col h-[400px] min-w-0">
+                <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg flex flex-col h-[400px] min-w-0 transform-gpu">
                     <h3 className = "text-sm font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
                         <CreditCard className = "h-4 w-4 text-emerald-500" />
 
@@ -391,7 +392,14 @@ export default function HostEventStats() {
                                         </Pie>
 
                                         <Tooltip
-                                            contentStyle = {{backgroundColor : '#09090b', borderColor : '#27272a', borderRadius : '12px', textTransform : 'uppercase', fontSize : '10px', fontWeight : 'bold'}}
+                                            contentStyle = {{
+                                                backgroundColor : '#09090b',
+                                                borderColor : '#27272a',
+                                                borderRadius : '12px',
+                                                textTransform : 'uppercase',
+                                                fontSize : '10px',
+                                                fontWeight : 'bold'
+                                            }}
                                             itemStyle = {{color : '#fff', fontSize : '12px'}}
                                         />
                                     </PieChart>
@@ -427,7 +435,7 @@ export default function HostEventStats() {
                 </div>
 
                 {/* Demographics */}
-                <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg flex flex-col h-[400px] min-w-0">
+                <div className = "bg-[#18181b] border border-zinc-800 p-6 rounded-2xl shadow-lg flex flex-col h-[400px] min-w-0 transform-gpu">
                     <h3 className = "text-sm font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
                         <MapPin className = "h-4 w-4 text-pink-500" />
 
@@ -441,7 +449,7 @@ export default function HostEventStats() {
                             </span>
                         </div>
                     ) : (
-                        <div className = "space-y-4 overflow-y-auto pr-2 no-scrollbar">
+                        <div className = "space-y-4 overflow-y-auto pr-2 no-scrollbar transform-gpu will-change-scroll">
                             {demographicsData.map((item, index) => {
                                 // Calculate width percentage based on count relative to max count, with a minimum width for visibility
                                 const maxCount = demographicsData[0]?.count || 1
