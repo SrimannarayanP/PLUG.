@@ -483,6 +483,9 @@ class Registration(UUIDModel, TimeStampedModel):
     last_name = models.CharField(max_length = 255, blank = True)
     email = models.EmailField(db_index = True)
 
+    # Booking Details
+    booking_id = models.UUIDField(default = uuid.uuid4, db_index = True, help_text = "Groups multiple tickets bought in a single checkout session")
+
     # Guest details
     guest_data = models.JSONField(default = dict, blank = True, null = True)
 
