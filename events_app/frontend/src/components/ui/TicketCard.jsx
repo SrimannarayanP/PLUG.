@@ -60,13 +60,13 @@ export default function TicketCard({tickets, onTicketChange}) {
     function getStatusBadge({ticket}) {
         const {is_cancelled, payment_status, is_checked_in} = ticket
 
-        const badgeBase = "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm border backdrop-blur-md"
+        const badgeBase = "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm border transform-gpu md:backdrop-blur-md"
 
         if (is_cancelled) {
 
             return (
 
-                <div className = {`${badgeBase} bg-red-950/80 text-red-400 border-red-500/20`}>
+                <div className = {`${badgeBase} bg-red-950 md:bg-red-950/80 text-red-400 border-red-500/20`}>
                     <XCircle
                         size = {12}
                         strokeWidth = {3}
@@ -84,7 +84,7 @@ export default function TicketCard({tickets, onTicketChange}) {
             
             return (
 
-                <div className = {`${badgeBase} bg-yellow-950/80 text-yellow-400 border-yellow-500/20`}>
+                <div className = {`${badgeBase} bg-yellow-950 md:bg-yellow-950/80 text-yellow-400 border-yellow-500/20`}>
                     <Clock 
                         size = {12}
                         strokeWidth = {3}
@@ -102,7 +102,7 @@ export default function TicketCard({tickets, onTicketChange}) {
 
             return (
 
-                <div className = {`${badgeBase} bg-red-950/80 text-red-400 border-red-500/20`}>
+                <div className = {`${badgeBase} bg-red-950 md:bg-red-950/80 text-red-400 border-red-500/20`}>
                     <XCircle 
                         size = {12}
                         strokeWidth = {3}
@@ -119,7 +119,7 @@ export default function TicketCard({tickets, onTicketChange}) {
 
             return (
 
-                <div className = {`${badgeBase} bg-orange-950/80 text-orange-400 border-orange-500/20`}>
+                <div className = {`${badgeBase} bg-orange-950 md:bg-orange-950/80 text-orange-400 border-orange-500/20`}>
                     <RefreshCcw 
                         size = {12}
                         strokeWidth = {3}
@@ -136,7 +136,7 @@ export default function TicketCard({tickets, onTicketChange}) {
 
             return (
 
-                <div className = {`${badgeBase} bg-zinc-800 text-zinc-400 border-zinc-700`}>
+                <div className = {`${badgeBase} bg-zinc-900 md:bg-zinc-800 text-zinc-400 border-zinc-700`}>
                     <CheckCircle
                         size = {12}
                         strokeWidth = {3}
@@ -154,7 +154,7 @@ export default function TicketCard({tickets, onTicketChange}) {
 
             return (
 
-                <div className = {`${badgeBase} bg-zinc-800 text-zinc-400 border-zinc-700`}>
+                <div className = {`${badgeBase} bg-zinc-900 md:bg-zinc-800/80 text-zinc-400 border-zinc-700`}>
                     <CheckCircle
                         size = {12}
                         strokeWidth = {3}
@@ -171,7 +171,7 @@ export default function TicketCard({tickets, onTicketChange}) {
 
             return (
 
-                <div className = {`${badgeBase} bg-zinc-800/80 text-zinc-500 border-zinc-700/50`}>
+                <div className = {`${badgeBase} bg-zinc-900 md:bg-zinc-800/80 text-zinc-500 border-zinc-700/50`}>
                     <Archive
                         size = {12}
                         strokeWidth = {3}
@@ -187,7 +187,7 @@ export default function TicketCard({tickets, onTicketChange}) {
         // Default valid/confirmed
         return (
 
-            <div className = {`${badgeBase} bg-emerald-950/80 text-emerald-400 border-emerald-500/20`}>
+            <div className = {`${badgeBase} bg-emerald-950 md:bg-emerald-950/80 text-emerald-400 border-emerald-500/20`}>
                 <Ticket 
                     size = {12}
                     strokeWidth = {3}
@@ -204,7 +204,7 @@ export default function TicketCard({tickets, onTicketChange}) {
         <>
             <div 
                 className = {`
-                    group relative flex flex-col h-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 transition-all duration-300
+                    group relative flex flex-col h-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 transition-all duration-300 transform-gpu
                     ${hasUsableTicket
                         ? "cursor-pointer hover:-translate-y-1 hover:border-zinc-700 hover:shadow-2xl"
                         : 'opacity-80'
@@ -219,7 +219,7 @@ export default function TicketCard({tickets, onTicketChange}) {
                             src = {posterUrl}
                             alt = {event.name}
                             loading = 'lazy'
-                            className = "h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" 
+                            className = "h-full w-full object-cover transition-transform duration-700 group-hover:scale-105 transform-gpu" 
                         />
                     ) : (
                         <div className = "flex flex-col h-full w-full items-center justify-center bg-zinc-900 text-zinc-700 font-bold gap-2">
@@ -236,7 +236,7 @@ export default function TicketCard({tickets, onTicketChange}) {
 
                     <div className = "absolute top-3 right-3 z-10">
                         {ticketCount > 1 ? (
-                            <div className = "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm border backdrop-blur-md bg-orange-500/10 text-orange-400 border-orange-500/20">
+                            <div className = "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm border md:backdrop-blur-md bg-orange-950 md:bg-orange-500/10 text-orange-400 border-orange-500/20 transform-gpu">
                                 <Layers
                                     size = {12}
                                     strokeWidth = {3}
@@ -317,7 +317,7 @@ export default function TicketCard({tickets, onTicketChange}) {
                         >
                             <QrCode 
                                 size = {16} 
-                                className = "group-hover/btn:scale-110 transition-transform"
+                                className = "group-hover/btn:scale-110 transition-transform transform-gpu"
                             />
 
                             {ticketCount > 1 ? "View All Tickets" : "View Ticket"}
