@@ -10,10 +10,7 @@ import {getScarcityState} from '../../utils/ticketHelper'
 const formatDate = (dateString) => {
     if (!dateString) return 'TBA'
     
-    return new Date(dateString).toLocaleDateString('en-US', {
-        month : 'short',
-        day : 'numeric'
-    })
+    return new Date(dateString).toLocaleDateString('en-US', {month : 'short', day : 'numeric'})
 }
 
 
@@ -29,20 +26,11 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
         WARNING : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
     }
 
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-
-            onDetailsClick(event)
-        }
-    }
-
     return (
 
         <article
-            className = "group relative h-full flex flex-col overflow-hidden rounded-[20px] bg-[#0c0c0e] border border-zinc-800/60 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-900/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 cursor-pointer"
+            className = "group relative h-full flex flex-col overflow-hidden rounded-[20px] bg-[#0c0c0e] border border-zinc-800/60 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-900/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 cursor-pointer transform-gpu"
             onClick = {() => onDetailsClick(event)}
-            onKeyDown = {handleKeyDown}
             role = 'button'
             tabIndex = '0'
         >
@@ -54,7 +42,7 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
                         alt = {event.name}
                         loading = 'lazy'
                         decoding = 'async'
-                        className = "h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        className = "h-full w-full object-cover transition-transform duration-700 group-hover:scale-110 transform-gpu"
                     />
                 ) : (
                     <div className = "flex h-full w-full flex-col items-center justify-center gap-2 bg-zinc-900/50 text-zinc-700">
@@ -71,7 +59,7 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
                 {/* Badges container */}
                 <div className = "absolute top-3 right-3 flex flex-col items-end gap-2 z-50">
                     {/* Date badge */}
-                    <div className = "flex items-center gap-2 rounded-lg border border-white/10 bg-black/60 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-md">
+                    <div className = "flex items-center gap-2 rounded-lg border border-white/10 bg-black/90 md:bg-black/60 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white md:backdrop-blur-md">
                         <Calendar className = "h-3 w-3 text-orange-500" />
 
                         {formatDate(event.start_date)}
@@ -79,7 +67,7 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
 
                     {/* Price badge */}
                     {event.is_paid_event && (
-                        <div className = "flex items-center gap-1 rounded-md border border-emerald-400/20 bg-emerald-950/80 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-md">
+                        <div className = "flex items-center gap-1 rounded-md border border-emerald-400/20 bg-emerald-950 md:bg-emerald-950/80 px-2 py-1 text-[10px] font-bold text-white md:backdrop-blur-md">
                             <IndianRupee className = "h-2.5 w-2.5 text-emerald-400" />
 
                             {event.ticket_price}
@@ -105,7 +93,7 @@ const EventCard = ({event, onRegisterClick, onDetailsClick}) => {
                         {event.categories?.slice(0, 2).map((category) => (
                             <span
                                 key = {category.id}
-                                className = "rounded-[4px] border border-zinc-700 bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest text-zinc-300 backdrop-blur-sm"
+                                className = "rounded-[4px] border border-zinc-700 bg-black md:bg-black/50 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest text-zinc-300 md:backdrop-blur-sm"
                             >
                                 {category.name}
                             </span>
