@@ -7,8 +7,9 @@ import {
     X
 } from 'lucide-react'
 import React, {Suspense, useCallback, useEffect, useState} from 'react'
+import {Controller, useForm} from 'react-hook-form'
 import {toast} from 'react-hot-toast'
-import {useLocation, useNavigate} from 'react-router-dom'
+import {data, useLocation, useNavigate} from 'react-router-dom'
 
 import api from '../api/api'
 
@@ -18,16 +19,17 @@ import BackButton from '../components/common/BackButton'
 import FormInput from '../components/common/FormInput'
 import Logo from '../components/common/Logo'
 import SolidAnimatedButton from '../components/ui/SolidAnimatedButton'
+import { transform } from 'framer-motion'
 
 const RichTextEditor = React.lazy(() => import('../components/ui/RichTextEditor'))
 
 
+const FESTIVE_GRADIENT = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
+
 const logError = (context, error) => {
     console.error(`[${context}]`, error)
 
-    if (error?.response?.data) {
-        return error.response.data
-    }
+    if (error?.response?.data) return error.response.data
 
     return {generic : error.message || "An unexpected error occurred."}
 }
@@ -78,7 +80,7 @@ const ToggleSwitch = React.memo(({name, label, description, checked, onChange, i
 
         <button
             type = 'button'
-            onClick = {() => onChange({target : {name, type : 'checkbox', checked : !checked}})}
+            onClick = {() => onChange(name, !checked)}
             className = {`
                 relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out
                 focus:outline-none
@@ -92,7 +94,7 @@ const ToggleSwitch = React.memo(({name, label, description, checked, onChange, i
             <span 
                 aria-hidden = 'true'
                 className = {`
-                    pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out
+                    pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out transform-gpu
                     ${checked
                         ? 'translate-x-5'
                         : 'translate-x-0'
@@ -110,6 +112,37 @@ export default function CreateEvent() {
 
     const eventToEdit = location.state?.eventToEdit
     const isEditMode = !!eventToEdit
+
+    const {register, control, handleSubmit, reset, watch, setValue, getValues} = useForm({
+        defaultValues : {
+            name : '',
+            description : '',
+            start_date : '',
+            end_date : '',
+            registration_deadline : '',
+            physical_location : '', // Maps to physical_location in DB
+            location_type : 'offline',
+            google_maps_link : '',
+            virtual_location : '',
+
+            // Toggles
+            is_native : true,
+            collect_phone : false,
+            collect_college_school : false,
+            collect_student_id : false,
+            age_restriction_cutoff : '',
+
+            max_tickets_per_user : 1,
+            capacity : '',
+
+            // Payment state
+            is_paid_event : false,
+            ticket_price : '',
+
+            is_internal_event : false,
+            restricted_to_school_college_ids : [],
+        }
+    })
 
     const [loading, setLoading] = useState(false)
     const [isCompressing, setIsCompressing] = useState(false)
@@ -133,46 +166,24 @@ export default function CreateEvent() {
     const [availableSchoolsColleges, setAvailableSchoolsColleges] = useState([])
     const [hostProfile, setHostProfile] = useState(null)
 
-    const [eventContacts, setEventContacts] = useState([
-        {name : '', role : '', phone : '', email : ''}
-    ])
-
-    const [formData, setFormData] = useState({
+    const [eventContacts, setEventContacts] = useState([{
         name : '',
-        description : '',
-        start_date : '',
-        end_date : '',
-        registration_deadline : '',
-        physical_location : '', // Maps to physical_location in DB
-        location_type : 'offline',
-        google_maps_link : '',
-        virtual_location : '',
+        role : '',
+        phone : '',
+        email : ''
+    }])
 
-        // Toggles
-        is_native : true,
-        collect_phone : false,
-        collect_college_school : false,
-        collect_student_id : false,
-        age_restriction_cutoff : '',
-
-        max_tickets_per_user : 1,
-        capacity : '',
-
-        // Payment state
-        is_paid_event : false,
-        ticket_price : '',
-
-        is_internal_event : false,
-        restricted_to_school_college_ids : [],
-    })
+    // Watch values that are conditional
+    const wLocationType = watch('location_type')
+    const wIsPaidEvent = watch('is_paid_event')
+    const wIsInternalEvent = watch('is_internal_event')
+    const wMaxTickets = watch('max_tickets_per_user')
 
     useEffect(() => {
 
         return () => {
 
-            if (posterPreview && !posterPreview.startsWith('http')) {
-                URL.revokeObjectURL(posterPreview)
-            }
+            if (posterPreview && !posterPreview.startsWith('http')) URL.revokeObjectURL(posterPreview)
 
         }
 
@@ -206,7 +217,7 @@ export default function CreateEvent() {
     // Load form with existing data if edit mode
     useEffect(() => {
         if (isEditMode && eventToEdit) {
-            setFormData({
+            reset({
                 name : eventToEdit.name || '',
                 description : eventToEdit.description || '',
 
@@ -238,47 +249,24 @@ export default function CreateEvent() {
 
             // Pre-fill categories - What this means is that the API calls gives full objs to display but selectedCategories only accepts list of IDs. So we use map
             // to map over the full objs & extract only the IDs.
-            if (eventToEdit.categories) {
-                setSelectedCategories(eventToEdit.categories.map(c => c.id))
-            }
+            if (eventToEdit.categories) setSelectedCategories(eventToEdit.categories.map(c => c.id))
 
             if (eventToEdit.event_contacts && Array.isArray(eventToEdit.event_contacts) && eventToEdit.event_contacts.length > 0) {
                 setEventContacts(eventToEdit.event_contacts)
             }
 
             // Existing poster preview
-            if (eventToEdit.poster) {
-                setPosterPreview(getImageUrl(eventToEdit.poster))
-            }
+            if (eventToEdit.poster) setPosterPreview(getImageUrl(eventToEdit.poster))
 
-            if (eventToEdit.existingDocuments) {
-                setExistingDocuments(eventToEdit.documents)
-            }
+            if (eventToEdit.existingDocuments) setExistingDocuments(eventToEdit.documents)
 
-            if (eventToEdit?.age_restriction_cutoff) {
-                setHasAgeLimit(true)
-            }
+            if (eventToEdit?.age_restriction_cutoff) setHasAgeLimit(true)
 
-            if (eventToEdit.registration_deadline) {
-                setHasCustomDeadline(true)
-            }
+            if (eventToEdit.registration_deadline) setHasCustomDeadline(true)
 
-            if (eventToEdit.capacity !== null && eventToEdit.capacity !== undefined) {
-                setHasCapacityLimit(true)
-            }
+            if (eventToEdit.capacity !== null && eventToEdit.capacity !== undefined) setHasCapacityLimit(true)
         }
-    }, [isEditMode, eventToEdit])
-
-    // Auto-adjust group ticket size
-    useEffect(() => {
-        if (hasCapacityLimit && formData.capacity) {
-            const cap = parseInt(formData.capacity)
-
-            if (formData.max_tickets_per_user > cap) {
-                setFormData(prev => ({...prev, max_tickets_per_user : Math.max(1, cap)}))
-            }
-        }
-    }, [hasCapacityLimit, formData.capacity, formData.max_tickets_per_user])
+    }, [isEditMode, eventToEdit, reset])
     
     const updateContact = (index, field, value) => {
         const newContacts = [...eventContacts]
@@ -295,12 +283,13 @@ export default function CreateEvent() {
             return
         }
 
-        setEventContacts([...eventContacts, {name : '', role : '', phone : '', email : ''}])
+        setEventContacts([
+            ...eventContacts,
+            {name : '', role : '', phone : '', email : ''}
+        ])
     }
 
-    const removeContact = (index) => {
-        setEventContacts(eventContacts.filter((_, i) => i !== index))
-    }
+    const removeContact = (index) => setEventContacts(eventContacts.filter((_, i) => i !== index))
 
     // Document handlers
     const handleDocumentChange = useCallback((e) => {
@@ -331,9 +320,7 @@ export default function CreateEvent() {
         e.target.value = ''
     }, [newDocuments.length, existingDocuments.length])
 
-    const removeNewDocument = (index) => {
-        setNewDocuments(prev => prev.filter((_, i) => i !== index))
-    }
+    const removeNewDocument = (index) => setNewDocuments(prev => prev.filter((_, i) => i !== index))
 
     const executeDocumentDelete = async () => {
         if (!documentToDelete) return
@@ -354,27 +341,6 @@ export default function CreateEvent() {
     }
 
     // Form handlers
-    const handleChange = useCallback((e) => {
-        const {name, value, type, checked} = e.target
-
-        setPageErrors(prev => {
-            if (prev[name]) {
-                const newErrors = {...prev}
-
-                delete newErrors[name]
-
-                return newErrors
-            }
-
-            return prev
-        })
-
-        setFormData(prev => ({
-            ...prev,
-            [name] : type === 'checkbox' ? checked : value
-        }))
-    }, [])
-
     const handleCategoryToggle = (catId) => {
         setSelectedCategories(prev => {
             if (prev.includes(catId)) {
@@ -390,6 +356,10 @@ export default function CreateEvent() {
     }
 
     const handleCollegeToggle = (collegeId) => {
+        const currentIds = prev.restricted_to_school_college_ids || []
+
+        setValue('restricted_to_school_college_ids', currentIds.includes(collegeId) ? currentIds.filter(id => id !== collegeId) : [...currentIds, collegeId])
+
         setPageErrors(prev => {
             if (prev.restricted_to_school_college_ids) {
                 const newErrors = {...prev}
@@ -401,37 +371,19 @@ export default function CreateEvent() {
 
             return prev
         })
-
-        setFormData(prev => {
-            const currentIds = prev.restricted_to_school_college_ids || []
-
-            if (currentIds.includes(collegeId)) {
-
-                return {...prev, restricted_to_school_college_ids : currentIds.filter(id => id !== collegeId)} // Remove if already exists in categories
-
-            } else {
-
-                return {...prev, restricted_to_school_college_ids : [...currentIds, collegeId]} // Add if doesn't exist in existing list of categories
-
-            }
-        })
     }
 
     const handleTicketsChange = useCallback((delta) => {
-        setFormData(prev => {
-            const current = parseInt(prev.max_tickets_per_user || 1)
+        const current = parseInt(getValues('max_tickets_per_user') || 1)
 
-            let currentMax = 10
+        let currentMax = 10
 
-            if (hasCapacityLimit && prev.capacity) {
-                currentMax = Math.min(10, parseInt(prev.capacity))
-            }
+        if (hasCapacityLimit && getValues('capacity')) {
+            currentMax = Math.min(10, parseInt(getValues('capacity')))
+        }
 
-            const newVal = Math.max(1, Math.min(10, current + delta))
-
-            return {...prev, max_tickets_per_user : newVal}
-        })
-    }, [hasCapacityLimit])
+        setValue('max_tickets_per_user', Math.max(1, Math.min(currentMax, current + delta)))
+    }, [hasCapacityLimit, getValues, setValue])
 
     const handlePosterChange = async (e) => {
         const file = e.target.files[0]
@@ -449,19 +401,11 @@ export default function CreateEvent() {
         setIsCompressing(true)
 
         try {
-            const options = {
-                maxSizeMB : 5,
-                maxWidthOrHeight : 1920,
-                useWebWorker : true,
-                fileType : file.type
-            }
+            const options = {maxSizeMB : 5, maxWidthOrHeight : 1920, useWebWorker : true, fileType : file.type}
 
             const compressedBlob = await imageCompression(file, options)
 
-            const compressedFile = new File([compressedBlob], file.name, {
-                type : compressedBlob.type,
-                lastModified : new Date().getTime()
-            })
+            const compressedFile = new File([compressedBlob], file.name, {type : compressedBlob.type, lastModified : new Date().getTime()})
 
             setPosterFile(compressedFile)
             setPosterPreview(URL.createObjectURL(compressedFile))
@@ -479,9 +423,7 @@ export default function CreateEvent() {
         }
     }
 
-    const handleSubmit = async (e) => {
-        e.preventDefault()
-        
+    const onSubmit = async (formData) => {
         if (isCompressing) {
             toast.error("Please wait for image processing to finish.")
 
@@ -491,7 +433,7 @@ export default function CreateEvent() {
         setLoading(true)
         setPageErrors({})
 
-        const validationErrors = validateForm()
+        const validationErrors = validateForm(formData)
 
         if (Object.keys(validationErrors).length > 0) {
             setPageErrors(validationErrors)
@@ -500,16 +442,14 @@ export default function CreateEvent() {
 
             setLoading(false)
 
-            const firstErrorField = document.querySelector('[name="' + Object.keys(validationErrors)[0] + '"]')
+            const firstErrorField = document.querySelector(`[name="${Object.keys(validationErrors)[0]}"]`)
 
-            if (firstErrorField) {
-                firstErrorField.scrollIntoView({behavior : 'smooth', block : 'center'})
-            }
+            if (firstErrorField) firstErrorField.scrollIntoView({behavior : 'smooth', block : 'center'})
 
             return
         }
 
-        const data = new FormData()
+        const formDataPayload = new FormData()
 
         Object.entries(formData).forEach(([key, value]) => {
             if (key === 'description' && !value) return
@@ -526,36 +466,50 @@ export default function CreateEvent() {
 
             if (key === 'restricted_to_school_college_ids') return
 
-            if (hasCapacityLimit && formData.capacity) {
-                data.append('capacity', formData.capacity)
+            if (key === 'capacity') {
+                if (hasCapacityLimit && formData.capacity) {
+                    formDataPayload.append('capacity', formData.capacity)
+                } else {
+                    formDataPayload.append('capacity', '')
+                }
             } else {
-                data.append('capacity', '')
+                formDataPayload.append(key, value)
             }
-
-            data.append(key, value)
         })
 
-        selectedCategories.forEach(id => data.append('category_ids', id))
+        selectedCategories.forEach(id => formDataPayload.append('category_ids', id))
 
         if (formData.is_internal_event && !hostProfile?.school_college) {
-            formData.restricted_to_school_college_ids.forEach(id => data.append('restricted_to_school_college_ids', id))
+            formData.restricted_to_school_college_ids.forEach(id => formDataPayload.append('restricted_to_school_college_ids', id))
         }
 
-        if (posterFile) data.append('poster', posterFile)
+        if (posterFile) formDataPayload.append('poster', posterFile)
 
-        newDocuments.forEach(file => data.append('uploaded_documents', file))
+        newDocuments.forEach(file => formDataPayload.append('uploaded_documents', file))
 
         const validContacts = eventContacts.filter(c => c.name.trim() !== '')
 
-        data.append('event_contacts', JSON.stringify(validContacts))
+        formDataPayload.append('event_contacts', JSON.stringify(validContacts))
+
+        const config = {
+            transformRequest: [(data, headers) => {
+                delete headers['Content-Type']
+
+                if (headers.common) delete headers.common['Content-Type']
+                if (headers.post) delete headers.post['Content-Type']
+                if (headers.patch) delete headers.patch['Content-Type']
+
+                return data
+            }]
+        }
 
         try {
             if (isEditMode) {
-                await api.patch(`/api/host/edit/${eventToEdit.id}/`, data)
+                await api.patch(`/api/host/edit/${eventToEdit.id}/`, formDataPayload, config)
 
                 toast.success("Event Updated Successfully!")
             } else {
-                await api.post('/api/host/create-event/', data)
+                await api.post('/api/host/create-event/', formDataPayload, config)
                 
                 toast.success("Event Created Successfully!")
             }
@@ -589,11 +543,7 @@ export default function CreateEvent() {
         }
     }
 
-    const handleDescriptionChange = (htmlContent) => {
-        setFormData(prev => ({...prev, description : htmlContent}))
-    }
-
-    const validateForm = () => {
+    const validateForm = (formData) => {
         const errors = {}
 
         const start = new Date(formData.start_date)
@@ -624,7 +574,7 @@ export default function CreateEvent() {
 
         if (hasAgeLimit && !formData.age_restriction_cutoff) errors.age_restriction_cutoff = "Cutoff data required"
 
-        if (formData.is_internal_event && (!hostProfile?.school_college && !formData.restricted_to_school_college_ids.length === 0)) {
+        if (formData.is_internal_event && (!hostProfile?.school_college && formData.restricted_to_school_college_ids.length === 0)) {
             errors.restricted_to_school_college_ids = "External promoters must select target schools/colleges."
         }
 
@@ -639,36 +589,24 @@ export default function CreateEvent() {
         return errors
     }
 
-    const toggleRegistrationDeadline = useCallback((e) => {
-        const checked = e.target.checked
-
+    const toggleRegistrationDeadline = useCallback((name, checked) => {
         setHasCustomDeadline(checked)
 
-        if (!checked) {
-            setFormData(prev => ({...prev, registration_deadline : ''}))
-        }
-    }, [])
+        if (!checked) setValue('registration_deadline', '')
+    }, [setValue])
 
 
-    const toggleAgeLimit = useCallback((e) => {
-        const checked = e.target.checked
-
+    const toggleAgeLimit = useCallback((name, checked) => {
         setHasAgeLimit(checked)
 
-        if (!checked) {
-            setFormData(prev => ({...prev, age_restriction_cutoff : ''}))
-        }
-    }, [])
+        if (!checked) setValue('age_restriction_cutoff', '')
+    }, [setValue])
 
-    const toggleCapacityLimit = useCallback((e) => {
-        const checked = e.target.checked
-
+    const toggleCapacityLimit = useCallback((name, checked) => {
         setHasCapacityLimit(checked)
 
-        if (!checked) {
-            setFormData(prev => ({...prev, capacity : ''}))
-        }
-    }, [])
+        if (!checked) setValue('capacity', '')
+    }, [setValue])
 
     // Helper to format Django ISO dates to HTML Input format
     const formatDateForInput = (isoString) => {
@@ -678,8 +616,6 @@ export default function CreateEvent() {
 
         return new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
     }
-
-    const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
 
     return (
 
@@ -746,8 +682,9 @@ export default function CreateEvent() {
                 )}
 
                 <form
-                    onSubmit = {handleSubmit}
+                    onSubmit = {handleSubmit(onSubmit)}
                     className = 'space-y-12'
+                    noValidate
                 >
                     {/* Visuals */}
                     <div className = 'space-y-6'>
@@ -792,7 +729,7 @@ export default function CreateEvent() {
                                             className = "h-full w-full object-cover"
                                         />
 
-                                        <div className = "absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-sm opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity p-4 text-center">
+                                        <div className = "absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-sm opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity p-4 text-center transform-gpu">
                                             <Upload className = "h-8 md:h-10 w-8 md:w-10 text-orange-500 mb-3" />
 
                                             <span className = "font-bold text-white uppercase tracking-widest text-xs md:text-sm">
@@ -837,7 +774,7 @@ export default function CreateEvent() {
                                 </span>
                             </div>
 
-                            <label className = "flex items-center justify-center w-full p-6 border-2 border-dashed border-zinc-800 hover:border-zinc-700 rounded-xl bg-[#18181b] hover:bg-zinc-900 transition-all cursor-pointer group active:scale-[0.99]">
+                            <label className = "flex items-center justify-center w-full p-6 border-2 border-dashed border-zinc-800 hover:border-zinc-700 rounded-xl bg-[#18181b] hover:bg-zinc-900 transition-all cursor-pointer group active:scale-[0.99] transform-gpu">
                                 <div className = "flex items-center gap-2">
                                     <Paperclip className = "h-6 w-6 text-zinc-600 group-hover:text-indigo-500 transition-colors" />
 
@@ -927,9 +864,7 @@ export default function CreateEvent() {
 
                         <FormInput 
                             label = "Event Name"
-                            name = 'name'
-                            value = {formData.name}
-                            onChange = {handleChange}
+                            {...register('name')}
                             error = {pageErrors.name}
                         />
 
@@ -950,7 +885,8 @@ export default function CreateEvent() {
                                             type = 'button'
                                             onClick = {() => handleCategoryToggle(cat.id)}
                                             className = {`
-                                                flex items-center gap-2 px-4 py-3 md:py-2 rounded-full text-xs font-bold uppercase tracking-wide border transition-all active:scale-95
+                                                flex items-center gap-2 px-4 py-3 md:py-2 rounded-full text-xs font-bold uppercase tracking-wide border transition-all
+                                                active:scale-95 transform-gpu
                                                 ${isSelected
                                                     ? "bg-zinc-100 text-black border-white"
                                                     : "bg-zinc-900 text-zinc-500 hover:text-zinc-300 border-zinc-800 hover:border-zinc-600"
@@ -975,9 +911,7 @@ export default function CreateEvent() {
                             <FormInput 
                                 label = "Starts At"
                                 type = 'datetime-local'
-                                name = 'start_date'
-                                value = {formData.start_date}
-                                onChange = {handleChange}
+                                {...register('start_date')}
                                 icon = {Calendar}
                                 error = {pageErrors.start_date}
                             />
@@ -985,16 +919,15 @@ export default function CreateEvent() {
                             <FormInput 
                                 label = "Ends At"
                                 type = 'datetime-local'
-                                name = 'end_date'
-                                value = {formData.end_date}
-                                onChange = {handleChange}
+                                {...register('end_date')}
                                 icon = {Clock}
                                 error = {pageErrors.end_date}
                             />
                         </div>
 
                         <div className = 'space-y-4'>
-                            <ToggleSwitch 
+                            <ToggleSwitch
+                                name = 'has_registration_deadline'
                                 label = "Registration Deadline"
                                 description = "Set a specific date & time for registration to close."
                                 icon = {Clock}
@@ -1007,9 +940,7 @@ export default function CreateEvent() {
                                 <div className = "animate-in slide-in-from-top-2 fade-in duration-300 pt-2">
                                     <FormInput 
                                         type = 'datetime-local'
-                                        name = 'registration_deadline'
-                                        value = {formData.registration_deadline}
-                                        onChange = {handleChange}
+                                        {...register('registration_deadline')}
                                         error = {pageErrors.registration_deadline}
                                         required = {hasCustomDeadline}
                                         className = "bg-black/50 border-zinc-700 focus:border-pink-500"
@@ -1029,10 +960,11 @@ export default function CreateEvent() {
                                     <button
                                         key = {type}
                                         type = 'button'
-                                        onClick = {() => setFormData(prev => ({...prev, location_type : type}))}
+                                        onClick = {() => setValue('location_type', type)}
                                         className = {`
                                             flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all duration-300
-                                            ${formData.location_type === type
+                                            transform-gpu
+                                            ${wLocationType === type
                                                 ? "bg-zinc-800 text-white shadow-lg ring-1 ring-white/10"
                                                 : "bg-transparent text-zinc-400 hover:bg-zinc-800/50"
                                             }    
@@ -1052,14 +984,12 @@ export default function CreateEvent() {
                             </div>
 
                             <div className = "relative animate-in fade-in slide-in-from-top-1 duration-300">
-                                {formData.location_type === 'offline' ? (
+                                {wLocationType === 'offline' ? (
                                     <>
                                         <FormInput 
                                             label = "Venue Name"
-                                            name = 'physical_location'
                                             placeholder = "e.g., Auditorium 1"
-                                            value = {formData.physical_location}
-                                            onChange = {handleChange}
+                                            {...register('physical_location')}
                                             error = {pageErrors.physical_location}
                                             className = "border-zinc-800 pl-10 py-3"
                                             icon = {MapPin}
@@ -1068,10 +998,8 @@ export default function CreateEvent() {
                                         <div className = 'mt-4'>
                                             <FormInput 
                                                 label = "Google Maps Link"
-                                                name = 'google_maps_link'
                                                 placeholder = 'http://googleusercontent.com/maps.google.com/...'
-                                                value = {formData.google_maps_link}
-                                                onChange = {handleChange}
+                                                {...register('google_maps_link')}
                                                 className = "border-zinc-800 pl-10 text-blue-400 py-3"
                                                 icon = {MapPin}
                                             />
@@ -1084,10 +1012,8 @@ export default function CreateEvent() {
                                 ) : (
                                     <FormInput 
                                         label = "Platform/Meeting Link"
-                                        name = 'virtual_location'
                                         placeholder = "e.g., Zoom, Google Meet"
-                                        value = {formData.virtual_location}
-                                        onChange = {handleChange}
+                                        {...register('virtual_location')}
                                         className = "border-zinc-800 pl-10 py-3"
                                         icon = {Layers}
                                         error = {pageErrors.virtual_location}
@@ -1101,8 +1027,8 @@ export default function CreateEvent() {
                                 Description
                             </label>
 
-                            <div className = "rounded-xl border border-zinc-800 overflow-hidden focus-within:border-orange-500 transition-colors min-h-[150px] relative">
-                                <Suspense 
+                            <div className = "rounded-xl border border-zinc-800 overflow-hidden focus-within:border-orange-500 transition-colors min-h-[150px] relative transform-gpu">
+                                <Suspense
                                     fallback = {
                                         <div className = "flex items-center justify-center h-40 bg-zinc-900/50 text-zinc-500">
                                             <Loader2 className = "animate-spin h-5 w-5 mr-2" />
@@ -1111,9 +1037,15 @@ export default function CreateEvent() {
                                         </div>
                                     }
                                 >
-                                    <RichTextEditor 
-                                        value = {formData.description}
-                                        onChange = {handleDescriptionChange}
+                                    <Controller
+                                        name = 'description'
+                                        control = {control}
+                                        render = {({field}) => (
+                                            <RichTextEditor
+                                                value = {field.value}
+                                                onChange = {field.onChange}
+                                            />
+                                        )}
                                     />
                                 </Suspense>
                             </div>
@@ -1135,7 +1067,7 @@ export default function CreateEvent() {
                             <button
                                 type = 'button'
                                 onClick = {addContact}
-                                className = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-bold text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+                                className = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-bold text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors transform-gpu"
                             >
                                 <Plus size = {14} />
 
@@ -1153,7 +1085,7 @@ export default function CreateEvent() {
                                         <button
                                             type = 'button'
                                             onClick = {() => removeContact(index)}
-                                            className = "absolute -top-3 -right-3 bg-zinc-900 border border-zinc-700 text-zinc-500 hover:text-red-500 hover:border-red-500/50 p-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100 shadow-xl"
+                                            className = "absolute -top-3 -right-3 bg-zinc-900 border border-zinc-700 text-zinc-500 hover:text-red-500 hover:border-red-500/50 p-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100 shadow-xl transform-gpu"
                                         >
                                             <X size = {14} />
                                         </button>
@@ -1235,17 +1167,23 @@ export default function CreateEvent() {
 
                         <div className = "grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className = 'space-y-4'>
-                                <ToggleSwitch
+                                <Controller
                                     name = 'is_internal_event'
-                                    label = "Internal Event"
-                                    description = "Restrict this event exclusively to students of a specific college."
-                                    icon = {Shield}
-                                    checked = {formData.is_internal_event}
-                                    onChange = {handleChange}
-                                    activeColor = 'bg-indigo-500'
+                                    control = {control}
+                                    render = {({field}) => (
+                                        <ToggleSwitch
+                                            name = {field.name}
+                                            label = "Internal Event"
+                                            description = "Restrict this event exclusively to students of a specific college."
+                                            icon = {Shield}
+                                            checked = {field.value}
+                                            onChange = {(n, v) => field.onChange(v)}
+                                            activeColor = 'bg-indigo-500'
+                                        />
+                                    )}
                                 />
 
-                                {formData.is_internal_event && (
+                                {wIsInternalEvent && (
                                     <div className = "pl-4 border-l-2 border-zinc-800 ml-4 animate-in slide-in-from-top-2 fade-in duration-300">
                                         {hostProfile?.school_college ? (
                                             // College Club
@@ -1265,9 +1203,10 @@ export default function CreateEvent() {
                                                     Select Target Campuses
                                                 </label>
 
-                                                <div className = "max-h-60 overflow-y-auto pr-2 space-y-2 custom-scrollbar transform-gpu overscroll-contain">
+                                                <div className = "max-h-60 overflow-y-auto pr-2 space-y-2 custom-scrollbar transform-gpu will-change-scroll overscroll-contain">
                                                     {availableSchoolsColleges.map(school_college => {
-                                                        const isSelected = formData.restricted_to_school_college_ids.includes(school_college.id)
+                                                        const currentIds = watch('restricted_to_school_college_ids') || []
+                                                        const isSelected = currentIds.includes(school_college.id)
 
                                                         return (
 
@@ -1277,6 +1216,7 @@ export default function CreateEvent() {
                                                                 onClick = {() => handleCollegeToggle(school_college.id)}
                                                                 className = {`
                                                                     w-full text-left flex items-center gap-3 p-3 rounded-lg text-sm transition-all duration-200
+                                                                    transform-gpu
                                                                     ${isSelected
                                                                         ? "bg-indigo-500/20 border border-indigo-500 text-white"
                                                                         : "bg-black/40 border-zinc-800 text-zinc-400 border hover:border-zinc-600"
@@ -1317,24 +1257,28 @@ export default function CreateEvent() {
                                 )}
 
                                 <div className = 'space-y-4'>
-                                    <ToggleSwitch
+                                    <Controller
                                         name = 'is_paid_event'
-                                        label = "Paid Event"
-                                        description = "Enable ticket pricing for this event."
-                                        icon = {IndianRupee}
-                                        checked = {formData.is_paid_event}
-                                        onChange = {handleChange}
-                                        activeColor = 'bg-orange-500'
+                                        control = {control}
+                                        render = {({field}) => (
+                                            <ToggleSwitch
+                                                name = {field.name}
+                                                label = "Paid Event"
+                                                description = "Enable ticket pricing for this event."
+                                                icon = {IndianRupee}
+                                                checked = {field.value}
+                                                onChange = {(n, v) => field.onChange(v)}
+                                                activeColor = 'bg-orange-500'
+                                            />
+                                        )}
                                     />
 
-                                    {formData.is_paid_event && (
+                                    {wIsPaidEvent && (
                                         <div className = "pl-4 border-l-2 border-zinc-800 ml-4 animate-in slide-in-from-top-2 fade-in duration-300">
                                             <FormInput
                                                 label = "Price (INR)"
                                                 type = 'number'
-                                                name = 'ticket_price'
-                                                value = {formData.ticket_price}
-                                                onChange = {handleChange}
+                                                {...register('ticket_price')}
                                                 className = "text-2xl font-bold text-white bg-black/50 border-zinc-700 focus:border-orange-500"
                                                 icon = {IndianRupee}
                                                 error = {pageErrors.ticket_price}
@@ -1359,10 +1303,8 @@ export default function CreateEvent() {
                                         <FormInput 
                                             label = "Maximum Attendees"
                                             type = 'number'
-                                            name = 'capacity'
+                                            {...register('capacity')}
                                             placeholder = "e.g., 500"
-                                            value = {formData.capacity}
-                                            onChange = {handleChange}
                                             className = "text-2xl font-bold text-white bg-black/50 border-zinc-700 focus:border-blue-500"
                                             icon = {Users}
                                             error = {pageErrors.capacity}
@@ -1375,7 +1317,7 @@ export default function CreateEvent() {
                                 <div 
                                     className = {`
                                         p-4 rounded-xl border transition-all duration-300
-                                        ${formData.max_tickets_per_user > 1
+                                        ${wMaxTickets > 1
                                             ? "bg-zinc-900 border-indigo-500/30"
                                             : "bg-zinc-900/30 border-zinc-800"
                                         }
@@ -1406,13 +1348,13 @@ export default function CreateEvent() {
                                             </button>
 
                                             <span className = "text-xl font-mono font-bold text-white w-6 text-center">
-                                                {formData.max_tickets_per_user}
+                                                {wMaxTickets}
                                             </span>
                                         
                                             <button
                                                 type = 'button'
                                                 onClick = {() => handleTicketsChange(1)}
-                                                disabled = {(hasCapacityLimit && formData.capacity && formData.max_tickets_per_user >= parseInt(formData.capacity)) || formData.max_tickets_per_user >= 10}
+                                                disabled = {(hasCapacityLimit && watch('capacity') && wMaxTickets >= parseInt(watch('capacity'))) || wMaxTickets >= 10}
                                                 className = "p-3 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
                                                 <Plus className = "h-4 w-4" />
@@ -1437,12 +1379,10 @@ export default function CreateEvent() {
                                     <div className = "pl-4 border-l-2 border-zinc-800 ml-4 animate-in slide-in-from-top-2 fade-in duration-300">
                                         <div className = "bg-zinc-900/50 p-5 rounded-xl border border-zinc-800/50 flex flex-col md:flex-row gap-6 items-start md:items-center">
                                             <div className = "flex-1 w-full">
-                                                <FormInput 
+                                                <FormInput
                                                     label = "Cutoff Birth Date"
                                                     type = 'date'
-                                                    name = 'age_restriction_cutoff'
-                                                    value = {formData.age_restriction_cutoff}
-                                                    onChange = {handleChange}
+                                                    {...register('age_restriction_cutoff')}
                                                     error = {pageErrors.age_restriction_cutoff}
                                                     required = {hasAgeLimit}
                                                     className = "bg-black/50 border-zinc-700 focus:border-red-500 w-full"
@@ -1483,48 +1423,55 @@ export default function CreateEvent() {
                                         {name : 'collect_college_school', label : "College/School"},
                                         {name : 'collect_student_id', label : "Student ID/USN"},
                                     ].map((field) => (
-                                        <label
+                                        <Controller
                                             key = {field.name}
-                                            className = {`
-                                                flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all active:scale-[0.98] 
-                                                ${formData[field.name] 
-                                                    ? "bg-zinc-900 border-pink-500/50" 
-                                                    : "bg-black/20 border-zinc-800"
-                                                }
-                                            `}
-                                        >
-                                            <span 
-                                                className = {`
-                                                    text-sm font-bold 
-                                                    ${formData[field.name] 
-                                                        ? 'text-white' 
-                                                        : 'text-zinc-500'
-                                                    }
-                                                `}
-                                            >
-                                                {field.label}
-                                            </span>
+                                            name = {field.name}
+                                            control = {control}
+                                            render = {({field : {value, onChange}}) => (
+                                                <label
+                                                    key = {field.name}
+                                                    className = {`
+                                                        flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all active:scale-[0.98] 
+                                                        ${value
+                                                            ? "bg-zinc-900 border-pink-500/50" 
+                                                            : "bg-black/20 border-zinc-800"
+                                                        }
+                                                    `}
+                                                >
+                                                    <span 
+                                                        className = {`
+                                                            text-sm font-bold 
+                                                            ${value 
+                                                                ? 'text-white' 
+                                                                : 'text-zinc-500'
+                                                            }
+                                                        `}
+                                                    >
+                                                        {field.label}
+                                                    </span>
 
-                                            <div 
-                                                className = {`
-                                                    h-5 w-5 rounded border flex items-center justify-center transition-colors 
-                                                    ${formData[field.name] 
-                                                        ? "bg-pink-500 border-pink-500"
-                                                        : "border-zinc-700 bg-zinc-900"
-                                                    }
-                                                `}
-                                            >
-                                                {formData[field.name] && <Check className = "h-3 w-3 text-white" />}
-                                            </div>
+                                                    <div 
+                                                        className = {`
+                                                            h-5 w-5 rounded border flex items-center justify-center transition-colors 
+                                                            ${value 
+                                                                ? "bg-pink-500 border-pink-500"
+                                                                : "border-zinc-700 bg-zinc-900"
+                                                            }
+                                                        `}
+                                                    >
+                                                        {value && <Check className = "h-3 w-3 text-white" />}
+                                                    </div>
 
-                                            <input 
-                                                type = 'checkbox'
-                                                name = {field.name}
-                                                checked = {formData[field.name]}
-                                                onChange = {handleChange}
-                                                className = 'hidden'
-                                            />
-                                        </label>
+                                                    <input 
+                                                        type = 'checkbox'
+                                                        name = {field.name}
+                                                        checked = {value}
+                                                        onChange = {(e) => onChange(e.target.checked)}
+                                                        className = 'hidden'
+                                                    />
+                                                </label>
+                                            )}
+                                        />
                                     ))}
                                 </div>
                             </div>
@@ -1534,7 +1481,7 @@ export default function CreateEvent() {
                             <SolidAnimatedButton
                                 type = 'submit'
                                 disabled = {loading || isCompressing}
-                                className = "w-full py-4 text-lg"
+                                className = "w-full py-4 text-lg transform-gpu"
                             >
                                 {loading ? (
                                     <span className = "flex items-center gap-2">
