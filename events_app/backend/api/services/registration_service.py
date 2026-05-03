@@ -149,7 +149,9 @@ class EventRegistrationService:
             if profile_needs_save:
                 student_profile.save()
                 
-            created_registrations = []
+            tickets_to_create = []
+
+            current_booking_id = uuid.uuid4()
 
             for i, attendee in enumerate(attendees_data):
                 is_buyer = (i == 0)
@@ -192,7 +194,8 @@ class EventRegistrationService:
                 if attendee.get('date_of_birth'):
                     guest_extra_info['date_of_birth'] = str(attendee.get('date_of_birth'))
 
-                registration = Registration.objects.create(
+                # Instantiate in memory, don't create
+                registration = Registration(
                     student = student_profile,
                     event = locked_event,
                     email = reg_email,
@@ -202,10 +205,13 @@ class EventRegistrationService:
                     is_cancelled = False,
                     payment_status = Registration.PaymentStatus.PENDING if locked_event.is_paid_event else Registration.PaymentStatus.VERIFIED,
                     razorpay_order_id = razorpay_order['id'] if locked_event.is_paid_event else None,
-                    amount_paid = event.ticket_price if locked_event.is_paid_event else 0.00
+                    amount_paid = event.ticket_price if locked_event.is_paid_event else 0.00,
+                    booking_id = current_booking_id 
                 )
 
-                created_registrations.append(registration)
+                tickets_to_create.append(registration)
+            
+            created_registrations = Registration.objects.bulk_create(tickets_to_create)
 
         if locked_event.is_paid_event:
 
