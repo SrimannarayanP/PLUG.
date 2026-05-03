@@ -3,6 +3,7 @@
 
 import {ArrowRight, Check, ChevronDown, Loader2} from 'lucide-react'
 import {useState} from 'react'
+import {useForm} from 'react-hook-form'
 import {toast} from 'react-hot-toast'
 import {Link, useNavigate} from 'react-router-dom'
 
@@ -15,60 +16,86 @@ import api from '../api/api'
 import {useAuth} from '../context/AuthContext'
 
 
+const HOST_TYPE_OPTIONS = [
+    {value : 'club', label : "School/College Club/Society"},
+    {value : 'institution', label : 'Institution'},
+    {value : 'promoter', label : "Independent Promoter"}
+]
+
+const FESTIVE_GRADIENT = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
+
+
 export default function LoginSignup() {
 
     const [isLogin, setIsLogin] = useState(true)
     const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState('')
+    const [apiError, setApiError] = useState('')
 
     const [isHostTypeOpen, setIsHostTypeOpen] = useState(false)
-    const hostTypeOptions = [
-        {value : 'club', label : "School/College Club/Society"},
-        {value : 'institution', label : 'Institution'},
-        {value : 'promoter', label : "Independent Promoter"}
-    ]
-
-    const [formData, setFormData] = useState({
-        first_name : '',
-        last_name : '',
-        email : '',
-        password : '',
-        confirmPassword : '',
-        register_as_host : false,
-        organisation_name : '',
-        host_type : 'club' // Default
-    })
 
     const navigate = useNavigate()
-
     const {login} = useAuth()
 
-    const handleHostToggle = (isHost) => {
-        setFormData(prev => ({...prev, register_as_host : isHost}))
-    }
+    const {register : loginRegister, handleSubmit : loginHandleSubmit, reset : loginReset, formState : {errors : loginErrors}} = useForm({
+        defaultValues : {
+            email : '',
+            password : ''
+        },
+        mode : 'onSubmit'
+    })
 
-    const handleChange = (e) => {
-        const {name, value} = e.target
-
-        setFormData(prev => ({...prev, [name] : value}))
-
-        if (error) setError('')
-    }
-
-    const handleToggle = () => {
-        setIsLogin(prev => !prev)
-        // Reset form but keep role preference if selected
-        setFormData(prev => ({
+    const {
+        register : signupRegister,
+        handleSubmit : signupHandleSubmit,
+        watch : signupWatch,
+        setValue : signupSetValue,
+        getValues : signupGetValues,
+        reset : signupReset,
+        formState : {errors : signupErrors}
+    } = useForm({
+        defaultValues : {
             first_name : '',
             last_name : '',
             email : '',
             password : '',
             confirmPassword : '',
-            register_as_host : prev.register_as_host,
-            organisation_name : prev.organisation_name,
-            host_type : prev.host_type
-        }))
-        setError('')
+            register_as_host : false,
+            organisation_name : '',
+            host_type : 'club'
+        },
+        mode : 'onSubmit'
+    })
+
+    const isHost = signupWatch('register_as_host')
+    const currentHostType = signupWatch('host_type')
+
+    const handleHostToggle = (status) => {
+        setValue('register_as_host', status, {shouldValidate : true})
+    }
+
+    const handleToggle = () => {
+        setIsLogin(prev => !prev)
+        setApiError('')
+
+        const currentValues = getValues()
+
+        // Reset form but keep role preference if selected
+        if (isLogin) {
+            const {register_as_host, organisation_name, host_type} = signupGetValues()
+
+            signupReset({
+                first_name : '',
+                last_name : '',
+                email : '',
+                password : '',
+                confirmPassword : '',
+                register_as_host,
+                organisation_name,
+                host_type
+            })
+        } else {
+            loginReset()
+        }
     }
 
     
@@ -81,30 +108,20 @@ export default function LoginSignup() {
                 : `Client error : ${error.message}`
         }
 
-        if (typeof data.detail === 'string') {
-            return data.detail
-        }
+        if (typeof data.detail === 'string') return data.detail
 
-        if (typeof data === 'string') {
-            return data
-        }
+        if (typeof data === 'string') return data
 
         if (typeof data === 'object') {
             const firstKey = Object.keys(data)[0]
 
-            if (!firstKey) {
-                return 'Something went wrong.'
-            }
+            if (!firstKey) return "Something went wrong."
 
             const firstError = data[firstKey]
 
-            if (Array.isArray(firstError)) {
-                return `${firstKey.replace(/_/g, ' ')} : ${firstError[0]}`
-            }
+            if (Array.isArray(firstError)) return `${firstKey.replace(/_/g, ' ')} : ${firstError[0]}`
 
-            if (typeof firstError === 'string') {
-                return `${firstKey.replace(/_/g, ' ')} : ${firstError}`
-            }
+            if (typeof firstError === 'string') return `${firstKey.replace(/_/g, ' ')} : ${firstError}`
         }
 
         return 'Something went wrong.'
@@ -113,93 +130,24 @@ export default function LoginSignup() {
     const handleError = (error, action) => {
         console.group(`${action} failed`)
 
-        if (error.response) {
-            console.error("Status:", error.response.status)
-            console.error("Headers:", error.response.headers)
-            console.error("Data:", error.response.data)
-
-            const message = getApiErrorMessage(error)
-            setError(message)
-            toast.error(message)
-        } else if (error.request) {
-            console.error("No response received: ", error.request)
-            
-            const message = getApiErrorMessage(error)
-            setError(message)
-            toast.error(message)
-        } else {
-            console.error("Request setup error : ", error.message)
-
-            const message = getApiErrorMessage(error)
-            setError(message)
-            toast.error(message)
-        }
+        const message = getApiErrorMessage(error)
+        
+        setApiError(message)
+        toast.error(message)
 
         console.groupEnd()
     }
 
-    const handleSubmit = async (e) => {
-        e.preventDefault()
-
+    const onLoginSubmit = async (data) => {
         setIsLoading(true)
-        setError('')
+        setApiError('')
 
-        // Validation Logic
-        if (!formData.email || !formData.password) {
-            setError("Email & password are required")
-            setIsLoading(false)
-
-            return
-        }
-
-        if (!isLogin) {
-            if (formData.password !== formData.confirmPassword) {
-                setError("Passwords don't match")
-                setIsLoading(false)
-
-                return
-            }
-
-            if (!formData.first_name || !formData.last_name) {
-                setError("Name is required for registration")
-                setIsLoading(false)
-
-                return
-            }
-        }
-
-        // API Endpoint Selection
-        const endpoint = isLogin ? '/api/auth/login/' : '/api/auth/signup/'
-    
-        // Payload Construction
-        let payload = {
-            email : formData.email,
-            password : formData.password,
-        }
-
-        if (!isLogin) {
-            payload = {
-                ...payload,
-                first_name : formData.first_name,
-                last_name : formData.last_name,
-                register_as_host : formData.register_as_host
-            }
-
-            if (formData.register_as_host) {
-                if (!formData.organisation_name.trim()) {
-                    setError("Organisation/Club Name is required.")
-                    setIsLoading(false)
-
-                    return
-                }
-
-                payload.organisation_name = formData.organisation_name
-                payload.host_type = formData.host_type
-            }
-        }
-
+        
         try {
-            const response = await api.post(endpoint, payload)
+            const response = await api.post('/api/auth/login/', {
+                email : data.email,
+                password : data.password
+            })
 
             if (response.status === 200 || response.status === 201) {
                 const user = response.data?.user || null
@@ -207,26 +155,10 @@ export default function LoginSignup() {
                 login(response.data.access, response.data.refresh)
 
                 // Clear form
-                setFormData({
-                    first_name : '',
-                    last_name : '', 
-                    email : '', 
-                    password : '', 
-                    confirmPassword : '',
-                    register_as_host : false,
-                    organisation_name : '',
-                    host_type : 'club'
-                })
+                loginReset()
 
                 // Prevent ProtectedRoute race condition.
                 setTimeout(() => {
-                    // If it's a signup, always redirect the user to onboarding
-                    if (!isLogin) {
-                        navigate('/verify-email')
-                        
-                        return
-                    }
-                    
                     // If login, check the profile status.
                     if (user) {
                         if (user.is_email_verified === false) {
@@ -246,14 +178,46 @@ export default function LoginSignup() {
                 }, 50)
             }
         } catch (error) {
-            handleError(error, isLogin ? 'Login' : 'Signup')
+            handleError(error, 'Login')
+        } finally {
+            setIsLoading(false)
+        }   
+    }
+
+    const onSignupSubmit = async (data) => {
+        setIsLoading(true)
+        setApiError('')
+
+        const payload = {
+            email : data.email,
+            password : data.password,
+            first_name : data.first_name,
+            last_name : data.last_name,
+            register_as_host : data.register_as_host,
+            ...(data.register_as_host && {
+                organisation_name : data.organisation_name,
+                host_type : data.host_type
+            })
+        }
+
+        try {
+            const response = await api.post('/api/auth/signup/', payload)
+
+            if (response.status === 201) {
+                login(response.data.access, response.data.refresh)
+
+                signupReset()
+
+                setTimeout(() => {
+                    navigate('/verify-email')
+                }, 50)
+            }
+        } catch (error) {
+            handleError(error, 'Signup')
         } finally {
             setIsLoading(false)
         }
-        
     }
-
-    const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
 
     return (
 
@@ -276,14 +240,14 @@ export default function LoginSignup() {
                 {/* Left side : Logo & tagline */}
                 <div className = "flex flex-col items-center lg:items-start text-center lg:text-left space-y-6 md:space-y-8 pt-8 lg:pt-0 order-1 lg:order-none">
                     <div className = "relative group">
-                        <div className = {`absolute -inset-10 blur-3xl -z-10 rounded-full opacity-40 transition-opacity duration-1000 group-hover:opacity-60 ${festiveGradient}`} />
+                        <div className = {`absolute -inset-10 blur-3xl -z-10 rounded-full opacity-40 transition-opacity duration-1000 group-hover:opacity-60 ${FESTIVE_GRADIENT}`} />
 
                         <div className = "flex flex-col items-center lg:items-start relative z-10">
                             {/* Logo Box */}
                             <div className = "h-20 sm:h-28 md:h-32 w-20 sm:w-28 md:w-32 relative mb-4">
                                 <div className = "absolute inset-0 bg-[#09090b] border-4 border-zinc-800 rounded-2xl transform -skew-x-12 overflow-hidden shadow-2xl">
                                     {/* Inner gradient core */}
-                                    <div className = {`absolute inset-0 opacity-90 ${festiveGradient}`} />
+                                    <div className = {`absolute inset-0 opacity-90 ${FESTIVE_GRADIENT}`} />
 
                                     {/* P shape overlay */}
                                     <div 
@@ -300,7 +264,7 @@ export default function LoginSignup() {
                                 PLUG
 
                                 {/* Festive gradient in the period */}
-                                <span className = {`text-transparent bg-clip-text ${festiveGradient}`}>.</span>
+                                <span className = {`text-transparent bg-clip-text ${FESTIVE_GRADIENT}`}>.</span>
                             </h1>
                         </div>
                     </div>
@@ -308,7 +272,7 @@ export default function LoginSignup() {
                     <p className = "text-lg sm:text-xl lg:text-3xl text-zinc-300 max-w-md font-light tracking-wide leading-relaxed">
                         Campus events. <br />
 
-                        <span className = {`text-transparent font-black bg-clip-text ${festiveGradient} text-3xl sm:text-4xl lg:text-5xl uppercase tracking-tighter`}>
+                        <span className = {`text-transparent font-black bg-clip-text ${FESTIVE_GRADIENT} text-3xl sm:text-4xl lg:text-5xl uppercase tracking-tighter`}>
                             Redefined.
                         </span>
                     </p>
@@ -317,12 +281,12 @@ export default function LoginSignup() {
                 {/* Right side : Login/Signup form */}
                 <div className = "w-full max-w-md mx-auto order-2 lg:order-none pb-8 lg:pb-0">
                     <div className = "relative w-full max-w-md min-h-[580px] sm:min-h-[600px] bg-[#18181b]/90 backdrop-blur-xl border border-zinc-800/50 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/5">
-                        {error && (
+                        {apiError && (
                             <div className = "absolute top-0 left-0 right-0 p-3 bg-red-950/90 border-b border-red-500/20 backdrop-blur-md text-center animate-in slide-in-from-top z-50">
                                 <p className = "text-xs sm:text-sm font-bold text-red-400 flex items-center justify-center gap-2">
                                     <span className = "h-2 w-2 rounded-full bg-red-500 animate-pulse" />
                                     
-                                    {error}
+                                    {apiError}
                                 </p>
                             </div>
                         )}
@@ -340,7 +304,7 @@ export default function LoginSignup() {
                             >
                                 <form 
                                     className = "p-6 sm:p-8 h-full flex flex-col justify-center gap-6" 
-                                    onSubmit = {handleSubmit} 
+                                    onSubmit = {loginHandleSubmit(onLoginSubmit)}
                                     noValidate
                                 >
                                     <div className = "text-center space-y-1">
@@ -356,26 +320,24 @@ export default function LoginSignup() {
                                     <div className = 'space-y-5'>
                                         <FormInput
                                             id = 'login-email'
-                                            name = 'email' 
                                             type = 'email'
                                             placeholder = "Email Address"
-                                            value = {formData.email} 
-                                            onChange = {handleChange} 
+                                            {...loginRegister('email', {required : "Email is required."})}
+                                            error = {loginErrors.email?.message}
                                         />
 
                                         <div className = 'space-y-2'>
                                             <FormInput 
-                                                id = 'login-password' 
-                                                name = 'password' 
-                                                type = 'password' 
-                                                placeholder = 'Password' 
-                                                value = {formData.password} 
-                                                onChange = {handleChange} 
+                                                id = 'login-password'
+                                                type = 'password'
+                                                placeholder = 'Password'
+                                                {...loginRegister('password', {required : "Password is required."})}
+                                                error = {loginErrors.password?.message}
                                             />
 
                                             {/* Forgot Password link */}
                                             <div className = "flex justify-end">
-                                                <Link 
+                                                <Link
                                                     to = '/request-password'
                                                     className = "text-xs font-bold text-zinc-500 hover:text-pink-500 transition-colors uppercase tracking-widest py-1"
                                                 >
@@ -414,12 +376,30 @@ export default function LoginSignup() {
                             </div>
 
                             {/* Signup form */}
-                            <div className = {`absolute inset-0 transition-all duration-700 ease-[cubic-bezier(0.23, 1, 0.32, 1)] ${!isLogin ? "translate-y-0 opacity-100" : "translate-y-full opacity-0 pointer-events-none"}`}>
+                            <div
+                                className = {`
+                                    absolute inset-0 transition-all duration-700 ease-[cubic-bezier(0.23, 1, 0.32, 1)]
+                                    ${!isLogin
+                                        ? "translate-y-0 opacity-100"
+                                        : "translate-y-full opacity-0 pointer-events-none"
+                                    }
+                                `}
+                            >
                                 <form 
-                                    className = "p-6 sm:p-8 h-full overflow-y-auto custom-scrollbar flex flex-col" 
-                                    onSubmit = {handleSubmit} 
+                                    className = "p-6 sm:p-8 h-full overflow-y-auto custom-scrollbar flex flex-col"
+                                    onSubmit = {signupHandleSubmit(onSignupSubmit)}
                                     noValidate
                                 >
+                                    <input
+                                        type = 'hidden'
+                                        {...signupRegister('register_as_host')}
+                                    />
+
+                                    <input
+                                        type = 'hidden'
+                                        {...signupRegister('host_type')}
+                                    />
+
                                     <div className = "flex-shrink-0 text-center mb-6 pt-2">
                                         <h2 className = "text-2xl sm:text-3xl font-black text-white uppercase tracking-tighter">
                                             Join PLUG.
@@ -429,7 +409,7 @@ export default function LoginSignup() {
                                             Already have an account?
 
                                             <button 
-                                                type = 'button' 
+                                                type = 'button'
                                                 onClick = {handleToggle} 
                                                 className = "font-bold text-white hover:text-pink-500 ml-2 transition-colors"
                                             >
@@ -444,7 +424,7 @@ export default function LoginSignup() {
                                             onClick = {() => handleHostToggle(false)}
                                             className = {`
                                                 cursor-pointer rounded-xl p-[1px] relative overflow-hidden group transition-all duration-300
-                                                ${!formData.register_as_host
+                                                ${!isHost
                                                     ? 'shadow-[0_0_25px_rgba(236, 72, 153, 0.3)]'
                                                     : 'hover:bg-zinc-800/50'
                                                 }
@@ -453,7 +433,7 @@ export default function LoginSignup() {
                                             <div
                                                 className = {`
                                                     relative h-full bg-[#18181b] rounded-[11px] p-3 flex flex-col items-center justify-center gap-2
-                                                    ${!formData.register_as_host
+                                                    ${!isHost
                                                         ? 'bg-[#18181b]/90'
                                                         : ''
                                                     }
@@ -462,13 +442,13 @@ export default function LoginSignup() {
                                                 <div
                                                     className = {`
                                                         h-5 w-5 rounded-full flex items-center justify-center transition-all
-                                                        ${!formData.register_as_host
-                                                            ? festiveGradient
+                                                        ${!isHost
+                                                            ? FESTIVE_GRADIENT
                                                             : "border border-zinc-600 bg-zinc-900"
                                                         }
                                                     `}
                                                 >
-                                                    {!formData.register_as_host && (
+                                                    {!isHost && (
                                                         <Check
                                                             size = {12}
                                                             className = "text-white font-bold"
@@ -479,7 +459,7 @@ export default function LoginSignup() {
                                                 <span
                                                     className = {`
                                                         text-xs font-bold uppercase tracking-wider
-                                                        ${!formData.register_as_host
+                                                        ${!isHost
                                                             ? 'text-white'
                                                             : "text-zinc-500 group-hover:text-zinc-300"
                                                         }
@@ -494,7 +474,7 @@ export default function LoginSignup() {
                                             onClick = {() => handleHostToggle(true)}
                                             className = {`
                                                 cursor-pointer rounded-xl p-[1px] relative overflow-hidden group transition-all duration-300
-                                                ${formData.register_as_host
+                                                ${isHost
                                                     ? 'shadow-[0_0_25px_rgba(236, 72, 153, 0.3)]'
                                                     : 'hover:bg-zinc-800/50'
                                                 }
@@ -503,7 +483,7 @@ export default function LoginSignup() {
                                             <div
                                                 className = {`
                                                     relative h-full bg-[#18181b] rounded-[11px] p-3 flex flex-col items-center justify-center gap-2
-                                                    ${formData.register_as_host
+                                                    ${isHost
                                                         ? 'bg-[#18181b]/90'
                                                         : ''
                                                     }
@@ -512,13 +492,13 @@ export default function LoginSignup() {
                                                 <div
                                                     className = {`
                                                         h-5 w-5 rounded-full flex items-center justify-center transition-all
-                                                        ${formData.register_as_host
-                                                            ? festiveGradient
+                                                        ${isHost
+                                                            ? FESTIVE_GRADIENT
                                                             : "border border-zinc-600 bg-zinc-900"
                                                         }
                                                     `}
                                                 >
-                                                    {formData.register_as_host && ( 
+                                                    {isHost && ( 
                                                         <Check
                                                             size = {12}
                                                             className = "text-white font-bold"
@@ -529,7 +509,7 @@ export default function LoginSignup() {
                                                 <span
                                                     className = {`
                                                         text-xs font-bold uppercase tracking-wider
-                                                        ${formData.register_as_host
+                                                        ${isHost
                                                             ? 'text-white'
                                                             : "text-zinc-500 group-hover:text-zinc-300"
                                                         }
@@ -544,52 +524,50 @@ export default function LoginSignup() {
                                     <div className = "space-y-4 flex-grow">
                                         <div className = "grid grid-cols-2 gap-3 sm:gap-4">
                                             <FormInput 
-                                                id = 'signup-firstname' 
-                                                name = 'first_name' 
-                                                type = 'text' 
+                                                id = 'signup-firstname'
+                                                type = 'text'
                                                 placeholder = "First Name"
-                                                value = {formData.first_name} 
-                                                onChange = {handleChange}
+                                                {...signupRegister('first_name', {required : "First name is required"})}
+                                                error = {signupErrors.first_name?.message}
                                             />
 
                                             <FormInput
                                                 id = 'signup-lastname'
-                                                name = 'last_name'
                                                 type = 'text'
                                                 placeholder = "Last Name"
-                                                value = {formData.last_name}
-                                                onChange = {handleChange}
+                                                {...signupRegister('last_name', {required : "Last name is required."})}
+                                                error = {signupErrors.last_name?.message}
                                             />
                                         </div>
 
                                         <FormInput 
-                                            id = 'signup-email' 
-                                            name = 'email' 
-                                            type = 'email' 
-                                            placeholder = "Email ID" 
-                                            value = {formData.email} 
-                                            onChange = {handleChange} 
+                                            id = 'signup-email'
+                                            type = 'email'
+                                            placeholder = "Email ID"
+                                            {...signupRegister('email', {required : "Email is required."})}
+                                            error = {signupErrors.email?.message}
                                         />
 
                                         <FormInput 
-                                            id = 'signup-password' 
-                                            name = 'password' 
-                                            type = 'password' 
-                                            placeholder = 'Password' 
-                                            value = {formData.password} 
-                                            onChange = {handleChange}
+                                            id = 'signup-password'
+                                            type = 'password'
+                                            placeholder = 'Password'
+                                            {...signupRegister('password', {required : "Password is required."})}
+                                            error = {signupErrors.password?.message}
                                         />
 
                                         <FormInput 
-                                            id = 'signup-confirmPassword' 
-                                            name = 'confirmPassword' 
-                                            type = 'password' 
-                                            placeholder = "Confirm Password" 
-                                            value = {formData.confirmPassword} 
-                                            onChange = {handleChange} 
+                                            id = 'signup-confirmPassword'
+                                            type = 'password'
+                                            placeholder = "Confirm Password"
+                                            {...signupRegister('confirmPassword', {
+                                                required : "Please confirm your password.",
+                                                validate : val => val === signupGetValues('password') || "Passwords don't match"
+                                            })}
+                                            error = {signupErrors.confirmPassword?.message}
                                         />
 
-                                        {formData.register_as_host && (
+                                        {isHost && (
                                             <div className = "space-y-5 pt-6 mt-4 pb-4 border-t border-zinc-800/50 animate-in slide-in-from-top-2 duration-300">
                                                 <div className = "text-center space-y-1.5 mb-4">
                                                     <h3 className = "text-sm font-bold text-white uppercase tracking-widest">
@@ -603,11 +581,10 @@ export default function LoginSignup() {
 
                                                 <FormInput 
                                                     id = 'signup-orgname'
-                                                    name = 'organisation_name'
                                                     type = 'text'
                                                     placeholder = "Organisation/Club Name"
-                                                    value = {formData.organisation_name}
-                                                    onChange = {handleChange}
+                                                    {...signupRegister('organisation_name', {required : "Organisation Name is required."})}
+                                                    error = {signupErrors.organisation_name?.message}
                                                 />
 
                                                 <div className = "relative z-50">
@@ -635,8 +612,8 @@ export default function LoginSignup() {
                                                            }
                                                         `}
                                                     >
-                                                        <span className = {formData.host_type ? 'text-white' : 'text-zinc-500'}>
-                                                            {hostTypeOptions.find(o => o.value === formData.host_type)?.label || "Select Host Type"}
+                                                        <span className = {currentHostType ? 'text-white' : 'text-zinc-500'}>
+                                                            {HOST_TYPE_OPTIONS.find(o => o.value === currentHostType)?.label || "Select Host Type"}
                                                         </span>
 
                                                         <ChevronDown
@@ -658,24 +635,24 @@ export default function LoginSignup() {
                                                             />
 
                                                             <div className = "absolute top-full left-0 w-full mt-2 bg-[#18181b] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                                                                {hostTypeOptions.map((opt) => (
+                                                                {HOST_TYPE_OPTIONS.map((opt) => (
                                                                     <div
                                                                         key = {opt.value}
                                                                         onClick = {() => {
-                                                                            handleChange({target : {name : 'host_type', value : opt.value}})
+                                                                            signupSetValue('host_type', opt.value, {shouldValidate : true})
                                                                             setIsHostTypeOpen(false)
                                                                         }}
                                                                         className = {`
                                                                             px-4 py-3.5 text-sm cursor-pointer transition-colors flex items-center justify-between
-                                                                            ${formData.host_type === opt.value
+                                                                            ${currentHostType === opt.value
                                                                                 ? "bg-yellow-500/10 text-yellow-500 font-bold"
                                                                                 : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-                                                                            }    
+                                                                            }
                                                                         `}
                                                                     >
                                                                         {opt.label}
 
-                                                                        {formData.host_type === opt.value && <Check className = "h-4 w-4 text-yellow-500" />}
+                                                                        {currentHostType === opt.value && <Check className = "h-4 w-4 text-yellow-500" />}
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -704,6 +681,6 @@ export default function LoginSignup() {
             </div>
         </main>
 
-    );
+    )
 
 }
