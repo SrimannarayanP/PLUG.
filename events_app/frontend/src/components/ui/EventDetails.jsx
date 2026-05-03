@@ -3,7 +3,7 @@
 
 import DOMPurify from 'dompurify'
 import {AlertCircle, Calendar, Clock, Download, ExternalLink, FileText, Laptop, MapPin, Mail, Phone, TicketIcon, User, X} from 'lucide-react'
-import {useEffect, useState} from 'react'
+import {useCallback, useEffect, useState} from 'react'
 
 import apiPublic from '../../api/apiPublic'
 
@@ -12,39 +12,33 @@ import {getScarcityState} from '../../utils/ticketHelper'
 
 
 const CountdownTimer = ({deadline, onExpire}) => {
-    const [timeLeft, setTimeLeft] = useState({
-        days : 0,
-        hours : 0, 
-        minutes : 0
-    })
+    const [timeLeft, setTimeLeft] = useState({days : 0, hours : 0, minutes : 0})
 
-    useEffect(() => {
-        const calculate = () => {
-            const diff = new Date(deadline) - new Date()
+    const calculate = useCallback(() => {
+        const diff = new Date(deadline) - new Date()
 
-            if (diff <= 0) {
-                onExpire()
+        if (diff <= 0) {
+            onExpire()
 
-                return {days : 0, hours : 0, minutes : 0}
-            }
-
-            return {
-
-                days : Math.floor(diff / (1000 * 60 * 60 *24)),
-                hours : Math.floor((diff / (1000 * 60 * 60)) % 24),
-                minutes : Math.floor((diff / 1000 / 60) % 60)
-            
-            }
+            return {days : 0, hours : 0, minutes : 0}
         }
 
+        return {
+            days : Math.floor(diff / (1000 * 60 * 60 *24)),
+            hours : Math.floor((diff / (1000 * 60 * 60)) % 24),
+            minutes : Math.floor((diff / 1000 / 60) % 60)
+        }
+    }, [deadline, onExpire])
+
+    useEffect(() => {
         setTimeLeft(calculate())
 
         const timer = setInterval(() => {
             setTimeLeft(calculate())
-        }, 1000 * 60) // Update every minute
+        }, 1000 * 60)
 
         return () => clearInterval(timer)
-    }, [deadline, onExpire])
+    }, [calculate])
 
     return (
 
@@ -90,9 +84,7 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
         })
     }, [])
 
-    const [isRegistrationClosed, setIsRegistrationClosed] = useState(
-        event?.registration_deadline && new Date(event.registration_deadline) < new Date()
-    )
+    const [isRegistrationClosed, setIsRegistrationClosed] = useState(event?.registration_deadline && new Date(event.registration_deadline) < new Date())
 
     const locationDisplay = event.location_type === 'online'
         ? (event.virtual_location || "Online Event")
@@ -151,7 +143,7 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
     return (
 
         <div 
-            className = "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-6 backdrop-blur-sm transition-all duration-300"
+            className = "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/95 md:bg-black/60 p-0 sm:p-6 md:backdrop-blur-sm transition-all duration-300 transform-gpu"
             onClick = {onClose}
             role = 'dialog'
         >
@@ -164,22 +156,22 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                     {/* Close button */}
                     <button
                         onClick = {onClose}
-                        className = "absolute top-4 right-4 z-30 rounded-full bg-black/50 p-2 text-white backdrop-blur-md transition-colors hover:bg-zinc-800"
+                        className = "absolute top-4 right-4 z-30 rounded-full bg-black/80 md:bg-black/50 p-2 text-white md:backdrop-blur-md transition-colors hover:bg-zinc-800"
                     >
                         <X className = "h-5 w-5" />
                     </button>
 
                     <div className = "flex-1 overflow-y-auto overflow-x-hidden">
                         {/* Event Poster */}
-                        <div className = "relative h-56 sm:h-80 w-full overflow-hidden shrink-0">
+                        <div className = "relative h-56 sm:h-80 w-full overflow-hidden shrink-0 bg-zinc-900">
                             {posterUrl ? (
                                 <img 
                                     src = {posterUrl}
                                     alt = {event.name}
-                                    className = "h-full w-full object-cover"
+                                    className = "h-full w-full object-cover transform-gpu"
                                 />
                             ) : (
-                                <div className = "flex h-full w-full items-center justify-center bg-zinc-900">
+                                <div className = "flex h-full w-full items-center justify-center">
                                     <span className = "text-zinc-700 font-bold uppercase tracking-widest text-xs">
                                         No Poster Available
                                     </span>
@@ -190,21 +182,27 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                             <div className = "absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
 
                             {/* Badge */}
-                            <div className = "absolute top-6 left-6 flex flex-col items-start gap-2">
+                            <div className = "absolute top-6 left-6 flex flex-col items-start gap-2 z-10">
                                 <span
                                     className = {`
-                                        inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white
-                                        backdrop-blur-md
-                                        ${!event.is_native 
-                                            ? 'bg-blue-500/20' 
-                                            : isSoldOut
-                                                ? "bg-orange-500/20 border-orange-500/30"
-                                                : isRegistrationClosed
-                                                    ? "bg-red-500/20 border-red-500/30"
-                                                    : 'bg-orange-500/20'
-                                        }
+                                        inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider
+                                        text-white bg-black/90 md:bg-black/50 md:backdrop-blur-md
                                     `}
                                 >
+                                    <span
+                                        className = {`
+                                            h-2 w-2 rounded-full mr-2
+                                            ${!event.is_native
+                                            ? 'bg-blue-500'
+                                            : isSoldOut
+                                                ? 'bg-orange-500'
+                                                : isRegistrationClosed
+                                                    ? 'bg-red-500/20'
+                                                    : 'bg-orange-500'
+                                            }    
+                                        `}
+                                    />
+
                                     {!event.is_native
                                         ? "External Event"
                                         : isSoldOut
@@ -220,8 +218,8 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                         {/* Text Content */}
                         <div className = "px-5 sm:px-10 pb-8">
                             {/* Title Section */}
-                            <div className = "relative -mt-12 mb-8">
-                                <h2 className = "mb-2 break-words font-black uppercase leading-none tracking-tighter text-white drop-shadow-xl text-3xl sm:text-5xl">
+                            <div className = "relative -mt-12 mb-8 z-20">
+                                <h2 className = "mb-2 break-words font-black uppercase leading-none tracking-tighter text-white text-3xl sm:text-5xl">
                                     {event.name}
                                 </h2>
 
@@ -389,7 +387,7 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                 </div>
 
                 {/* Sticky Footer Area */}
-                <div className = "shrink-0 border-t border-zinc-800 bg-zinc-950 p-4 pb-safe sm:px-10 sm:py-6">
+                <div className = "shrink-0 border-t border-zinc-800 bg-zinc-950 p-4 pb-safe sm:px-10 sm:py-6 transform-gpu">
                     {isRegistrationClosed || isSoldOut ? (
                         <div
                             className = {`
@@ -429,7 +427,12 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                                     </span>
 
                                     {scarcity && (
-                                        <span className = {`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${scarcityStyles[scarcity.status] || ''}`}>
+                                        <span
+                                            className = {`
+                                                inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider
+                                                ${scarcityStyles[scarcity.status] || ''}
+                                            `}
+                                        >
                                             {scarcity.text}
                                         </span>
                                     )}
@@ -439,7 +442,10 @@ export default function EventDetails({event, onClose, onRegisterClick}) {
                             {/* Register Button */}
                             <button
                                 onClick = {handleActionClick}
-                                className = {`group relative flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl ${festiveGradient} px-8 py-3.5 text-sm font-black uppercase tracking-widest text-white shadow-lg transition-all active:scale-95 hover:shadow-[0_0_20px_rgba(236, 72, 153, 0.4)]`}
+                                className = {`
+                                    group relative flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl ${festiveGradient} px-8 py-3.5 text-sm font-black
+                                    uppercase tracking-widest text-white shadow-lg transition-all active:scale-95 hover:shadow-[0_0_20px_rgba(236, 72, 153, 0.4)]
+                                `}
                             >
                                 {event.is_native ? "Register Now" : "External Link"}
 
