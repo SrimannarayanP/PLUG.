@@ -6,7 +6,7 @@ export default function TicketCardSkeleton() {
 
     return (
 
-        <div className = "flex flex-col h-full rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden">
+        <div className = "flex flex-col h-full rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden transform-gpu">
             {/* Image placeholder */}
             <div className = "relative aspect-video w-full bg-zinc-900 animate-pulse border-b border-zinc-800">
                 {/* Status Badge Placeholder */}
