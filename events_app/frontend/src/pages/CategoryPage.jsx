@@ -72,19 +72,13 @@ export default function CategoryPage() {
             } catch (err) {
                 console.error("Failed to fetch category events", err)
 
-                if (isMounted) {
-                    setError("Failed to load events for this category.")
-                }
+                if (isMounted) setError("Failed to load events for this category.")
             } finally {
-                if (isMounted) {
-                    setLoading(false)
-                }
+                if (isMounted) setLoading(false)
             }
         }
 
-        if (id) {
-            fetchEvents()
-        }
+        if (id) fetchEvents()
 
         return () => {isMounted = false}
     }, [id])
@@ -96,10 +90,11 @@ export default function CategoryPage() {
         <div className = "min-h-screen bg-[#09090b] text-white font-sans selection:bg-orange-500 selection:text-white pb-24">
             {/* Background Pattern */}
             <div
-                className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0"
+                className = "fixed inset-0 opacity-[0.03] pointer-events-none z-0 transform-gpu"
                 style = {{
                     backgroundImage : "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-                    backgroundSize : "40px 40px"
+                    backgroundSize : "40px 40px",
+                    contain : 'strict'
                 }}
             />
 
@@ -108,7 +103,7 @@ export default function CategoryPage() {
                     <div className = "flex items-center gap-4">
                         <button
                             onClick = {() => navigate(-1)}
-                            className = "h-10 w-10 flex items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
+                            className = "h-10 w-10 flex items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors transform-gpu"
                         >
                             <ArrowLeft className = "h-5 w-5" />
                         </button>
@@ -142,7 +137,7 @@ export default function CategoryPage() {
                 )}
 
                 {!loading && events.length > 0 && (
-                    <div className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-500">
+                    <div className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-500 transform-gpu">
                         {events.map((event) => (
                             <EventCard
                                 key = {event.id}
