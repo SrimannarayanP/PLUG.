@@ -10,7 +10,10 @@ import {useEffect, useMemo, useState} from 'react'
 
 function useFloatingPaths() {
     // Safe default for server side rendering to prevent hydration mismatch. Default is desktop view.
-    const [pathCount, setPathCount] = useState(36)
+    const [pathConfig, setPathConfig] = useState({
+        count : 36,
+        isMobile : false
+    })
 
     useEffect(() => {
         const mobileQuery = window.matchMedia('(max-width : 640px)')
@@ -18,11 +21,20 @@ function useFloatingPaths() {
         
         const updatePathCount = () => {
             if (mobileQuery.matches) {
-                setPathCount(15)
+                setPathConfig({
+                    count : 8,
+                    isMobile : true
+                })
             } else if (tabletQuery.matches) {
-                setPathCount(24)
+                setPathConfig({
+                    count : 16,
+                    isMobile : false
+                })
             } else {
-                setPathCount(36)
+                setPathConfig({
+                    count : 30,
+                    isMobile : false
+                })
             }
         }
 
@@ -39,11 +51,11 @@ function useFloatingPaths() {
         }
     }, [])
 
-    return pathCount
+    return pathConfig
 }
 
 function FloatingPaths({position}) {
-    const pathCount = useFloatingPaths()
+    const {count : pathCount, isMobile} = useFloatingPaths()
 
     const paths = useMemo(() => {
 
@@ -53,7 +65,8 @@ function FloatingPaths({position}) {
                 ${152 - i * 5 * position} ${343 - i * 6} C${616 - i * 5 * position} ${470 - i * 6} ${684 - i * 5 * position} ${875 - i * 6} ${684 - i * 5 * position} 
                 ${875 - i * 6}`,
             width : Math.min(1.2, 0.6 + i * 0.025),
-            opacity : Math.min(0.6, 0.1 + i * 0.03)
+            opacity : Math.min(0.6, 0.1 + i * 0.03),
+            duration : 20 + Math.random() * 10
         }))
     
     }, [pathCount, position])
@@ -61,13 +74,13 @@ function FloatingPaths({position}) {
     return (
             
         <svg
-            className = "absolute inset-0 w-full h-full text-yellow-400 opacity-60"
+            className = "absolute inset-0 w-full h-full text-orange-500 opacity-40 transform-gpu"
             viewBox = "0 0 696 316"
             preserveAspectRatio = "xMidyMid slice"
             fill = 'none'
         >
             {paths.map((path) => (
-                <motion.path 
+                <motion.path
                     key = {path.id}
                     d = {path.d}
                     stroke = 'currentColor' // Inherits the Yellow from the parent svg class
@@ -79,12 +92,12 @@ function FloatingPaths({position}) {
                         opacity : 0
                     }}
                     animate = {{
-                        pathLength : 1,
-                        opacity : [path.opacity * 0.5, path.opacity, path.opacity * 0.5],
-                        pathOffset : [0, 1, 0]
+                        pathLength : isMobile ? 1 : 1,
+                        opacity : [path.opacity * 0.3, path.opacity, path.opacity * 0.3],
+                        pathOffset : isMobile ? 0 : [0, 1, 0]
                     }}
                     transition = {{
-                        duration : 20 + Math.random() * 10,
+                        duration : path.duration,
                         repeat : Infinity,
                         ease : 'linear',
                         repeatType : 'loop'
@@ -101,12 +114,12 @@ export default function BackgroundPaths() {
 
     return (
 
-        <div className = "absolute inset-0 pointer-events-none overflow-hidden bg-black">
+        <div className = "absolute inset-0 pointer-events-none overflow-hidden bg-black z-0">
             <FloatingPaths position = {1} /> {/* +ve position for 1 flow direction */}
             <FloatingPaths position = {-1} /> {/* -ve position for inverse flow direction */}
 
             {/* Vignette to fade edges */}
-            <div className = "absolute inset-0 bg-gradient-to-t from-black via-transparent to-black opacity-40" />
+            <div className = "absolute inset-0 bg-gradient-to-t from-black via-transparent to-[#09090b] opacity-60" />
         </div>
 
     )
