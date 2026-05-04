@@ -70,14 +70,14 @@ export default function LoginSignup() {
     const currentHostType = signupWatch('host_type')
 
     const handleHostToggle = (status) => {
-        setValue('register_as_host', status, {shouldValidate : true})
+        signupSetValue('register_as_host', status, {shouldValidate : true})
     }
 
     const handleToggle = () => {
         setIsLogin(prev => !prev)
         setApiError('')
 
-        const currentValues = getValues()
+        const currentValues = signupGetValues()
 
         // Reset form but keep role preference if selected
         if (isLogin) {
