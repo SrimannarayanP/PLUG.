@@ -60,6 +60,7 @@ class UserService:
                 name = organisation_name,
                 host_type = host_type,
                 school_college = school_college,
+                unlisted_school_college_data = unlisted_school_college_data if not school_college else {},
                 owner = user
             )
 
@@ -100,6 +101,11 @@ class UserService:
                 profile.host_type = host_type
             if update_school_college:
                 profile.school_college = school_college
+
+                if school_college is not None:
+                    profile.unlisted_school_college_data = {}
+                elif unlisted_school_college_data:
+                    profile.unlisted_school_college_data = unlisted_school_college_data
 
             profile.save()
 
