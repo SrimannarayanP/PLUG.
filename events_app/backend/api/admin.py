@@ -87,6 +87,7 @@ class UnlistedSchoolCollegeAdmin(admin.ModelAdmin):
     def approve_and_convert(self, request, queryset):
         success_count = 0
         student_update_count = 0
+        host_update_count = 0
 
         for school_college_request in queryset:
             with transaction.atomic():
@@ -111,12 +112,26 @@ class UnlistedSchoolCollegeAdmin(admin.ModelAdmin):
 
                     student_update_count += 1
 
+                hosts_to_update = HostProfile.objects.filter(
+                    unlisted_school_college_data__name = school_college_request.name,
+                    unlisted_school_college_data__campus = school_college_request.campus if school_college_request.campus else '',
+                    unlisted_school_college_data__city = school_college_request.city,
+                    unlisted_school_college_data__state = school_college_request.state
+                )
+
+                for host in hosts_to_update:
+                    host.school_college = official_school_college
+                    host.unlisted_school_college_data = {}
+                    host.save(update_fields = ['school_college', 'unlisted_school_college_data'])
+
+                    host_update_count += 1
+
                 school_college_request.delete()
                 success_count += 1
         
         self.message_user(
             request,
-            f"Successfully approved {success_count} colleges. Upgraded {student_update_count} student profiles.",
+            f"Successfully approved {success_count} colleges. Upgraded {student_update_count} student profiles & {host_update_count} host profiles",
             messages.SUCCESS
         )
 
