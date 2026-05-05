@@ -40,7 +40,7 @@ const AnimatedBorderButton = ({children, className = '', onClick, ...props}) => 
             </span>
         </button>
 
-    );
+    )
 
 }
 
