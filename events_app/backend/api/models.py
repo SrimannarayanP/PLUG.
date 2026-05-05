@@ -240,6 +240,8 @@ class HostProfile(TimeStampedModel):
         help_text = "Leave blank if this is an external promoter. Select a college if this is a student club."
     )
 
+    unlisted_school_college_data = models.JSONField(default = dict, blank = True, null = True, help_text = "Stores user input if they selected Other/Unlisted")
+
     def __str__(self):
         status = 'Verified' if self.is_verified else 'Unverified'
 
