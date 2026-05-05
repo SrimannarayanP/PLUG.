@@ -211,6 +211,12 @@ export default function HostDashboard() {
 
     if (!clubProfile || typeof clubProfile !== 'object' || !('host_type' in clubProfile)) return <Unauthorized />
 
+    if (clubProfile.is_verified === false) {
+        navigate('/pending-verification', {replace : true})
+
+        return null
+    }
+
     return (
 
         <div className = "min-h-[calc(100vh-72px)] md:min-h-[calc(100vh-96px)] bg-[#09090b] text-white font-sans flex flex-col md:flex-row relative overflow-x-hidden selection:bg-orange-500 selection:text-white pb-24 md:pb-12">
