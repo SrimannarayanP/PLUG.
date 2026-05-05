@@ -123,7 +123,7 @@ class HostProfileSerializer(serializers.ModelSerializer):
     class Meta:
 
         model = HostProfile
-        fields = ['id', 'name', 'host_type', 'contact_email', 'school_college', 'is_verified', 'owner', 'team_members']
+        fields = ['id', 'name', 'host_type', 'contact_email', 'school_college', 'is_verified', 'owner', 'team_members', 'unlisted_school_college_data']
 
 
 class StudentProfileSerializer(serializers.ModelSerializer):
