@@ -38,7 +38,7 @@ export default function RegistrationModal({event, closeModal}) {
 
     // useFieldArray is a custom hook provided by react-hook-form to manage dynamic fields (attendees). It dynamically adds/removes fields without re-rendering the entire
     // form.
-    const {fields, append, remove} = useArray({control, name : 'attendees'})
+    const {fields, append, remove} = useFieldArray({control, name : 'attendees'})
 
     const [loading, setLoading] = useState(false)
     const [serverError, setServerError] = useState(null)
