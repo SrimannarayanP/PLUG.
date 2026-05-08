@@ -250,11 +250,11 @@ class EventSerializer(serializers.ModelSerializer):
 
         model = Event
         fields = [
-            'age_restriction_cutoff', 'capacity', 'categories', 'category_ids', 'collect_college_school', 'collect_student_id', 'description', 'documents', 'end_date',
-            'event_contacts', 'google_maps_link', 'has_pending_refunds', 'host', 'id', 'is_cancelled', 'is_featured', 'is_internal_event', 'is_native', 'is_paid_event',
-            'is_registration_open', 'is_sold_out', 'location_type', 'max_tickets_per_user', 'name', 'physical_location', 'poster', 'register_link',
-            'registration_deadline', 'remaining_capacity', 'restricted_to_school_college_ids', 'start_date', 'start_date_formatted', 'ticket_price', 'uploaded_documents',
-            'virtual_location'
+            'age_restriction_cutoff', 'capacity', 'categories', 'category_ids', 'collect_college_school', 'collect_phone', 'collect_student_id', 'description',
+            'documents', 'end_date', 'event_contacts', 'google_maps_link', 'has_pending_refunds', 'host', 'id', 'is_cancelled', 'is_featured', 'is_internal_event',
+            'is_native', 'is_paid_event', 'is_registration_open', 'is_sold_out', 'location_type', 'max_tickets_per_user', 'name', 'physical_location', 'poster',
+            'register_link', 'registration_deadline', 'remaining_capacity', 'restricted_to_school_college_ids', 'start_date', 'start_date_formatted', 'ticket_price',
+            'uploaded_documents', 'virtual_location'
         ]
 
     def get_is_internal_event(self, obj):
