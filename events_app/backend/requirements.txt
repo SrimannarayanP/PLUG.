@@ -22,6 +22,7 @@ dotenv==0.9.9
 gunicorn==25.3.0
 idna==3.11
 kombu==5.5.4
+mysqlclient==2.2.7
 packaging==25.0
 pillow==12.0.0
 prompt_toolkit==3.0.52
@@ -29,6 +30,7 @@ psycopg==3.3.3
 psycopg2-binary==2.9.11
 pycparser==2.23
 PyJWT==2.10.1
+PyMySQL==1.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
 pytz==2025.2
@@ -36,8 +38,10 @@ qrcode==8.2
 razorpay==2.0.0
 redis==7.1.0
 requests==2.32.5
+resend==2.30.0
 six==1.17.0
 sqlparse==0.5.3
+typing_extensions==4.15.0
 tzdata==2025.2
 urllib3==2.6.3
 vine==5.1.0
