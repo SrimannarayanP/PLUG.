@@ -168,13 +168,15 @@ class UserSerializer(serializers.ModelSerializer):
     unlisted_school_college_data = serializers.JSONField(write_only = True, required = False, allow_null = True)
 
     profile = serializers.SerializerMethodField()
+    host_profiles = serializers.SerializerMethodField()
+    student_profile = serializers.SerializerMethodField()
 
     class Meta:
 
         model = User
         fields = [
-            'id', 'email', 'password', 'first_name', 'last_name', 'register_as_host', 'organisation_name', 'phone_number', 'date_of_birth', 'student_id_number', 
-            'school_college_id', 'unlisted_school_college_data', 'profile', 'is_email_verified', 'host_type'
+            'date_of_birth', 'email', 'first_name', 'host_profiles', 'host_type', 'id', 'is_email_verified', 'last_name', 'organisation_name', 'password', 'phone_number',
+            'profile', 'register_as_host', 'school_college_id', 'student_id_number', 'student_profile', 'unlisted_school_college_data'
         ]
         extra_kwargs = {
             'password' : {'write_only' : True}, # This ensures that when we're creating a new user, we accept a password but we don't want to return the
@@ -182,6 +184,20 @@ class UserSerializer(serializers.ModelSerializer):
             'id' : {'read_only' : True}
         }
     
+    def get_host_profiles(self, obj):
+        if obj.host_profiles.exists():
+
+            return HostProfileSerializer(obj.host_profiles.all(), many = True).data
+        
+        return None
+    
+    def get_student_profile(self, obj):
+        if hasattr(obj, 'student_profile'):
+
+            return StudentProfileSerializer(obj.student_profile).data
+        
+        return None
+
     # Checks who the user & gets the right data.
     def get_profile(self, obj):
         if obj.host_profiles.exists():
