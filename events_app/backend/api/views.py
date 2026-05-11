@@ -8,12 +8,14 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.cache import add_never_cache_headers
 
 from rest_framework import generics, permissions
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import Category, Event, EventClick, Registration, SchoolCollege
@@ -75,7 +77,14 @@ class CreateUserView(APIView):
         try:
             user = UserService.register_user(serializer.validated_data)
 
-            return Response(UserSerializer(user).data, status = 201)
+            # Refresh token generation for new users
+            refresh = CustomTokenObtainPairSerializer.get_token(user)
+
+            return Response({
+                'user' : UserSerializer(user).data,
+                'refresh' : str(refresh),
+                'access' : str(refresh.access_token)
+            }, status = 201)
         except Exception as e:
             logger.error(f"User creation failed: {str(e)}")
 
@@ -89,8 +98,11 @@ class UserProfileView(APIView):
     
     def get(self, request):
         serializer = UserSerializer(request.user)
+        response = Response(serializer.data)
 
-        return Response(serializer.data)
+        add_never_cache_headers(response)
+
+        return response
 
     def patch(self, request):
         data = request.data.copy()
