@@ -118,10 +118,12 @@ export default function LoginSignup() {
             if (!firstKey) return "Something went wrong."
 
             const firstError = data[firstKey]
+            
+            const errorMessage = Array.isArray(firstError) ? firstError[0] : firstError
 
-            if (Array.isArray(firstError)) return `${firstKey.replace(/_/g, ' ')} : ${firstError[0]}`
+            if (firstKey === 'non_field_errors') return errorMessage
 
-            if (typeof firstError === 'string') return `${firstKey.replace(/_/g, ' ')} : ${firstError}`
+            return `${firstKey.replace(/_/g, ' ')} : ${errorMessage}`
         }
 
         return 'Something went wrong.'
