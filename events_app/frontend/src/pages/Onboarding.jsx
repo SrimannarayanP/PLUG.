@@ -40,24 +40,22 @@ export default function Onboarding() {
         const fetchUser = async () => {
             try {
                 const response = await api.get('/api/user/profile/')
+                
+                const profileData = Array.isArray(response.data.profile) ? response.data.profile[0] : response.data.profile
 
-                setUser(response.data)
+                const isHostUser = !!profileData?.host_type
 
-                const isHostUser = !!response.data.profile?.host_type
-
-                if (isHostUser && !response.data.profile?.school_college?.id) {
-                    setIsExternalPromoter(true)
-                }
+                if (isHostUser && !profileData?.school_college?.id) setIsExternalPromoter(true)
 
                 // Pre-fill existing data, if any
                 setFormData(prev => ({
                     ...prev,
-                    phone_number : response.data.profile?.phone_number || '',
-                    date_of_birth : response.data.profile?.date_of_birth || '',
-                    student_id_number : response.data.profile?.student_id_number || '',
+                    phone_number : profileData?.phone_number || '',
+                    date_of_birth : profileData?.date_of_birth || '',
+                    student_id_number : profileData?.student_id_number || '',
                     organisation_name : isHostUser ? (response.data.profile?.name || '') : '',
-                    school_college_id : response.data.profile?.school_college?.id || '',
-                    school_college_name : response.data.profile?.school_college?.name || ''
+                    school_college_id : profileData?.school_college?.id || '',
+                    school_college_name : profileData?.school_college?.name || ''
                 }))
             } catch (err) {
                 console.error("Failed to load user", err)
@@ -121,7 +119,7 @@ export default function Onboarding() {
         }
     }
 
-    const isHost = !!user?.profile?.host_type
+    const isHost = !!profileData?.host_type
 
     const validateForm = () => {
         const newErrors = {}
