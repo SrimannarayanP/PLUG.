@@ -3,7 +3,7 @@
 
 import {Check, Loader2, MapPin, Minus, Plus, User, Users, X} from 'lucide-react'
 import {useEffect, useState} from 'react'
-import {useForm, useFieldArray, Form} from 'react-hook-form'
+import {useForm, useFieldArray, Form, get} from 'react-hook-form'
 import {toast} from 'react-hot-toast'
 import {useNavigate} from 'react-router-dom'
 
@@ -12,14 +12,40 @@ import api from '../../api/api'
 import FormInput from '../common/FormInput'
 import SearchableSelect from '../common/SearchableSelect'
 
+import {useAuth} from '../../context/AuthContext'
+
 import {loadRazorpayScript} from '../../utils/loadRazorpay'
 
 
 export default function RegistrationModal({event, closeModal}) {
 
     const navigate = useNavigate()
+    const {user} = useAuth()
+
+    const studentData = user?.student_profile || {}
+
+    const locks = {
+        hasPhone : !!studentData?.phone_number,
+        hasStudentId : !!studentData?.student_id_number,
+        hasDob : !!studentData?.date_of_birth,
+        hasCollege : !!studentData?.school_college.id || !!studentData?.unlisted_school_college_data?.name
+    }
 
     // We now use a single 'formData' object
+    const primaryAttendee = {
+        first_name : user?.first_name || '',
+        last_name : user?.last_name || '',
+        email : user?.email || '',
+        phone_number : studentData?.phone_number || '',
+        school_college_id : studentData?.school_college?.id || '',
+        school_college_name : studentData?.school_college?.name || studentData?.unlisted_school_college_data?.name || '',
+        school_college_campus : studentData?.school_college?.campus || studentData?.unlisted_school_college_data?.campus || '',
+        school_college_city : studentData?.school_college?.city || studentData?.unlisted_school_college_data?.city || '',
+        school_college_state : studentData?.school_college?.state || studentData?.unlisted_school_college_data?.state || '',
+        student_id_number : studentData?.student_id_number || '',
+        date_of_birth : studentData?.date_of_birth || '',
+    }
+
     const attendeeTemplate = {
         first_name : '',
         last_name : '',
@@ -31,10 +57,10 @@ export default function RegistrationModal({event, closeModal}) {
         school_college_city : '',
         school_college_state : '',
         student_id_number : '',
-        date_of_birth : '',
+        date_of_birth : ''
     }
 
-    const {register, control, handleSubmit, setValue, watch, formState : {errors}} = useForm({defaultValues : {attendees : [attendeeTemplate]}})
+    const {register, control, handleSubmit, setValue, watch, formState : {errors}} = useForm({defaultValues : {attendees : [primaryAttendee]}})
 
     // useFieldArray is a custom hook provided by react-hook-form to manage dynamic fields (attendees). It dynamically adds/removes fields without re-rendering the entire
     // form.
@@ -333,37 +359,58 @@ export default function RegistrationModal({event, closeModal}) {
                                     const selectedCollegeName = watch(`attendees.${index}.school_college_name`)
                                     const isUnlistedCollege = selectedCollegeName && !selectedCollegeId
 
+                                    const isPrimary = index === 0
+                                    const lockBase = isPrimary // First name, last name & email are always locked for primary
+                                    const lockPhone = isPrimary && locks.hasPhone
+                                    const lockStudentId = isPrimary && locks.hasStudentId
+                                    const lockDob = isPrimary && locks.hasDob
+                                    const lockCollege = isPrimary && locks.hasCollege
+
+                                    const getFieldStyle = (isLocked) => `
+                                        ${inputStyle}
+                                        ${isLocked
+                                            ? "opacity-60 cursor-not-allowed bg-zinc-900/80 border-zinc-800"
+                                            : ''
+                                        }
+                                    `
+
                                     return (
 
                                         <div
                                             key = {field.id}
                                             className = "animate-in slide-in-from-left-4 duration-300"
                                         >
-                                            <div className = "flex items-center gap-2 mb-3">
-                                                {index === 0
+                                            <div className = "flex items-center justify-between mb-3">
+                                                {isPrimary
                                                     ? <User className = "h-4 w-4 text-orange-500" />
                                                     : <Users className = "h-4 w-4 text-zinc-500" />
                                                 }
 
                                                 <span className = "text-xs text-zinc-500 font-bold uppercase tracking-wider">
-                                                    {index === 0 ? "Primary Attendee (You)" : `Guest #${index}`}
+                                                    {isPrimary ? "Primary Attendee (You)" : `Guest #${index}`}
                                                 </span>
                                             </div>
+
+                                            {isPrimary && (!locks.hasPhone || !locks.hasStudentId || !locks.hasDob || !locks.hasCollege) && (
+                                                <span className = "text-[10px] text-orange-500 font-medium bg-orange-500/10 px-2 py-1 rounded-md">
+                                                    Missing info will be saved to profile
+                                                </span>
+                                            )}
 
                                             <div className = "grid grid-cols-1 gap-3 p-4 rounded-2xl border border-zinc-800/50 bg-zinc-900/20">
                                                 <div className = "grid grid-cols-2 gap-3 mb-3">
                                                     <FormInput
                                                         {...register(`attendees.${index}.first_name`, {required : true})}
                                                         placeholder = "First Name"
-                                                        className = {inputStyle}
-                                                        disabled = {loading}
+                                                        className = {getFieldStyle(lockBase)}
+                                                        disabled = {loading || lockBase}
                                                     />
 
                                                     <FormInput
                                                         {...register(`attendees.${index}.last_name`, {required : true})}
                                                         placeholder = "Last Name"
-                                                        className = {inputStyle}
-                                                        disabled = {loading}
+                                                        className = {getFieldStyle(lockBase)}
+                                                        disabled = {loading || lockBase}
                                                     />
                                                 </div>
 
@@ -371,8 +418,8 @@ export default function RegistrationModal({event, closeModal}) {
                                                     {...register(`attendees.${index}.email`, {required : true})}
                                                     type = 'email'
                                                     placeholder = 'Email'
-                                                    className = {inputStyle}
-                                                    disabled = {loading}
+                                                    className = {getFieldStyle(lockBase)}
+                                                    disabled = {loading || lockBase}
                                                 />
 
                                                 {/* Smart Fields (Renders on condition) */}
@@ -381,8 +428,8 @@ export default function RegistrationModal({event, closeModal}) {
                                                         {...register(`attendees.${index}.phone_number`, {required : true})}
                                                         type = 'tel'
                                                         placeholder = "Phone Number"
-                                                        className = {inputStyle}
-                                                        disabled = {loading}
+                                                        className = {getFieldStyle(lockPhone)}
+                                                        disabled = {loading || lockPhone}
                                                     />
                                                 )}
 
@@ -390,8 +437,8 @@ export default function RegistrationModal({event, closeModal}) {
                                                     <FormInput
                                                         {...register(`attendees.${index}.student_id_number`, {required : true})}
                                                         placeholder = "Student ID / USN"
-                                                        className = {inputStyle}
-                                                        disabled = {loading}
+                                                        className = {getFieldStyle(lockStudentId)}
+                                                        disabled = {loading || lockStudentId}
                                                     />
                                                 )}
 
@@ -405,7 +452,7 @@ export default function RegistrationModal({event, closeModal}) {
                                                             onChange = {(selection) => handleCollegeChange(index, selection)}
                                                             placeholder = "Search School/College..."
                                                             endpoint = '/api/data/colleges/'
-                                                            disabled = {loading}
+                                                            disabled = {loading || lockCollege}
                                                         />
 
                                                         {isUnlistedCollege && (
@@ -413,23 +460,23 @@ export default function RegistrationModal({event, closeModal}) {
                                                                 <FormInput
                                                                     {...register(`attendees.${index}.school_college_campus`, {required : false})}
                                                                     placeholder = "Campus (Optional)"
-                                                                    className = {`${inputStyle} text-xs`}
-                                                                    disabled = {loading}
+                                                                    className = {`${getFieldStyle(lockCollege)} text-xs`}
+                                                                    disabled = {loading || lockCollege}
                                                                 />
                                                                 
                                                                 <div className = "grid grid-cols-2 gap-3">
                                                                     <FormInput
                                                                         {...register(`attendees.${index}.school_college_city`, {required : true})}
                                                                         placeholder = "City (Required)"
-                                                                        className = {`${inputStyle} text-xs`}
-                                                                        disabled = {loading}
+                                                                        className = {`${getFieldStyle(lockCollege)} text-xs`}
+                                                                        disabled = {loading || lockCollege}
                                                                     />
 
                                                                     <FormInput
                                                                         {...register(`attendees.${index}.school_college_state`, {required : true})}
                                                                         placeholder = "State (Required)"
-                                                                        className = {`${inputStyle} text-xs`}
-                                                                        disabled = {loading}
+                                                                        className = {`${getFieldStyle(lockCollege)} text-xs`}
+                                                                        disabled = {loading || lockCollege}
                                                                     />
                                                                 </div>
                                                             </div>
@@ -454,8 +501,8 @@ export default function RegistrationModal({event, closeModal}) {
                                                         <FormInput
                                                             {...register(`attendees.${index}.date_of_birth`, {required : true})}
                                                             type = 'date'
-                                                            className = {`${inputStyle} [color-scheme:dark]`}
-                                                            disabled = {loading}
+                                                            className = {`${getFieldStyle(lockDob)} [color-scheme:dark]`}
+                                                            disabled = {loading || lockDob}
                                                         />
                                                     </div>
                                                 )}
