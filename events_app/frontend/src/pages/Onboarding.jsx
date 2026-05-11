@@ -119,7 +119,7 @@ export default function Onboarding() {
         }
     }
 
-    const isHost = !!profileData?.host_type
+    const isHost = Array.isArray(user?.host_profiles) && user.host_profiles.length > 0
 
     const validateForm = () => {
         const newErrors = {}
