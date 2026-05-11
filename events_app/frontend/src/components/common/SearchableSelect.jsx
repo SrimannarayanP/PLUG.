@@ -2,12 +2,12 @@
 
 
 import {useState, useEffect, useRef} from 'react'
-import {Check, ChevronsUpDown, Plus, Loader2, School} from 'lucide-react'
+import {Check, ChevronsUpDown, Plus, Loader2, School, ReceiptTurkishLiraIcon} from 'lucide-react'
 
 import apiPublic from '../../api/apiPublic'
 
 
-export default function SearchableSelect({value, onChange, placeholder = "Select option...", endpoint = '', hasError = false}) {
+export default function SearchableSelect({value, onChange, placeholder = "Select option...", endpoint = '', hasError = false, disabled}) {
 
     const [isOpen, setIsOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
@@ -94,16 +94,18 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
                     flex items-center justify-between w-full px-4 py-3 bg-zinc-900/50 border border-zinc-700 rounded-xl text-white focus-within:border-orange-500
                     focus-within:ring-1 focus-within:ring-orange-500/20 cursor-text transition-all
                     ${hasError
-                        ? "border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20 bg-red-500/5"
-                        : "border-zinc-700 focus-within:border-orange-500 focus-within:ring-orange-500/20"
+                        ? "border-red-500 focus-within:border-red-500 focus-within:ring-1 focus-within:ring-red-500/20 bg-red-500/5"
+                        : disabled
+                            ? "bg-zinc-900/80 border border-zinc-800 opacity-60 cursor-not-allowed"
+                            : "bg-zinc-900/50 border border-zinc-700 focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500/20 cursor-text"
                     }
                 `}
-                onClick = {() => setIsOpen(true)}
+                onClick = {() => {if (!disabled) setIsOpen(true)}}
             >
                 <div className = "flex items-center gap-3 w-full">
                     <School 
                         className = {`
-                            h-4 w-4 text-zinc-500 shrink-0
+                            h-4 w-4 shrink-0
                             ${hasError
                                 ? 'text-red-500'
                                 : 'text-zinc-500'
@@ -113,15 +115,19 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
                 
                     <input 
                         type = 'text'
-                        className = "bg-transparent border-none outline-none text-sm w-full placeholder:text-zinc-600 text-white"
+                        disabled = {disabled}
+                        readOnly = {disabled}
+                        className = "bg-transparent border-none outline-none text-sm w-full placeholder:text-zinc-600 text-white disabled:cursor-not-allowed"
                         placeholder = {placeholder}
                         value = {displayValue}
                         onChange = {(e) => {
+                            if (disabled) return
+
                             setSearchTerm(e.target.value)
 
                             if (!isOpen) setIsOpen(true)
                         }}
-                        onFocus = {() => setIsOpen(true)}
+                        onFocus = {() => {if (!disabled) setIsOpen(true)}}
                     />
                 </div>
 
@@ -132,8 +138,8 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
                 )}
             </div>
 
-            {isOpen && searchTerm.length > 0 && (
-                <div className = "absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl max-h-60 overflow-auto animate-in fade-in slide-in-from-top-2">
+            {!disabled && isOpen && searchTerm.length > 0 && (
+                <div className = "absolute z-50 w-full mt-2 bg-zinc-900 bnorder border-zinc-700 rounded-xl shadow-2xl max-h-60 overflow-auto animate-in fade-in slide-in-from-top-2">
                     {options.length > 0 ? (
                         <ul className = 'pl-1'>
                             {options.map((option, index) => (
