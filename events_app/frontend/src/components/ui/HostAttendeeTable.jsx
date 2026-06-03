@@ -140,7 +140,7 @@ const OrderRow = memo(({order, isExpanded, processingId, toggleOrder, handleRefu
 
                             <div className = "flex items-center gap-1.5 bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
                                 <span className = "text-xs font-bold text-orange-500">
-                                    {order.tickets.length}
+                                    {order.tickets?.length}
                                 </span>
 
                                 {isExpanded ? (
@@ -160,7 +160,7 @@ const OrderRow = memo(({order, isExpanded, processingId, toggleOrder, handleRefu
 
                     {isExpanded && (
                         <div className = "divide-y divide-zinc-800/50 border-t border-zinc-800">
-                            {order.tickets.map((ticket) => (
+                            {order.tickets?.map((ticket) => (
                                 <div
                                     key = {ticket.id}
                                     className = "p-4 bg-zinc-900/40"
@@ -283,7 +283,7 @@ const OrderRow = memo(({order, isExpanded, processingId, toggleOrder, handleRefu
                                     className = 'text-orange-500'
                                 />
 
-                                {order.tickets.length} Ticket{order.tickets.length > 1 ? 's' : ''}
+                                {order.tickets?.length} Ticket{order.tickets?.length > 1 ? 's' : ''}
                             </span>
                         </div>
                     </div>
@@ -291,7 +291,7 @@ const OrderRow = memo(({order, isExpanded, processingId, toggleOrder, handleRefu
                     {/* Expanded Guest Row */}
                     {isExpanded && (
                         <div className = 'bg-zinc-900/50'>
-                            {order.tickets.map(ticket => (
+                            {order.tickets?.map(ticket => (
                                 <div
                                     key = {ticket.id}
                                     className = "grid grid-cols-12 gap-4 p-4 pl-12 border-t border-zinc-800/50 items-center hover:bg-zinc-800/40 transition-colors"
@@ -403,7 +403,7 @@ export default function HostAttendeeTable({groupedOrders = [], onActionComplete}
         try {
             await api.post('/api/host/process-payment/', {
                 registration_id : regId,
-                action : 'refund', // 'approve' or 'reject'
+                action : 'refund',
             })
 
             if (onActionComplete) onActionComplete()
@@ -463,7 +463,7 @@ export default function HostAttendeeTable({groupedOrders = [], onActionComplete}
                         const isExpanded = !!expandedOrders[order.id]
                         // Only pass the processing ID to the specific order that needs it. Prevents 15 other visible rows from unnecessarily re-rendering when you click
                         // a button. 
-                        const activeProcessingId = order.tickets.some(t => t.id === processingId) ? processingId : null
+                        const activeProcessingId = order.tickets?.some(t => t.id === processingId) ? processingId : null
 
                         return (
 
