@@ -221,7 +221,7 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                     {/* Header/Close */}
                                     <button
                                         onClick = {closeModal}
-                                        className = "absolute top-4 right-4 z-20 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors border border-white/10"
+                                        className = "absolute top-4 right-4 z-30 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 transition-colors border border-white/10"
                                     >
                                         <X size = {18} />
                                     </button>
@@ -386,7 +386,7 @@ export default function TicketModal({tickets : initialTickets, closeModal, onTic
                                 <div className = "p-6 text-center border-b border-zinc-900 shrink-0 relative">
                                     <button
                                         onClick = {closeModal}
-                                        className = "absolute top-4 right-4 z-20 bg-white/5 hover:bg-white/10 text-white rounded-full p-2 transition-colors"
+                                        className = "absolute top-4 right-4 z-30 bg-white/5 hover:bg-white/10 text-white rounded-full p-2 transition-colors"
                                     >
                                         <X size = {18} />
                                     </button>
