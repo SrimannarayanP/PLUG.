@@ -252,4 +252,3 @@ export default function RichTextEditor({value, onChange}) {
     )
 
 }
-
