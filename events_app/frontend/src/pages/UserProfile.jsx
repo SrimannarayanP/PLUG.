@@ -1,7 +1,9 @@
 // UserProfile.jsx
 
 
-import {AlertTriangle, ArrowLeft, Building2, Calendar, CheckCircle2, Edit2, GraduationCap, LogOut, Mail, MapPin, Phone, Save, Shield, Trash2, User, X} from 'lucide-react'
+import {
+    AlertTriangle, ArrowLeft, Building2, Calendar, CheckCircle2, ChevronDown, ChevronRight, Edit2, GraduationCap, LogOut, Mail, MapPin, Phone, Save, Shield, Trash2, User, X
+} from 'lucide-react'
 import {useEffect, useState} from 'react'
 import {toast} from 'react-hot-toast'
 import {useNavigate} from 'react-router-dom'
@@ -59,8 +61,6 @@ export default function UserProfile() {
             phone_number : details.phone_number || '',
             date_of_birth : details.date_of_birth || '',
             student_id_number : details.student_id_number || '',
-            organisation_name : ('host_type' in details) ? (details.name || data.first_name) : '',
-
             school_college_id : details.school_college?.id || '',
             school_college_name : details.school_college?.name || '',
             school_college_city : '',
@@ -83,32 +83,25 @@ export default function UserProfile() {
         try {
             const payload = {...formData}
 
-            if (profile.role === 'host') {
+            if (payload.date_of_birth === '') payload.date_of_birth = null
+
+            if (payload.school_college_id) {
+                delete payload.school_college_name
+                delete payload.school_college_city
+                delete payload.school_college_state
+            } else if (payload.school_college_name) {
+                if (!payload.school_college_city || !payload.school_college_state) {
+                    toast.error("City & State are required for new schools/colleges.")
+
+                    setIsSaving(false)
+
+                    return
+                }
+            } else {
                 delete payload.school_college_id
                 delete payload.school_college_name
                 delete payload.school_college_city
                 delete payload.school_college_state
-            } else {
-                delete payload.organisation_name
-
-                if (payload.school_college_id) {
-                    delete payload.school_college_name
-                    delete payload.school_college_city
-                    delete payload.school_college_state
-                } else if (payload.school_college_name) {
-                    if (!payload.school_college_city || !payload.school_college_state) {
-                        toast.error("City & State are required for new schools/colleges.")
-
-                        setIsSaving(false)
-
-                        return
-                    }
-                } else {
-                    delete payload.school_college_id
-                    delete payload.school_college_name
-                    delete payload.school_college_city
-                    delete payload.school_college_state
-                }
             }
 
             const response = await api.patch('/api/user/profile/', payload)
@@ -206,16 +199,14 @@ export default function UserProfile() {
 
     if (!profile) return null
 
-    const userDetails = profile.profile || {}
+    const studentDetails = profile.student_profile || {}
+    const hostProfiles = profile.host_profiles || []
 
-    const isHost = Boolean(profile.profile && 'host_type' in profile.profile)
-    const isStudent = !isHost
+    const isHost = hostProfiles.length > 0
 
-    const phone = userDetails.phone_number || "Not Provided"
-    const dob = userDetails.date_of_birth || null
-    const organisation = isStudent
-        ? userDetails.school_college
-        : (isHost ? {name : userDetails.name || profile.first_name, logo : profile.profile_picture} : null)
+    const phone = studentDetails.phone_number || "Not Provided"
+    const dob = studentDetails.date_of_birth || null
+    const institution = studentDetails.school_college || null
 
     const festiveGradient = "bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600"
     const inputStyle = "bg-zinc-900 border-zinc-800 focus:border-orange-500 text-white"
@@ -337,8 +328,8 @@ export default function UserProfile() {
                                             First Name
                                         </label>
 
-                                        <FormInput 
-                                            name = 'first_name' 
+                                        <FormInput
+                                            name = 'first_name'
                                             value = {formData.first_name} 
                                             onChange = {handleChange} 
                                             className = {inputStyle} 
@@ -365,17 +356,15 @@ export default function UserProfile() {
                                     </h1>
                                     
                                     <div className = "flex flex-wrap items-center justify-center md:justify-start gap-3">
-                                        <span 
-                                            className={`
-                                                px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border 
-                                                ${isHost 
-                                                    ? "bg-orange-500/10 text-orange-500 border-orange-500/20" 
-                                                    : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                                                }
-                                            `}
-                                        >
-                                            {isHost ? "Event Host" : 'Student'}
+                                        <span className = "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border bg-blue-500/10 text-blue-400 border-blue-500/20">
+                                            Student
                                         </span>
+
+                                        {isHost && (
+                                            <span className = "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border bg-orange-500/10 text-orange-500 border-orange-500/20">
+                                                Event Host
+                                            </span>
+                                        )}
 
                                         <div 
                                             className = {`
@@ -447,136 +436,117 @@ export default function UserProfile() {
                         </div>
 
                         {/* DOB */}
-                        {isStudent && (
-                            <div className = 'space-y-1'>
-                                <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
-                                    <Calendar className = "h-3 w-3" />
+                        <div className = 'space-y-1'>
+                            <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
+                                <Calendar className = "h-3 w-3" />
 
-                                    Date of Birth
-                                </label>
+                                Date of Birth
+                            </label>
 
-                                {isEditing ? (
-                                    <FormInput 
-                                        type = 'date'
-                                        name = 'date_of_birth'
-                                        value = {formData.date_of_birth}
-                                        onChange = {handleChange}
-                                        className = {`${inputStyle} [color-scheme:dark]`}
-                                    />
-                                ) : (
-                                    <p className = "text-lg font-medium text-white">
-                                        {formatDate(dob)}
-                                    </p>
-                                )}
-                            </div>
-                        )}
+                            {isEditing ? (
+                                <FormInput 
+                                    type = 'date'
+                                    name = 'date_of_birth'
+                                    value = {formData.date_of_birth}
+                                    onChange = {handleChange}
+                                    className = {`${inputStyle} [color-scheme:dark]`}
+                                />
+                            ) : (
+                                <p className = "text-lg font-medium text-white">
+                                    {formatDate(dob)}
+                                </p>
+                            )}
+                        </div>
+                        
+                        <div className = 'space-y-1'>
+                            <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
+                                <Shield className = "h-3 w-3" />
 
-                        {isStudent && (
-                            <div className = 'space-y-1'>
-                                <label className = "text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-2">
-                                    <Shield className = "h-3 w-3" />
+                                Student ID/USN
+                            </label>
 
-                                    Student ID/USN
-                                </label>
-
-                                {isEditing ? (
-                                    <FormInput 
-                                        name = 'student_id_number'
-                                        value = {formData.student_id_number}
-                                        onChange = {handleChange}
-                                        className = {inputStyle}
-                                    />
-                                ) : (
-                                    <p className = "text-lg font-medium text-white font-mono">
-                                        {userDetails.student_id_number || "Not Provided"}
-                                    </p>
-                                )}
-                            </div>
-                        )}
+                            {isEditing ? (
+                                <FormInput 
+                                    name = 'student_id_number'
+                                    value = {formData.student_id_number}
+                                    onChange = {handleChange}
+                                    className = {inputStyle}
+                                />
+                            ) : (
+                                <p className = "text-lg font-medium text-white font-mono">
+                                    {studentDetails.student_id_number || "Not Provided"}
+                                </p>
+                            )}
+                        </div>
                     </div>
                         
-                    {/* Right column : Organisation / College info */}
-                    <div className = "md:col-span-2 lg:col-span-3 bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-8 relative overflow-hidden group">
-                        <div className = "absolute top-0 right-0 p-32 bg-zinc-800/20 blur-[80px] rounded-full pointer-events-none" />
+                    {/* Right column : Personal Institution Info */}
+                    <div className = "md:col-span-2 lg:col-span-3 bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-8 relative group">
+                        <div className = "absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
+                            <div className = "absolute top-0 right-0 p-32 bg-zinc-800/20 blur-[80px] rounded-full" />
+                        </div>
 
                         <div className = "flex items-center gap-3 text-zinc-500 mb-6 relative z-10">
                             <Building2 className = "h-5 w-5" />
 
                             <h3 className = "text-xs font-bold uppercase tracking-widest">
-                                {isHost ? 'Organisation' : 'Institution'}
+                                Your Institution
                             </h3>
                         </div>
                         
                         <div className = "relative z-10">
                             {isEditing ? (
-                                <div className = "max-w-xl space-y-6 animate-in fade-in">
-                                    {isHost ? (
-                                        <div>
-                                            <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
-                                                Organisation Name
-                                            </label>
+                                <div className = "max-w-xl space-y-4 animate-in fade-in">
+                                    <div>
+                                        <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
+                                            Search School/College
+                                        </label>
 
-                                            <FormInput 
-                                                name = 'organisation_name'
-                                                value = {formData.organisation_name}
-                                                onChange = {handleChange}
-                                                className = {inputStyle}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div className = 'space-y-4'>
-                                            <div>
-                                                <label className = "text-[10px] uppercase font-bold text-zinc-500 mb-1 block">
-                                                    Search School/College
-                                                </label>
+                                        <SearchableSelect 
+                                            value = {{
+                                                id : formData.school_college_id, 
+                                                name : formData.school_college_name
+                                            }}
+                                            onChange = {handleCollegeChange}
+                                            endpoint = '/api/data/colleges/'
+                                        />
+                                    </div>
 
-                                                <SearchableSelect 
-                                                    value = {{
-                                                        id : formData.school_college_id, 
-                                                        name : formData.school_college_name
-                                                    }}
-                                                    onChange = {handleCollegeChange}
-                                                    endpoint = '/api/data/colleges/'
-                                                />
+                                    {isCreatingNewCollege && (
+                                        <div className = "p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 animate-in slide-in-from-top-2">
+                                            <div className = "flex items-center gap-2 text-orange-400 text-xs font-bold uppercase tracking-wider mb-3">
+                                                <AlertTriangle className = "h-3 w-3" />
+
+                                                Adding New Institution
                                             </div>
 
-                                            {isCreatingNewCollege && (
-                                                <div className = "p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 animate-in slide-in-from-top-2">
-                                                    <div className = "flex items-center gap-2 text-orange-400 text-xs font-bold uppercase tracking-wider mb-3">
-                                                        <AlertTriangle className = "h-3 w-3" />
+                                            <div className = "grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <FormInput 
+                                                    name = 'school_college_city'
+                                                    placeholder = 'City'
+                                                    value = {formData.school_college_city}
+                                                    onChange = {handleChange}
+                                                    className = {inputStyle}
+                                                />
 
-                                                        Adding New Institution
-                                                    </div>
-
-                                                    <div className = "grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                        <FormInput 
-                                                            name = 'school_college_city'
-                                                            placeholder = 'City'
-                                                            value = {formData.school_college_city}
-                                                            onChange = {handleChange}
-                                                            className = {inputStyle}
-                                                        />
-
-                                                        <FormInput 
-                                                            name = 'school_college_state'
-                                                            placeholder = 'State'
-                                                            value = {formData.school_college_state}
-                                                            onChange = {handleChange}
-                                                            className = {inputStyle}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
+                                                <FormInput 
+                                                    name = 'school_college_state'
+                                                    placeholder = 'State'
+                                                    value = {formData.school_college_state}
+                                                    onChange = {handleChange}
+                                                    className = {inputStyle}
+                                                />
+                                            </div>
                                         </div>
                                     )}
                                 </div>
                             ) : (
                                 <div className = "flex items-start gap-6">
                                     <div className = "h-20 w-20 rounded-2xl bg-black border border-zinc-800 flex items-center justify-center shadow-lg shrink-0">
-                                        {organisation?.logo ? (
+                                        {institution?.logo ? (
                                             <img 
-                                                src = {getImageUrl(organisation.logo)}
-                                                alt = {organisation.name}
+                                                src = {getImageUrl(institution.logo)}
+                                                alt = {institution.name}
                                                 className = "h-full w-full object-cover rounded-xl"
                                             />
                                         ) : (
@@ -585,17 +555,17 @@ export default function UserProfile() {
                                     </div>
 
                                     <div className = 'pt-2'>                 
-                                        {organisation ? (
+                                        {institution ? (
                                             <>
                                                 <h2 className = "text-2xl font-bold text-white mb-1">
-                                                    {organisation.name}
+                                                    {institution.name}
                                                 </h2>
 
-                                                {organisation.city && (
+                                                {institution.city && (
                                                     <div className = "flex items-center gap-1.5 text-zinc-500 text-sm font-medium">
                                                         <MapPin className = "h-3.5 w-3.5" />
 
-                                                        {organisation.city}
+                                                        {institution.city}
                                                     </div>
                                                 )}
                                             </>
@@ -610,6 +580,46 @@ export default function UserProfile() {
                         </div>
                     </div>
                 </div>
+                
+                {hostProfiles.length > 0 && (
+                    <div className = "mt-6 bg-[#18181b] border border-zinc-800 rounded-3xl p-6 md:p-8">
+                        <div className = "flex items-center gap-3 text-zinc-500 mb-6">
+                            <Shield className = "h-5 w-5" />
+
+                            <h3 className = "text-xs font-bold uppercase tracking-widest">
+                                Managed Organisations
+                            </h3>
+                        </div>
+
+                        <div className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {hostProfiles.map(org => (
+                                <div
+                                    key = {org.id}
+                                    onClick = {() => navigate(`/host/${org.id}/dashboard`)}
+                                    className = "p-5 rounded-2xl bg-zinc-900/50 border border-zinc-800 hover:border-orange-500/50 transition-all cursor-pointer group flex items-center justify-between"
+                                >
+                                    <div className = "flex items-center gap-4">
+                                        <div className = "h-12 w-12 rounded-xl bg-black border border-zinc-800 flex items-center justify-center shrink-0">
+                                            <Building2 className = "h-5 w-5 text-orange-500 group-hover:scale-110 transition-transform" />
+                                        </div>
+
+                                        <div>
+                                            <h4 className = "text-white font-bold text-sm group-hover:text-orange-400 transition-colors line-clamp-1">
+                                                {org.name}
+                                            </h4>
+
+                                            <p className = "text-zinc-500 text-xs capitalize mt-1 flex items-center gap-1">
+                                                {org.host_type} {org.school_college && `• ${org.school_college.name}`}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <ChevronRight className = "h-5 w-5 text-zinc-600 group-hover:text-orange-500 group-hover:translate-x-1 transition-all" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className = "mt-12 border border-red-500/20 bg-red-500/5 rounded-3xl p-6 md:p-8">
                     <div className = "flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
