@@ -144,7 +144,6 @@ export default function LoginSignup() {
         setIsLoading(true)
         setApiError('')
 
-        
         try {
             const response = await api.post('/api/auth/login/', {
                 email : data.email,
@@ -154,7 +153,7 @@ export default function LoginSignup() {
             if (response.status === 200 || response.status === 201) {
                 const user = response.data?.user || null
 
-                login(response.data.access, response.data.refresh)
+                await login(response.data.access, response.data.refresh)
 
                 // Clear form
                 loginReset()
@@ -177,7 +176,7 @@ export default function LoginSignup() {
                     }
 
                     navigate('/')
-                }, 50)
+                })
             }
         } catch (error) {
             handleError(error, 'Login')
@@ -206,13 +205,11 @@ export default function LoginSignup() {
             const response = await api.post('/api/auth/signup/', payload)
 
             if (response.status === 201) {
-                login(response.data.access, response.data.refresh)
+                await login(response.data.access, response.data.refresh)
 
                 signupReset()
 
-                setTimeout(() => {
-                    navigate('/verify-email')
-                }, 50)
+                navigate('/verify-email')
             }
         } catch (error) {
             handleError(error, 'Signup')
