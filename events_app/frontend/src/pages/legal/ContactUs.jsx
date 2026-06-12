@@ -17,7 +17,7 @@ export default function ContactUs() {
                         Email Support
                     </h3>
 
-                    <p>For payment issues, ticket retrieval or technical support, please email us at SUPPORT_EMAIL</p>
+                    <p>For payment issues, ticket retrieval or technical support, please email us at our support email -</p>
 
                     <a
                         href = "mailto:support@pluglive.in"
