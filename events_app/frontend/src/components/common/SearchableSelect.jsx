@@ -151,7 +151,7 @@ export default function SearchableSelect({value, onChange, placeholder = "Select
                                     <div className = "flex flex-col">
                                         <div className = "flex items-center gap-2">
                                             <span className = 'font-medium'>
-                                                {option.name} {option.campus ? `-${option.campus}` : ''}
+                                                {option.name} {option.campus ? `(${option.campus})` : ''}
                                             </span>
 
                                             {option.status === 'requested' && (
